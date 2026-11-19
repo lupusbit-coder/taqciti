@@ -21,7 +21,7 @@
  *     -d '{"providers":["anthropic"]}'
  */
 import { NextResponse, type NextRequest } from 'next/server';
-import { corsHeaders, rejectIfUnauthorized } from '@/lib/apiGuard';
+import { corsHeaders, diagnosticoForaDoAr, rejectIfUnauthorized } from '@/lib/apiGuard';
 import {
   activeDataPolicyWarning,
   AGENT_CONFIG,
@@ -92,7 +92,9 @@ function report(result: CompletionResult, expectParsed: boolean): CallReport {
 }
 
 function failure(model: string, error: unknown): CallReport {
-  return { ok: false, model, failure: (error as Error).message };
+  // Detalhe só no log do servidor (S11); o cliente recebe texto genérico.
+  console.error('[api/ai/smoke] falha em ' + model, error);
+  return { ok: false, model, failure: 'Falha ao chamar o modelo.' };
 }
 
 /**
@@ -181,6 +183,8 @@ export function OPTIONS(request: NextRequest): NextResponse {
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const headers = corsHeaders(request.headers.get('origin'));
 
+  const foraDoAr = diagnosticoForaDoAr(headers);
+  if (foraDoAr) return foraDoAr;
   const unauthorized = rejectIfUnauthorized(request, headers);
   if (unauthorized) return unauthorized;
 

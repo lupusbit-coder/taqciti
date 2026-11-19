@@ -32,15 +32,16 @@ import {
   type SpeakerRename,
 } from '@/features/transcription/speakerIdentity';
 import { cleanMeetingTitle } from '@/features/meeting/naming';
+import { salaDoCaminho } from '@/features/meeting/sala';
 import { resolveAgainstBaseline } from '@/features/transcription/recut';
 import { logger } from '@/shared/services/log';
 import { parseCaptionRegion } from './captionParser';
 import { readMeetAccountContext } from './accountContext';
 import {
+  CALL_ENDED_BUTTON_TEXT,
   CAPTION_REGION_SELECTORS,
-  CAPTIONS_TOGGLE_SELECTORS,
+  queryCaptionsToggle,
   LEAVE_CALL_SELECTORS,
-  MEETING_CODE_PATTERN,
   PARTICIPANT_NAME_SELECTORS,
   PARTICIPANT_TILE_SELECTOR,
   SELF_NAME_SELECTORS,
@@ -65,6 +66,34 @@ function safely<T>(what: string, fn: () => T, fallback: T): T {
     logger.error(`meet: ${what} falhou`, error);
     return fallback;
   }
+}
+
+/**
+ * Renderizado, e não só presente no documento. O Meet pode deixar o botão de
+ * sair escondido (`display: none`) na tela pós-chamada, e `querySelector` o
+ * acharia: a reunião "continuava" e a captura nunca acabava. O
+ * `checkVisibility()` padrão só recusa o que não é desenhado — a barra que se
+ * recolhe por `transform`/`opacity` no meio da chamada continua contando.
+ */
+function visivel(el: Element): boolean {
+  return typeof el.checkVisibility !== 'function' || el.checkVisibility();
+}
+
+function botaoDeSairVisivel(): boolean {
+  return LEAVE_CALL_SELECTORS.some((seletor) =>
+    Array.from(document.querySelectorAll(seletor)).some(visivel),
+  );
+}
+
+/** "Participar novamente" / "Voltar à tela inicial" na tela: a chamada acabou. */
+function naTelaPosChamada(): boolean {
+  for (const el of document.querySelectorAll('button, [role="button"], a')) {
+    const texto = el.textContent?.trim();
+    if (texto && texto.length < 40 && CALL_ENDED_BUTTON_TEXT.test(texto) && visivel(el)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 export class GoogleMeetProvider implements MeetingProvider {
@@ -143,14 +172,50 @@ export class GoogleMeetProvider implements MeetingProvider {
     return safely(
       'detecção de reunião',
       () => {
-        const match = MEETING_CODE_PATTERN.exec(window.location.pathname);
-        if (!match || !match[1]) return null;
-        if (!queryFirst(document, LEAVE_CALL_SELECTORS)) return null;
+        const codigo = salaDoCaminho(window.location.pathname);
+        if (!codigo) return null;
+        if (naTelaPosChamada()) return null;
+        // Dentro da chamada: o botão de sair está na tela. Ou a pessoa disse
+        // "gravar agora" (ver `forceMeeting`) e vale a palavra dela, na MESMA sala.
+        if (!botaoDeSairVisivel()) {
+          return this.forcada?.meetingCode === codigo ? this.forcada : null;
+        }
         // Título vazio (código cru do Meet) é sinal para o background auto-nomear.
-        return { meetingCode: match[1], title: cleanMeetingTitle(document.title, match[1]) };
+        return { meetingCode: codigo, title: cleanMeetingTitle(document.title, codigo) };
       },
       null,
     );
+  }
+
+  /** A sala que a pessoa mandou gravar à mão, com o detector automático em silêncio. */
+  private forcada: MeetingSession | null = null;
+
+  /** A sala desta página, para o "gravar agora": existe mesmo sem o botão de sair. */
+  salaDaPagina(): MeetingSession | null {
+    const codigo = salaDoCaminho(window.location.pathname);
+    if (!codigo || naTelaPosChamada()) return null;
+    return { meetingCode: codigo, title: cleanMeetingTitle(document.title, codigo) };
+  }
+
+  /**
+   * Religa a leitura das legendas AGORA: solta o observer, acha a região de
+   * novo e pede ao Meet que as ligue. É o "tentar de novo" da pessoa, para
+   * quando o religar automático (que desiste depois de algumas tentativas)
+   * não deu conta — por exemplo, ao voltar de uma sala de grupo.
+   */
+  reattachCaptions(): void {
+    this.detachCaptionObserver();
+    this.captureStalled = false;
+    this.lastChunkAt = 0;
+    this.captureExpectedSince = this.captionsOn ? Date.now() : 0;
+    this.publishCaptureHealth();
+    this.requestEnableCaptions();
+    this.ensureCaptionObserver(true);
+  }
+
+  forceMeeting(session: MeetingSession): void {
+    this.forcada = session;
+    this.poll();
   }
 
   onMeetingStart(cb: (session: MeetingSession) => void): Unsubscribe {
@@ -164,7 +229,7 @@ export class GoogleMeetProvider implements MeetingProvider {
   areCaptionsAvailable(): boolean {
     return safely(
       'busca do botão de legendas',
-      () => queryFirst(document, CAPTIONS_TOGGLE_SELECTORS) !== null,
+      () => queryCaptionsToggle() !== null,
       false,
     );
   }
@@ -182,10 +247,16 @@ export class GoogleMeetProvider implements MeetingProvider {
     return safely(
       'leitura do estado das legendas',
       () => {
-        const toggle = queryFirst(document, CAPTIONS_TOGGLE_SELECTORS);
+        const toggle = queryCaptionsToggle();
         const pressed = toggle?.getAttribute('aria-pressed');
         if (pressed === 'true') return true;
         if (pressed === 'false') return false;
+
+        // Sem aria-pressed, o rótulo da próxima ação informa o estado atual.
+        // Texto da barra de idioma dentro da região não prova captura ligada.
+        const label = toggle?.getAttribute('aria-label') ?? '';
+        if (/desativar|turn off|disable/i.test(label)) return true;
+        if (/ativar|turn on|enable/i.test(label)) return false;
 
         const region = queryFirst(document, CAPTION_REGION_SELECTORS);
         return (region?.textContent ?? '').trim().length > 0;
@@ -225,7 +296,7 @@ export class GoogleMeetProvider implements MeetingProvider {
       'clique no botão de legendas',
       () => {
         if (this.areCaptionsEnabled()) return true;
-        const toggle = queryFirst(document, CAPTIONS_TOGGLE_SELECTORS);
+        const toggle = queryCaptionsToggle();
         if (toggle instanceof HTMLElement) {
           toggle.click();
           return true;
@@ -391,8 +462,45 @@ export class GoogleMeetProvider implements MeetingProvider {
     if (renames.length > 0) this.renameCbs.forEach((cb) => cb(renames));
   }
 
+  /**
+   * A sala acabou (saiu, ou trocou de sala na mesma aba). Tudo que é estado
+   * DA CAPTURA volta ao zero, e não só a identidade da sala: uma pausa, a
+   * legenda "ligada" e a saúde degradada da reunião anterior vazavam para a
+   * seguinte no mesmo documento — com a pausa, a nova não capturava nada; com
+   * a legenda, o vigia de travamento ficava desligado; com a saúde, a cápsula
+   * dizia "religando…" a reunião inteira.
+   */
+  private encerrarSala(ended: MeetingSession | null): void {
+    this.inMeeting = false;
+    this.currentSession = null;
+    this.forcada = null;
+    this.detachCaptionObserver();
+    this.capturePaused = false;
+    this.captionsOn = false;
+    this.captureExpectedSince = 0;
+    this.parserDegraded = false;
+    this.captureStalled = false;
+    this.publishCaptureHealth();
+    if (ended) this.endCbs.forEach((cb) => cb(ended));
+  }
   private poll(): void {
     const session = this.detectMeeting();
+
+    /*
+     * Outra sala na MESMA aba, sem recarregar (o Meet é uma SPA): o botão de
+     * sair nunca some, então nem o fim nem o início eram emitidos — a reunião
+     * antiga ficava na sidebar e a nova não era capturada. Encerra a antiga
+     * aqui; o ramo de início logo abaixo abre a nova no mesmo poll.
+     */
+    if (
+      session &&
+      this.inMeeting &&
+      this.currentSession &&
+      session.meetingCode !== this.currentSession.meetingCode
+    ) {
+      this.encerrarSala(this.currentSession);
+
+    }
 
     if (session && !this.inMeeting) {
       if (session.meetingCode !== this.lastMeetingCode) {
@@ -407,11 +515,8 @@ export class GoogleMeetProvider implements MeetingProvider {
       // Confirmação dupla evita falso fim durante re-render do Meet.
       this.endConfirmCount += 1;
       if (this.endConfirmCount >= MEET_END_CONFIRM_POLLS) {
-        this.inMeeting = false;
-        const ended = this.currentSession;
-        this.currentSession = null;
-        this.detachCaptionObserver();
-        if (ended) this.endCbs.forEach((cb) => cb(ended));
+        this.encerrarSala(this.currentSession);
+
       }
     } else {
       this.endConfirmCount = 0;
@@ -472,6 +577,13 @@ export class GoogleMeetProvider implements MeetingProvider {
     // que não estamos conseguindo ler.
     const region = queryFirst(document, CAPTION_REGION_SELECTORS);
     const hasVisibleCaption = (region?.textContent ?? '').trim().length > 0;
+    // Legendas LIGADAS há tempo e nem a região achada: os seletores não casam
+    // mais com o Meet. Isso é falha — calar aqui era o "não consegue religar".
+    if (!region) {
+      logger.warn('meet: legendas ligadas, mas a região de legenda não foi encontrada');
+      this.setCaptureStalled(true);
+      return;
+    }
     if (!hasVisibleCaption) return;
 
     logger.debug('meet: captura parada, reatando o observer');

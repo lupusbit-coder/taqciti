@@ -48,8 +48,3 @@ export function deriveMeetingTitle(participants: readonly Participant[]): string
   if (clients.length === 2) return `Reunião com ${clients[0]} e ${clients[1]}`;
   return `Reunião com ${clients[0]} e mais ${clients.length - 1}`;
 }
-
-/** É um título gerado pela extensão (data ou cliente), não digitado pela pessoa? */
-export function isAutoTitle(title: string): boolean {
-  return /^reuni[ãa]o\b/i.test(title.trim());
-}

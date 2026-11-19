@@ -1,423 +1,111 @@
 name: Release
 
+# ── O que a release entrega ──────────────────────────────────────────────────
+#
+# O ZIP DA EXTENSÃO, e só ele. Até 13/11/2026 a release compilava três
+# instaladores nativos (Inno Setup no Windows, .pkg no macOS, makeself no
+# Linux), montava um pacote com guia e os subia ao Drive do time. O usuário
+# abandonou os instaladores: hoje quem instala pede a um assistente de IA
+# (Claude, ChatGPT) que carregue a extensão no navegador, e o passo a passo
+# manual está em INSTALL.md. Três runners, uma conta de serviço do Google e um
+# pacote que ninguém mais abria saíram junto.
+#
+# Uma tag `vX.Y.Z` publica uma GitHub Release com o zip e o SHA-256 dele. Uma
+# run disparada à mão só compila e deixa o zip como artefato da run.
+
 on:
   push:
     tags:
       - "v*.*.*"
-
-  # Disparo à mão. O padrão é BUILD SÓ: os três instaladores são compilados e
-  # ficam como artefatos da run, e nada é publicado — nem GitHub Release, nem
-  # Drive. É esse o caminho para obter um instalador de verdade (em especial o
-  # .pkg do macOS, que só um runner macOS consegue gerar) sem gastar uma
-  # release nem tocar no que o time já tem no Drive.
-  #
-  # Publicar de verdade continua sendo o que acontece sozinho ao empurrar uma
-  # tag `vX.Y.Z`. Marcar "publicar" aqui é a exceção, não o caminho normal.
-  workflow_dispatch:
-    inputs:
-      versao:
-        description: "Versão para o nome dos instaladores (ex.: 2.1.2). Vazio = a do package.json."
-        required: false
-        type: string
-      publicar:
-        description: "O que fazer com o pacote depois de compilar."
-        required: false
-        default: nao
-        type: choice
-        options:
-          # Só compila. Os instaladores ficam como artefatos da run.
-          - nao
-          # Sobe ao Drive com nome SEPARADO (TaqCiti-teste.zip), sem GitHub
-          # Release. O TaqCiti.zip que o time baixa não é tocado, e desfazer é
-          # apagar um arquivo.
-          - teste
-          # O caminho de sempre: GitHub Release + sobrescrever o TaqCiti.zip
-          # oficial no Drive.
-          - oficial
+  workflow_dispatch: {}
 
 # O endereço do servidor e o segredo compartilhado entram NO BUNDLE da
-# extensão, na hora da build — não são lidos em runtime. Uma build sem eles
-# aponta para `http://localhost:3000`, o padrão de desenvolvimento.
-#
-# Foi o que aconteceu com os instaladores da v2.0.0: saíram apontando para
-# localhost e só funcionariam para quem estivesse rodando o servidor na
-# própria máquina. Por isso os jobs abaixo CONFEREM e falham alto — um
-# instalador publicado com o endereço errado é um defeito que só aparece na
-# mão de quem instalou.
+# extensão, na hora da build — não são lidos em runtime. Sem eles a build de
+# produção é recusada pelo `vite.config.ts`, e `check-release-env.sh` diz qual
+# falta antes de compilar. Foi o que fez os pacotes da v2.0.0 saírem apontando
+# para localhost.
 #
 # Configurar em Settings → Secrets and variables → Actions:
-#   Variables → DOCCITI_SERVER_URL   (https://taqciti-production.up.railway.app, sem "/" no fim)
+#   Variables → DOCCITI_SERVER_URL   (a URL base do servidor em produção, sem "/" no fim)
 #   Secrets   → DOCCITI_SHARED_KEY   (o mesmo valor da variável no servidor)
 #
-# Ver server/docs/deploy.md.
+# Ver docs/publicar-release.md. O deploy do servidor é MANUAL: nada aqui o
+# atualiza, então publique-o antes de cortar a tag.
 env:
   VITE_DOCCITI_SERVER_URL: ${{ vars.DOCCITI_SERVER_URL }}
   VITE_DOCCITI_SHARED_KEY: ${{ secrets.DOCCITI_SHARED_KEY }}
 
+# Só leitura por padrão; o passo de publicar pede escrita no próprio job.
+permissions:
+  contents: read
+
 jobs:
-  build-windows:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 20
-
-      - run: npm ci
-
-      - name: Conferir configuração de release
-        shell: bash
-        run: bash .github/scripts/check-release-env.sh
-
-      - run: npm run build
-
-      - name: Instalar Inno Setup
-        run: choco install innosetup --no-progress -y
-
-      - name: Resolver versão
-        id: version
-        shell: bash
-        run: bash .github/scripts/resolve-version.sh "${{ inputs.versao }}" >> "$GITHUB_OUTPUT"
-
-      - name: Compilar instalador Windows
-        shell: cmd
-        run: '"C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DAppVersion=${{ steps.version.outputs.version }} installer\windows\taqciti.iss'
-
-      - uses: actions/upload-artifact@v7
-        with:
-          name: windows-installer
-          path: release/*.exe
-          if-no-files-found: error
-
-  build-linux:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 20
-
-      - run: npm ci
-
-      - name: Conferir configuração de release
-        run: bash .github/scripts/check-release-env.sh
-
-      - name: Instalar makeself
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y makeself
-
-      - name: Resolver versão
-        id: version
-        run: bash .github/scripts/resolve-version.sh "${{ inputs.versao }}" >> "$GITHUB_OUTPUT"
-
-      - name: Compilar instalador Linux
-        env:
-          APP_VERSION: ${{ steps.version.outputs.version }}
-        run: bash installer/linux/build-installer.sh
-
-      - uses: actions/upload-artifact@v7
-        with:
-          name: linux-installer
-          path: release/*.run
-          if-no-files-found: error
-
-  build-macos:
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 20
-
-      - run: npm ci
-
-      - name: Conferir configuração de release
-        run: bash .github/scripts/check-release-env.sh
-
-      - name: Resolver versão
-        id: version
-        run: bash .github/scripts/resolve-version.sh "${{ inputs.versao }}" >> "$GITHUB_OUTPUT"
-
-      - name: Compilar instalador macOS
-        env:
-          APP_VERSION: ${{ steps.version.outputs.version }}
-        run: bash installer/macos/build-installer.sh
-
-      - uses: actions/upload-artifact@v7
-        with:
-          name: macos-installer
-          path: release/*.pkg
-          if-no-files-found: error
-
-  # Publicar é a exceção, não o padrão.
-  #
-  # Uma tag de release publica — é o que a tag significa. Uma run disparada à
-  # mão só publica se alguém marcar "publicar"; sem isso este job é pulado, e
-  # `distribute-gdrive` vai junto. É o que permite compilar os três
-  # instaladores (inclusive o .pkg do macOS, que exige runner macOS) e
-  # baixá-los como artefatos, sem gastar uma release nem mexer no arquivo que o
-  # time tem no Drive.
-  #
-  # A condição não diz só "é um push": diz "é um push DE TAG, e a tag começa
-  # com v". Hoje isso é redundante — o gatilho lá em cima filtra `tags: v*.*.*`
-  # e nenhum `branches:`, então push de branch não cria run nenhuma. A
-  # redundância é de propósito: no dia em que alguém acrescentar um `branches:`
-  # ao gatilho (para rodar os builds a cada push, por exemplo), um "push" puro
-  # passaria a incluir branch — e publicaria sozinho, no Drive, a cada commit.
-  # Escrita assim, essa mudança de gatilho não consegue causar publicação.
-  release:
-    if: >-
-      (github.event_name == 'push' && github.ref_type == 'tag'
-        && startsWith(github.ref_name, 'v'))
-      || inputs.publicar == 'oficial'
-    needs: [build-windows, build-linux, build-macos]
+  extensao:
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      # O checkout e o Node entraram aqui quando este job passou a montar o
-      # pacote de distribuição — antes ele só baixava artefatos e publicava.
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 20
+          cache: npm
+          cache-dependency-path: package-lock.json
 
-      - uses: actions/download-artifact@v8
-        with:
-          name: windows-installer
-          path: release-assets
+      - run: npm ci
 
-      - uses: actions/download-artifact@v8
-        with:
-          name: linux-installer
-          path: release-assets
+      - name: Conferir configuração de release
+        run: bash .github/scripts/check-release-env.sh
 
-      - uses: actions/download-artifact@v8
-        with:
-          name: macos-installer
-          path: release-assets
-
-      # O pacote é montado ANTES de qualquer publicação, de propósito: se
-      # faltar um dos três instaladores, ou se eles forem de versões
-      # diferentes, o script sai com erro e o job morre aqui — sem Release
-      # publicada pela metade e sem nada enviado ao Drive. O passo também
-      # confere o ZIP que acabou de gravar (relendo do disco) antes de dar por
-      # bom. Ver scripts/package-distribution.mjs.
       - name: Resolver versão
         id: version
-        run: bash .github/scripts/resolve-version.sh "${{ inputs.versao }}" >> "$GITHUB_OUTPUT"
+        run: bash .github/scripts/resolve-version.sh >> "$GITHUB_OUTPUT"
 
-      - name: Montar e conferir o pacote de distribuição
-        run: >
-          node scripts/package-distribution.mjs
-          --origem release-assets
-          --saida dist-package
-          --versao "${{ steps.version.outputs.version }}"
+      # O zip leva a versão do package.json no nome (scripts/package-release.mjs).
+      # Uma tag que diz outra coisa publicaria `v2.2.0` com um zip `v2.1.2`
+      # dentro — e quem baixa não tem como saber qual é qual.
+      - name: A tag e o package.json dizem a mesma versão
+        run: |
+          set -euo pipefail
+          pkg="$(node -p "require('./package.json').version")"
+          if [ "$pkg" != "${{ steps.version.outputs.version }}" ]; then
+            echo "A versão resolvida (${{ steps.version.outputs.version }}) não é a do package.json ($pkg)." >&2
+            echo "Ajuste o package.json antes de cortar a tag. Nada foi publicado." >&2
+            exit 1
+          fi
 
+      # `npm run package` roda a build de produção e empacota dist/ em
+      # release/taqciti-v<versão>.zip.
+      - run: npm run package
+
+      # A impressão digital do que foi publicado. O zip não é assinado; com
+      # isto, quem baixa confere que o arquivo é o mesmo que o CI montou
+      # (`Get-FileHash` no Windows, `shasum -a 256` no Mac).
+      - name: Calcular SHA-256
+        run: |
+          set -euo pipefail
+          ( cd release && sha256sum taqciti-v*.zip ) > release/SHA256SUMS.txt
+          cat release/SHA256SUMS.txt
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: extensao
+          path: |
+            release/taqciti-v*.zip
+            release/SHA256SUMS.txt
+          if-no-files-found: error
+
+      # Só uma tag publica. A condição não diz só "é um push": diz "é um push
+      # DE TAG começando com v" — se um dia alguém acrescentar `branches:` ao
+      # gatilho, um push de branch continua sem publicar nada.
       - name: Publicar GitHub Release
-        uses: softprops/action-gh-release@v3
+        if: github.event_name == 'push' && github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          # Os três instaladores soltos continuam na Release: ela é o canal
-          # técnico e de auditoria, onde é útil baixar um instalador só. O ZIP
-          # vai junto para a Release ter exatamente o mesmo arquivo que o time
-          # recebe pelo Drive.
           files: |
-            release-assets/*
-            dist-package/TaqCiti.zip
+            release/taqciti-v*.zip
+            release/SHA256SUMS.txt
           generate_release_notes: true
-
-      - uses: actions/upload-artifact@v7
-        with:
-          name: distribution-package
-          path: dist-package/TaqCiti.zip
-          if-no-files-found: error
-
-  # Canal de distribuição adicional pro time que ainda não tem acesso ao
-  # GitHub — a Release acima continua existindo e é o canal técnico/de
-  # auditoria; este job só soma o Drive como segundo destino, nunca
-  # substitui. Só roda depois que os 3 builds E a Release já tiverem
-  # terminado com sucesso ("needs: [release]" cobre isso transitivamente,
-  # já que o job release também depende dos 3 builds).
-  #
-  # O QUE VAI PRO DRIVE MUDOU: antes eram os três instaladores soltos, um
-  # arquivo por sistema, com a versão no nome. Como o nome carregava a versão,
-  # cada release SOMAVA três arquivos na pasta em vez de substituir os
-  # anteriores, e quem abria o Drive tinha que saber qual era o seu sistema e
-  # qual era a versão nova — inclusive com os instaladores quebrados da v2.0.0
-  # ali do lado. Agora vai um arquivo só, "TaqCiti.zip", com nome fixo: ele
-  # sobrescreve o anterior (upload-to-gdrive.sh procura por nome), então o
-  # link compartilhado com o time nunca muda e nunca há duas versões
-  # disputando o clique. A versão vive dentro do pacote, no guia e no nome dos
-  # três instaladores.
-  distribute-gdrive:
-    # O `needs: [release]` já bastaria — job pulado pula quem depende dele.
-    # A condição está repetida assim mesmo porque este é o job que sobrescreve
-    # o arquivo que o time baixa: se um dia alguém mexer no `needs`, a trava
-    # que importa continua escrita aqui, ao lado do que ela protege. Mesma
-    # leitura do job acima: push DE TAG começando com v, ou "publicar" marcado
-    # à mão. Push de branch não publica, nem se o gatilho mudar.
-    if: >-
-      (github.event_name == 'push' && github.ref_type == 'tag'
-        && startsWith(github.ref_name, 'v'))
-      || inputs.publicar == 'oficial'
-    needs: [release]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-
-      # Node explícito porque a conferência abaixo roda um script do repo.
-      # A imagem do runner já traz um Node, mas depender da versão que vier
-      # por acaso é o tipo de coisa que quebra sozinha num dia qualquer.
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 20
-
-      # Só o pacote, e nada mais: upload-to-gdrive.sh publica TUDO que
-      # encontrar nesta pasta, então qualquer arquivo a mais aqui viraria um
-      # arquivo a mais no Drive do time.
-      - uses: actions/download-artifact@v8
-        with:
-          name: distribution-package
-          path: gdrive-assets
-
-      # Autentica como a Service Account (sem fluxo OAuth interativo) e
-      # gera um access token de curta duração. O token é registrado pela
-      # própria action como segredo (mascarado nos logs), além da chave
-      # JSON crua em si já ser mascarada automaticamente pelo Actions por
-      # vir de um "secrets.*".
-      #
-      # access_token_scopes explícito é necessário: sem ele, o default da
-      # action é o escopo genérico "cloud-platform", que NÃO dá acesso à
-      # Drive API mesmo com o IAM da Service Account correto na pasta —
-      # foi exatamente isso que causou um 403 em "files.list"/"files.create"
-      # numa rodada anterior. O nome do parâmetro é "access_token_scopes"
-      # (conferido direto no action.yml da v3) — não existe input "scopes"
-      # nesta action; usar esse nome errado seria ignorado em silêncio pelo
-      # Actions e reproduziria o mesmo 403.
-      - name: Autenticar no Google Drive
-        id: gdrive-auth
-        uses: google-github-actions/auth@v3
-        with:
-          credentials_json: ${{ secrets.GDRIVE_SA_KEY }}
-          token_format: access_token
-          access_token_scopes: https://www.googleapis.com/auth/drive
-
-      # Última trava antes de sobrescrever a entrega boa que está no Drive.
-      # Duas perguntas: a pasta tem exatamente o arquivo esperado (porque o
-      # script de upload publica tudo que encontrar nela), e o conteúdo desse
-      # arquivo é mesmo o pacote completo.
-      - name: Conferir o que será publicado
-        run: |
-          set -euo pipefail
-          encontrados="$(find gdrive-assets -type f | sort)"
-          if [ "$encontrados" != "gdrive-assets/TaqCiti.zip" ]; then
-            echo "Esperava só 'gdrive-assets/TaqCiti.zip'. Encontrei:" >&2
-            echo "$encontrados" >&2
-            echo "Nada foi publicado — o Drive continua com a última entrega válida." >&2
-            exit 1
-          fi
-          echo "Pacote a publicar: TaqCiti.zip ($(stat -c%s gdrive-assets/TaqCiti.zip) bytes)"
-          # Abre o ZIP e confere a estrutura por dentro. O pacote foi montado
-          # em OUTRO job e chegou aqui por um artefato — esta é a única
-          # conferência que acontece depois dessa viagem, já com o arquivo na
-          # mão de quem vai sobrescrever o do Drive.
-          node scripts/package-distribution.mjs --conferir gdrive-assets/TaqCiti.zip
-
-      - name: Publicar o pacote no Google Drive
-        env:
-          GDRIVE_ACCESS_TOKEN: ${{ steps.gdrive-auth.outputs.access_token }}
-          GDRIVE_FOLDER_ID: ${{ secrets.GDRIVE_TAQCITI_FOLDER_ID }}
-        run: bash .github/scripts/upload-to-gdrive.sh gdrive-assets
-
-  # ---------------------------------------------------------------------------
-  # Canal de TESTE: mesmo Drive, arquivo com outro nome.
-  # ---------------------------------------------------------------------------
-  #
-  # Existe porque "publicar uma versão temporária" não cabia no desenho
-  # anterior: o pacote tem nome fixo e SOBRESCREVE, então qualquer publicação
-  # trocava a entrega que o time baixa. Aqui o arquivo se chama
-  # `TaqCiti-teste.zip` — nome diferente, registro diferente no Drive, então o
-  # `TaqCiti.zip` oficial não é tocado e desfazer é apagar um arquivo.
-  #
-  # Este job NÃO depende de `release` e não cria GitHub Release nenhuma: um
-  # pacote de teste não é uma release, e registrar um no histórico de versões
-  # confundiria a auditoria. Ele pendura nos três builds direto, e é por isso
-  # que monta o pacote por conta própria em vez de reaproveitar o artefato do
-  # job oficial (que nem roda neste modo).
-  distribuir-teste:
-    if: inputs.publicar == 'teste'
-    needs: [build-windows, build-linux, build-macos]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 20
-
-      - uses: actions/download-artifact@v8
-        with:
-          name: windows-installer
-          path: release-assets
-
-      - uses: actions/download-artifact@v8
-        with:
-          name: linux-installer
-          path: release-assets
-
-      - uses: actions/download-artifact@v8
-        with:
-          name: macos-installer
-          path: release-assets
-
-      - name: Resolver versão
-        id: version
-        run: bash .github/scripts/resolve-version.sh "${{ inputs.versao }}" >> "$GITHUB_OUTPUT"
-
-      # Mesmas travas do caminho oficial: os três instaladores têm que existir,
-      # ser do formato certo e da mesma versão. Um pacote de teste incompleto
-      # desperdiça o teste de quem for instalar.
-      - name: Montar e conferir o pacote
-        run: >
-          node scripts/package-distribution.mjs
-          --origem release-assets
-          --saida dist-package
-          --versao "${{ steps.version.outputs.version }}"
-
-      - name: Preparar o envio com o nome de teste
-        run: |
-          set -euo pipefail
-          mkdir -p gdrive-assets
-          # O script de upload usa o BASENAME como nome no Drive, então o
-          # rename aqui é o que separa este arquivo do oficial.
-          cp dist-package/TaqCiti.zip gdrive-assets/TaqCiti-teste.zip
-          node scripts/package-distribution.mjs --conferir gdrive-assets/TaqCiti-teste.zip
-          encontrados="$(find gdrive-assets -type f | sort)"
-          if [ "$encontrados" != "gdrive-assets/TaqCiti-teste.zip" ]; then
-            echo "Esperava só 'gdrive-assets/TaqCiti-teste.zip'. Encontrei:" >&2
-            echo "$encontrados" >&2
-            exit 1
-          fi
-          echo "A publicar: TaqCiti-teste.zip ($(stat -c%s gdrive-assets/TaqCiti-teste.zip) bytes)"
-          echo "O TaqCiti.zip oficial NÃO é tocado por este job."
-
-      - name: Autenticar no Google Drive
-        id: gdrive-auth
-        uses: google-github-actions/auth@v3
-        with:
-          credentials_json: ${{ secrets.GDRIVE_SA_KEY }}
-          token_format: access_token
-          access_token_scopes: https://www.googleapis.com/auth/drive
-
-      - name: Publicar o pacote de teste no Google Drive
-        env:
-          GDRIVE_ACCESS_TOKEN: ${{ steps.gdrive-auth.outputs.access_token }}
-          GDRIVE_FOLDER_ID: ${{ secrets.GDRIVE_TAQCITI_FOLDER_ID }}
-        run: bash .github/scripts/upload-to-gdrive.sh gdrive-assets

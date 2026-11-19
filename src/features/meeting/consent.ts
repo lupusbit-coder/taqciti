@@ -47,9 +47,28 @@
  * confirmação na sidebar serem a MESMA decisão, sem pergunta duplicada.
  */
 import { REJOIN_RESUME_WINDOW_MS, STORAGE_KEYS } from '@/shared/config/constants';
-import { onSessionChange, readSession, writeSession } from '@/shared/services/storage';
+import { onSessionChange, readLocal, readSession, writeSession } from '@/shared/services/storage';
+import type { MeetingRecord } from '@/shared/types/domain';
 
-export type DecisaoDeRegistro = 'aceito' | 'recusado';
+/**
+ * `continuar:<id>` — aceitou E escolheu continuar a gravação `<id>` desta
+ * sala, em vez de começar outra. Para a captura, vale como `aceito`.
+ */
+export type DecisaoDeRegistro = 'aceito' | 'recusado' | `continuar:${string}`;
+
+/** A decisão autoriza capturar? (`aceito` ou `continuar:<id>`.) */
+export function autorizaCaptura(decisao: DecisaoDeRegistro | null): boolean {
+  return decisao === 'aceito' || (decisao?.startsWith('continuar:') ?? false);
+}
+
+/** O id da gravação a continuar, quando a decisão é continuar. */
+export function gravacaoAContinuar(decisao: DecisaoDeRegistro | null): string | null {
+  return decisao?.startsWith('continuar:') ? decisao.slice('continuar:'.length) || null : null;
+}
+
+function ehDecisao(v: unknown): v is DecisaoDeRegistro {
+  return v === 'aceito' || v === 'recusado' || (typeof v === 'string' && /^continuar:.+/.test(v));
+}
 
 // ---------- a participação ----------
 
@@ -112,14 +131,36 @@ export async function abrirParticipacao(
   return nova;
 }
 
+/** Avisa a cada participação aberta, fechada ou retomada. */
+export function observarParticipacao(
+  cb: (participacao: Participacao | null) => void,
+): () => void {
+  let vivo = true;
+  void lerParticipacao().then((p) => {
+    if (vivo) cb(p);
+  });
+  const parar = onSessionChange<unknown>(STORAGE_KEYS.participation, (valor) => {
+    if (vivo) cb(ehParticipacao(valor) ? valor : null);
+  });
+  return () => {
+    vivo = false;
+    parar();
+  };
+}
+
 /**
  * Saiu da sala. A participação não é APAGADA — fica fechada, para uma volta em
  * seguida poder retomá-la. Apagar aqui faria toda queda de conexão virar uma
  * reunião nova, com pergunta nova e transcrição partida em duas.
  */
-export async function fecharParticipacao(agora: number): Promise<void> {
+export async function fecharParticipacao(
+  agora: number,
+  /** Só fecha se a participação aberta for desta sala. */
+  meetingCode?: string,
+): Promise<void> {
   const atual = await lerParticipacao();
   if (!atual || atual.saiuEm !== null) return;
+  if (meetingCode !== undefined && atual.meetingCode !== meetingCode) return;
   await writeSession(STORAGE_KEYS.participation, { ...atual, saiuEm: agora });
 }
 
@@ -142,7 +183,7 @@ export async function decisaoDe(
   participacaoId: string,
 ): Promise<DecisaoDeRegistro | null> {
   const valor = (await ler())[participacaoId];
-  return valor === 'aceito' || valor === 'recusado' ? valor : null;
+  return ehDecisao(valor) ? valor : null;
 }
 
 export async function guardarDecisao(
@@ -190,6 +231,19 @@ export interface ReuniaoDetectada {
   tabId: number | null;
   /** Quando a detecção aconteceu — não é o início da captura. */
   at: number;
+  /**
+   * A gravação mais recente DESTA sala, quando existe: a pergunta oferece
+   * continuá-la de onde parou em vez de começar outra.
+   */
+  anterior?: GravacaoAnterior;
+}
+
+export interface GravacaoAnterior {
+  id: string;
+  title: string;
+  startedAt: number;
+  endedAt: number;
+  segmentos: number;
 }
 
 function ehDetectada(v: unknown): v is ReuniaoDetectada {
@@ -207,7 +261,14 @@ export async function anunciarReuniao(reuniao: ReuniaoDetectada): Promise<void> 
 }
 
 /** A sala acabou (ou a decisão saiu): não há mais o que perguntar. */
-export async function esquecerReuniao(): Promise<void> {
+export async function esquecerReuniao(
+  /** Só esquece se a reunião anunciada for desta sala. */
+  meetingCode?: string,
+): Promise<void> {
+  if (meetingCode !== undefined) {
+    const anunciada = await lerReuniaoDetectada();
+    if (anunciada && anunciada.meetingCode !== meetingCode) return;
+  }
   await writeSession(STORAGE_KEYS.pendingMeeting, null);
 }
 
@@ -230,4 +291,35 @@ export function observarReuniaoDetectada(
     vivo = false;
     parar();
   };
+}
+
+// ---------- a gravação anterior da mesma sala ----------
+
+/**
+ * A gravação mais recente DESTA sala no histórico, para a pergunta oferecer
+ * "continuar de onde parou". Só gravações encerradas, com fala, e que saibam
+ * de que sala vieram (as anteriores a 03/10/2026 não sabem, e não entram).
+ */
+export async function gravacaoAnteriorDaSala(meetingCode: string): Promise<GravacaoAnterior | null> {
+  const bruto = await readLocal<unknown>(STORAGE_KEYS.history);
+  if (!Array.isArray(bruto)) return null;
+  const daSala = (bruto as MeetingRecord[])
+    .filter(
+      (r) =>
+        r &&
+        r.meetingCode === meetingCode &&
+        r.status !== 'recording' &&
+        Array.isArray(r.segments) &&
+        r.segments.length > 0,
+    )
+    .sort((a, b) => b.endedAt - a.endedAt)[0];
+  return daSala
+    ? {
+        id: daSala.id,
+        title: daSala.title,
+        startedAt: daSala.startedAt,
+        endedAt: daSala.endedAt,
+        segmentos: daSala.segments.length,
+      }
+    : null;
 }

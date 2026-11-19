@@ -1,31 +1,63 @@
 /**
  * Manifesto MV3 da extensão — fonte única de verdade consumida pelo @crxjs/vite-plugin.
  *
- * Ver `content_scripts` e `host_permissions` abaixo para o porquê de o TaqCITi
- * viver em toda página: é o que dá à UI um ciclo de vida previsível dentro do
- * Chrome, em vez de existir numa aba e desaparecer na navegação seguinte.
+ * Ver `content_scripts` e `host_permissions` abaixo: o TaqCITi só age no Google
+ * Meet (`https://meet.google.com/*`), e o painel persiste entre navegações
+ * dentro dele porque o Chrome reinjeta o content script declarado.
  */
 import { defineManifest } from '@crxjs/vite-plugin';
+import { loadEnv } from 'vite';
+
+/**
+ * O `.env` precisa ser lido À MÃO aqui, e isso não é preciosismo.
+ *
+ * O Vite carrega `.env` para `import.meta.env` — do código do cliente. Ele
+ * NÃO povoa `process.env`, por decisão de segurança da própria ferramenta. E
+ * este arquivo roda em Node, na hora de montar o manifesto, onde
+ * `import.meta.env` não existe.
+ *
+ * Sem `loadEnv`, um `.env` com o client id certo é ignorado em silêncio e o
+ * manifesto sai com o placeholder. O modo de falhar é o pior possível: a
+ * extensão carrega normalmente, o `getAuthToken` falha com "bad client id", e
+ * nada em lugar nenhum liga uma coisa à outra — a pessoa vai conferir o
+ * console do Google, que está certo.
+ *
+ * `process.env` continua vindo primeiro: é o caminho do CI (ver
+ * `.github/workflows/release.yml`) e o do `$env:` numa sessão do PowerShell,
+ * que a documentação descreve.
+ */
+const DO_ARQUIVO = loadEnv(process.env.NODE_ENV ?? 'production', process.cwd(), 'VITE_');
 
 /**
  * Cliente OAuth do Google, registrado no Google Cloud Console como
  * "Extensão do Chrome" e amarrado ao ID abaixo.
  *
- * Definível por `VITE_GOOGLE_OAUTH_CLIENT_ID` no ambiente da build. O
+ * Definível por `VITE_GOOGLE_OAUTH_CLIENT_ID`, no ambiente ou no `.env`. O
  * placeholder mantém o manifesto VÁLIDO quando ninguém registrou nada — a
- * extensão carrega, e só o envio para o Google Docs falha, com mensagem
- * dizendo o que fazer. Um `client_id` ausente faria o Chrome recusar a
- * extensão inteira, o que é um modo de falhar muito pior por um recurso
- * opcional. Ver `docs/google-docs-setup.md`.
+ * extensão carrega, e só o envio ao Google Docs e a seção Conexões ficam
+ * indisponíveis, cada um com mensagem dizendo o que fazer. Um `client_id`
+ * ausente faria o Chrome recusar a extensão inteira, o que é um modo de
+ * falhar muito pior. Ver `docs/google-oauth-setup.md`.
  */
 const OAUTH_CLIENT_ID =
-  process.env.VITE_GOOGLE_OAUTH_CLIENT_ID ?? 'CLIENT_ID_NAO_CONFIGURADO.apps.googleusercontent.com';
+  process.env.VITE_GOOGLE_OAUTH_CLIENT_ID ??
+  DO_ARQUIVO.VITE_GOOGLE_OAUTH_CLIENT_ID ??
+  'CLIENT_ID_NAO_CONFIGURADO.apps.googleusercontent.com';
 
 export default defineManifest({
   manifest_version: 3,
-  name: 'TaqCITi Standalone',
+  /*
+   * O nome que o Chrome mostra no cartão da extensão, e o nome do produto.
+   *
+   * Era "TaqCITi Standalone". O sufixo descrevia a ORIGEM — a extração do
+   * núcleo de captura da extensão antiga, sem a plataforma CITi Flow — e isso
+   * deixou de ser uma distinção útil: não existe uma edição "não standalone"
+   * deste produto para se contrapor a ela, e o sufixo só aparecia para quem
+   * instala, que nunca soube do que ele falava.
+   */
+  name: 'TaqCiti',
   description:
-    'Transcrição automática de reuniões do Google Meet — captura invisível e histórico 100% local, sem integração com nenhum backend.',
+    'Transcrição automática de reuniões do Google Meet — captura invisível, histórico local e geração de ata a partir do que foi dito.',
   version: '2.1.2',
   minimum_chrome_version: '116',
 
@@ -50,7 +82,7 @@ export default defineManifest({
   key: 'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAnK6hLSrLUsXOj3pPWAwMyzBPBOh3A9nI4PnbL/k6B3/G68Rk+MyjMj/86I4b2Dxi65UFD44YfygrpULYVBCayZ26qcjShnJse0U9rvF8OMp/U7EUBGS1VLdx6JKur/3OBzAMSb4c0V6EgL3rj4OEPgHbjEXjHDHt7azDyaOUOB+HJV6nCXzCiAogGXAHXB+9C1NG/GCpyh3F7cLu8gUnyND2xpkFPHU1+1Tdda7cOdZPK2SvbeXe5dCwdVzA3nSnsTNc2in+HMUvjtDZLdQRHV8nQIRQiApDUTa3LPfY6YLvPMvnfq3bEPCceHgdxmezRPbSUNYESp5Zj8n4YxFz8QIDAQAB',
 
   /*
-   * Só `drive.file`, e só ele.
+   * Três escopos, pedidos SEPARADAMENTE — e a separação é o ponto.
    *
    * `drive.file` dá acesso EXCLUSIVAMENTE aos arquivos que esta extensão
    * criou. Ela não enxerga, não lê e não altera nada mais do Drive de quem
@@ -59,11 +91,48 @@ export default defineManifest({
    * verificação da Google e pediriam ao usuário uma permissão que o produto
    * não precisa.
    *
+   * `openid` + `userinfo.email` existem para a sincronização: o servidor
+   * precisa saber DE QUEM é o acervo, e a conta do Google que a pessoa já usa
+   * é a resposta que não exige tela de login. Ver `lib/identidade/google.ts`
+   * no servidor.
+   *
+   * ── Por que isto NÃO é "pedir tudo de uma vez" ──────────────────────────
+   *
+   * Esta lista é o TETO do que a extensão pode pedir, não o que ela pede numa
+   * chamada. `chrome.identity.getAuthToken` aceita um `scopes` próprio, e ele
+   * sobrescreve esta lista (confirmado no tipo `TokenDetails`). Então:
+   *
+   *   sincronizar        → openid + email      (silencioso, ou quase)
+   *   "enviar pro Docs"  → drive.file          (só ao clicar, aí justificado)
+   *
+   * Juntos numa chamada só, a primeira sincronização mostraria à pessoa uma
+   * tela do Google pedindo acesso ao Drive dela — para um recurso que ela não
+   * pediu e talvez nunca use. É o momento exato em que alguém desiste.
+   * Separados, quem só sincroniza nunca vê o Drive ser mencionado.
+   *
    * Se algum dia parecer que precisa de mais, PARE e pergunte ao autor.
+   *
+   * ── A conta do CITi (autorizado pelo autor, 05/10/2026) ─────────────────
+   *
+   * Os quatro últimos escopos são a conexão com a organização: achar colegas
+   * no diretório do Workspace, enviar e-mail como a própria pessoa e usar a
+   * agenda. Valem como TETO, como os de cima: cada capacidade pede só os seus
+   * (`features/integracoes/escopos.ts`, a fonte única desta lista), e a tela
+   * Conexões só os pede no clique de "Conectar conta do CITi". Nenhum lê a
+   * caixa de entrada. Os passos do Google Cloud estão em
+   * `docs/integracoes-google-workspace.md`.
    */
   oauth2: {
     client_id: OAUTH_CLIENT_ID,
-    scopes: ['https://www.googleapis.com/auth/drive.file'],
+    scopes: [
+      'openid',
+      'https://www.googleapis.com/auth/userinfo.email',
+      'https://www.googleapis.com/auth/drive.file',
+      'https://www.googleapis.com/auth/gmail.send',
+      'https://www.googleapis.com/auth/directory.readonly',
+      'https://www.googleapis.com/auth/calendar.events',
+      'https://www.googleapis.com/auth/calendar.freebusy',
+    ],
   },
 
   icons: {
@@ -144,12 +213,32 @@ export default defineManifest({
    */
   content_scripts: [
     {
-      matches: ['<all_urls>'],
+      /*
+       * Só o Meet (21/10/2026, plano de segurança). O painel deixou de existir
+       * fora do Meet — `content/index.ts` já saía cedo em qualquer outro host —
+       * e manter o script em `<all_urls>` só servia para pôr código da
+       * extensão, com acesso ao storage e ao background, dentro do processo de
+       * todo site aberto. O `matches` dos chunks em `web_accessible_resources`
+       * acompanha (ver `vite.config.ts`).
+       */
+      matches: ['https://meet.google.com/*'],
       js: ['src/content/index.ts'],
       run_at: 'document_end',
       // Só o quadro de topo: o painel é uma janela da aba, e um iframe de
       // anúncio não deve ganhar a sua própria cópia.
       all_frames: false,
+    },
+    /*
+     * No MUNDO DA PÁGINA, só no Meet, antes de o Meet rodar: mantém a página
+     * "visível" enquanto a captura roda, para a transcrição não parar com a aba
+     * atrás. Ligado e desligado pelo content script; ver `visibilidade.main.ts`.
+     */
+    {
+      matches: ['https://meet.google.com/*'],
+      js: ['src/content/visibilidade.main.ts'],
+      run_at: 'document_start',
+      all_frames: false,
+      world: 'MAIN',
     },
   ],
 
@@ -168,52 +257,40 @@ export default defineManifest({
   //
   // `sidePanel` voltou porque o painel nativo voltou — e agora como a sidebar
   // do produto, não como uma segunda tela de histórico. Nenhuma destas aparece
-  // na tela de instalação: o aviso que o usuário vê vem do `<all_urls>`
-  // explicado abaixo.
-  permissions: ['storage', 'sidePanel', 'scripting', 'identity'],
+  // na tela de instalação: o aviso que o usuário vê vem do acesso ao Meet
+  // (`host_permissions` e `content_scripts`, abaixo).
+  permissions: ['storage', 'sidePanel', 'scripting', 'identity', 'alarms'],
 
   /*
-   * O preço honesto da persistência.
-   *
-   * `<all_urls>` põe "ler e alterar todos os seus dados nos sites que você
-   * visita" na tela de instalação. Isso é real e não há como evitar: uma UI que
-   * precisa existir em TODA página precisa de acesso a toda página, e o
-   * `content_scripts` acima já produziria o mesmo aviso sozinho — declarar
-   * `host_permissions` junto não acrescenta aviso NENHUM e habilita o que o
-   * content script sozinho não dá: `chrome.tabs.sendMessage` para o painel de
-   * qualquer aba (o estado ao vivo chegar até ele) e o `executeScript` da
-   * primeira execução.
-   *
-   * A versão anterior evitava esse aviso e, em troca, não entregava a
-   * persistência — o painel morria na primeira navegação. Entre o aviso e o
-   * produto funcionando, o produto.
+   * Só o Meet. O painel só existe lá: `canInject` (background/injectPanel.ts)
+   * recusa qualquer outra aba, `tabs.query` e `tabs.sendMessage` só endereçam
+   * abas do Meet, e o `executeScript` da primeira execução só injeta nelas.
+   * Foi `<all_urls>` enquanto o painel viveu em toda página (plano de
+   * segurança, 21/10/2026: o content script já voltou ao Meet; as permissões
+   * de host acompanham). O servidor e as APIs do Google são chamados por
+   * `fetch` de páginas da extensão, com CORS do lado de lá — não dependem de
+   * `host_permissions`.
    */
-  host_permissions: ['<all_urls>'],
+  host_permissions: ['https://meet.google.com/*'],
 
   // Conteúdo injetado só alcança arquivo da extensão declarado aqui — e o
   // loader do @crxjs faz `import()` dos chunks do painel, então eles precisam
-  // valer na aba onde o painel for parar. Como o painel agora abre em qualquer
-  // aba, a lista precisa alcançar qualquer origem.
+  // valer na aba onde o painel for parar: só o Meet.
   //
   // Isto NÃO é `host_permissions`: `web_accessible_resources` diz "quem pode
   // LER estes arquivos meus", nunca "onde eu posso mexer". Não aparece na tela
-  // de instalação, e sem o clique no ícone nada é injetado — o alcance real
-  // continua sendo o do activeTab.
+  // de instalação.
   //
   // (Os chunks do painel o próprio @crxjs acrescenta a esta entrada no build;
   // por isso ela precisa ser a que casa com o content script.)
   web_accessible_resources: [
     {
       resources: ['brand/*'],
-      matches: ['<all_urls>'],
+      // Só quem usa: o painel no Meet. Aberto a qualquer site, ele detectaria
+      // a extensão buscando um destes arquivos pelo ID fixo.
+      matches: ['https://meet.google.com/*'],
     },
   ],
-
-  // Nenhum host_permissions: `document/index.html` (fase 2) chama o
-  // servidor de geração de documento via `fetch` comum, de dentro de uma
-  // página normal da extensão — CORS do lado do servidor, não permissão de
-  // manifest. host_permissions só entraria se o fetch fosse feito do
-  // background com bypass de CORS, o que não é o caso aqui.
 
   content_security_policy: {
     extension_pages: "script-src 'self'; object-src 'self'",

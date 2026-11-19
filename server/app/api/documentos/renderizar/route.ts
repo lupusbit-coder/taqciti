@@ -1,0 +1,65 @@
+import { NextResponse, type NextRequest } from 'next/server';
+import { z } from 'zod';
+import { corsHeaders } from '@/lib/apiGuard';
+import { autorizarIa } from '@/lib/guardaDeIa';
+import { compilarDocumento } from '@/lib/documentos/compilador';
+import { contentTreeSchema } from '@/lib/documentos/contentTree';
+import { VARIANTE_DOS_PERSONALIZADOS } from '@/lib/documentos/perfil';
+import { listaComTeto } from '@/lib/listaComTeto';
+import { erroConhecido, lerCorpoComTeto, mensagemDeValidacao, tetoDoCorpo } from '@/lib/documentos/requisicao';
+
+/**
+ * Árvore → PDF, SEM modelo. A árvore é a fonte de verdade e o PDF é derivado
+ * dela: com isto o cliente guarda só a árvore (kilobytes) e pede o arquivo
+ * quando precisa — abrir uma versão antiga, baixar, conferir a paginação. Sem
+ * chamada ao provedor, sem custo e sem a trava de política de dados: nada novo
+ * sai da máquina além do que a pessoa já guardou.
+ */
+const corpoSchema = z.object({
+  arvore: contentTreeSchema,
+  variante: z.string().min(1).max(200).optional(),
+  /** Padrão: só o PDF. O DOCX é o Word editável, da mesma árvore. */
+  formatos: listaComTeto(z.enum(['pdf', 'docx']), 2, 1).optional(),
+});
+
+export function OPTIONS(request: NextRequest): NextResponse {
+  return new NextResponse(null, { status: 204, headers: corsHeaders(request.headers.get('origin')) });
+}
+
+export async function POST(request: NextRequest): Promise<NextResponse> {
+  const headers = corsHeaders(request.headers.get('origin'));
+  const autorizacao = await autorizarIa(request, headers, { cobrar: false });
+  if (!autorizacao.ok) return autorizacao.resposta;
+
+  // Teto do corpo ANTES do parse (S8): ver `tetoDoCorpo` em lib/documentos/requisicao.ts.
+  const lido = await lerCorpoComTeto(request, tetoDoCorpo.renderizar());
+  if (!lido.ok) return NextResponse.json({ error: lido.error }, { status: lido.status, headers });
+  const corpo = lido.corpo;
+  const validado = corpoSchema.safeParse(corpo);
+  if (!validado.success) {
+    return NextResponse.json({ error: mensagemDeValidacao(validado.error) }, { status: 400, headers });
+  }
+
+  try {
+    const { arvore, variante, formatos } = validado.data;
+    const compilado = await compilarDocumento(arvore, {
+      variante: variante ?? VARIANTE_DOS_PERSONALIZADOS,
+      formatos: formatos ?? ['pdf'],
+    });
+    return NextResponse.json(
+      {
+        ...(compilado.pdf ? { pdf: compilado.pdf.toString('base64') } : {}),
+        ...(compilado.docx ? { docx: compilado.docx.toString('base64') } : {}),
+        manifesto: compilado.manifesto,
+        avisos: compilado.avisos,
+        substituicoes: compilado.substituicoes,
+      },
+      { status: 200, headers },
+    );
+  } catch (erro) {
+    const conhecido = erroConhecido(erro);
+    if (conhecido) return NextResponse.json({ error: conhecido.error }, { status: conhecido.status, headers });
+    console.error('[documentos/renderizar]', erro);
+    return NextResponse.json({ error: 'Não foi possível gerar o arquivo agora.' }, { status: 500, headers });
+  }
+}

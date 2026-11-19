@@ -1,44 +1,38 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { DOCUMENT_TYPES, generateDocument, isDocumentType } from '@/lib/generateDocument';
-import { corsHeaders, maxTranscriptChars, rejectIfUnauthorized } from '@/lib/apiGuard';
-import { activeDataPolicyWarning } from '@/lib/ai';
+import { corsHeaders, maxTranscriptChars } from '@/lib/apiGuard';
+import { autorizarIa } from '@/lib/guardaDeIa';
+import { activeDataPolicyWarning, recusaPorPoliticaDeDados } from '@/lib/ai';
+import { erroConhecido } from '@/lib/documentos/requisicao';
 
 /**
- * INERTE NO HOST ATUAL. `maxDuration` é diretiva da Vercel: o Next a compila
- * em configuração de função serverless, e num host que roda o app como
- * processo Node de vida longa — que é o caso do Railway, produção desde
- * 08/2026 — ela não limita nada. Fica como porta de volta, não como proteção
- * ativa. Ver `docs/deploy.md`, seções 5 e 8.
+ * VALE EM PRODUÇÃO. O host de produção é a Vercel (`server/vercel.json`), onde
+ * `maxDuration` é o teto da função serverless: passou disso, a Vercel corta a
+ * resposta. (Houve um período no Railway, processo Node de vida longa, em que
+ * esta diretiva ficava sem efeito; comentários antigos que a chamavam de
+ * "inerte" eram desse período.)
  *
- * O que o valor significa QUANDO vale: 300 é o teto duro do plano Hobby,
- * confirmado por deploy real falhando com "maxDuration between 1 and 300 for
- * plan hobby" ao tentar 600 (17/08/2026). Não é conservador por escolha.
+ * 300 é o teto duro do plano Hobby, confirmado por deploy real falhando com
+ * "maxDuration between 1 and 300 for plan hobby" ao tentar 600 (17/08/2026).
+ * Não é conservador por escolha.
  *
- * E lá 300 provavelmente não bastaria. Uma Ata completa é de 20 a 30 chamadas
- * de modelo (9 Pensante + laço do Auditor + 9 Escritor); a medição mais
- * recente na configuração ATIVA (`docs/medicao-2026-08-16-longa/`, Pensante em
- * `gemini-3.5-flash` com `thinkingLevel: HIGH`) levou 202s para CINCO das nove
- * seções — a cota diária acabou antes de fechar o documento. Extrapolando
- * linearmente, nove seções ficam por volta de 360s.
+ * Com o pipeline antigo, 300 provavelmente não bastaria: eram 20 a 30 chamadas
+ * sequenciais (9 Pensante + laço do Auditor + Escritor), e a medição de
+ * `docs/medicao-2026-08-16-longa/` levou 202s para CINCO das nove seções —
+ * extrapolando, ~360s por Ata. Desde a troca para Leitor + Auditor são DUAS
+ * chamadas (ver `lib/generateStep.ts`), com um raciocínio HIGH em vez de nove.
+ * O tempo da Ata nova ainda NÃO foi medido; a expectativa é caber folgado.
  *
- * Era esse o maior risco aberto do projeto, e ele saiu de cena junto com a
- * Vercel: nem plano Pro nem redesenho assíncrono são necessários hoje. O que
- * continua SEM MEDIÇÃO é quanto o proxy do host atual tolera de resposta lenta
- * — o teto de função sumiu, o de rede nunca foi medido.
+ * Se uma Ata longa passar de 300s, a saída é plano Pro ou redesenho assíncrono
+ * — não há folga a ganhar só mudando este número.
  */
 export const maxDuration = 300;
 
 /**
- * CORS permissivo por design, e mais permissivo do que este comentário já
- * disse: `corsHeaders` reflete QUALQUER origem, não só `chrome-extension://`.
- * A extensão chama daqui de dois contextos diferentes — de uma página própria
- * dela (origem `chrome-extension://<id>`, que ainda por cima muda entre
- * unpacked e Web Store) e de dentro do content script, que carrega a origem da
- * PÁGINA e roda em `<all_urls>`. Não há lista que cubra isso.
- *
- * O que segura o abuso não é o CORS e sim o segredo compartilhado no header
- * `x-docciti-key`, validado abaixo. Motivação e limites da tranca — incluindo
- * por que o CORS aqui não defende nada: `lib/apiGuard.ts`.
+ * CORS só para a extensão (`corsHeaders`, desde 11/2026): quem chama esta rota
+ * são páginas da extensão, com origem `chrome-extension://<id>`. O que segura o
+ * abuso não é o CORS e sim `autorizarIa`, abaixo. Motivação e limites:
+ * `lib/apiGuard.ts`.
  */
 
 export function OPTIONS(request: NextRequest): NextResponse {
@@ -51,8 +45,8 @@ export function OPTIONS(request: NextRequest): NextResponse {
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const headers = corsHeaders(request.headers.get('origin'));
 
-  const unauthorized = rejectIfUnauthorized(request, headers);
-  if (unauthorized) return unauthorized;
+  const autorizacao = await autorizarIa(request, headers);
+  if (!autorizacao.ok) return autorizacao.resposta;
 
   let body: unknown;
   try {
@@ -127,20 +121,24 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
    * desenvolvimento, que é exatamente onde uma gravação real de reunião não
    * pode entrar.
    */
-  const aviso = activeDataPolicyWarning();
-  if (aviso && sintetica !== true) {
-    return NextResponse.json(
-      {
-        error:
-          'A configuração ativa envia o conteúdo para treinamento do provedor, com ' +
-          'possível revisão humana. Só transcrição sintética é aceita — declare ' +
-          '"sintetica": true no corpo. Com chave paga esta trava não existe.',
-        aviso,
-      },
-      { status: 400, headers },
-    );
+  const politica = recusaPorPoliticaDeDados(sintetica, activeDataPolicyWarning());
+  if (politica) {
+    const { status, ...corpo } = politica;
+    return NextResponse.json(corpo, { status, headers });
   }
 
-  const result = await generateDocument({ transcript, title, date, documentType });
-  return NextResponse.json(result, { status: 200, headers });
+  try {
+    const result = await generateDocument({ transcript, title, date, documentType });
+    return NextResponse.json(result, { status: 200, headers });
+  } catch (erro) {
+    // Cota e sobrecarga do provedor viram 429/503 com a mensagem de sempre; antes
+    // o Next respondia 500 com o corpo vazio e quem chamava não sabia o motivo.
+    const conhecido = erroConhecido(erro);
+    if (conhecido) return NextResponse.json({ error: conhecido.error }, { status: conhecido.status, headers });
+    console.error('[generate]', erro);
+    return NextResponse.json(
+      { error: 'Não foi possível gerar o documento agora. Tente de novo em instantes.' },
+      { status: 502, headers },
+    );
+  }
 }

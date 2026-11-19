@@ -1,6 +1,7 @@
 /**
- * `DocumentData` → PDF, irmão de `render/html.ts` — sai do MESMO dado
- * canônico, não de uma conversão do HTML.
+ * Camada de layout do PDF da Ata (capa, moldura, itens de lista), reaproveitada
+ * por `documentos/compilador/ata.ts`. O `DocumentData` → PDF completo
+ * (`renderPdf`) saiu: sem chamador em produção, o PDF do catálogo usa o compilador.
  *
  * ── Um motor só: `pdfkit` ────────────────────────────────────────────────
  *
@@ -57,11 +58,11 @@
  * dois no listener `pageAdded` do `pdfkit` — que dispara também para a CAPA,
  * onde eles não vão; daí a trava `molduraAtiva`.
  */
-import PDFDocument from 'pdfkit';
-import type { DocumentType } from '../documentTypes';
-import { TEMPLATES } from '../templates';
-import type { DocumentTemplate } from '../templates/types';
-import { specForSection, textoDeLacuna, type DocumentData, type Gap } from '../documentData';
+import {
+  textoDeLacuna,
+  type DocumentData,
+  type Gap,
+} from '../documentData';
 import {
   marcaBuffer,
   MARCA_CABECALHO_ALTURA_PT,
@@ -72,17 +73,15 @@ import {
   MARCA_CAPA_TOPO_PT,
 } from './brand';
 import { capaGraficoBuffer } from './modelo';
-import { FONTE_NEGRITO, FONTE_REGULAR, registrarFontes } from './fonts';
-import { RODAPE, temCabecalho } from './html';
+import { FONTE_NEGRITO, FONTE_REGULAR } from './fonts';
+import { RODAPE } from './html';
 import {
   CINZA_LINHA,
   COR_SUBTITULO_CAPA,
   ENTRELINHA,
   GAP_ANTES_DA_LISTA_PT,
-  GAP_PARAGRAFO_PT,
   LISTA_MARCADOR_RECUO_PT,
   LISTA_TEXTO_RECUO_PT,
-  TAMANHO_CORPO_PT,
   TAMANHO_ITEM_PT,
   TAMANHO_RODAPE_PT,
   TAMANHO_SECAO_PT,
@@ -94,7 +93,7 @@ import {
 /** Igual ao `@page { margin: 1in }` do HTML — o modelo usa 72pt real de
  *  margem (confirmado no `cm` de cada bloco de texto do stream: translada
  *  x=72 antes de desenhar), não 2,5cm como uma primeira leitura assumiu. */
-const MARGEM_PT = 72;
+export const MARGEM_PT = 72;
 
 /**
  * Margem INFERIOR do conteúdo — maior que as outras porque a base da página
@@ -102,14 +101,14 @@ const MARGEM_PT = 72;
  * deixa o texto parar ~14pt acima da linha fina, sem chance de encostar
  * nela. Não é assimetria decorativa: é a faixa que o modelo reserva.
  */
-const MARGEM_INFERIOR_PT = 140;
+export const MARGEM_INFERIOR_PT = 140;
 
 /** A4 nos mesmos pontos que o `pdfkit` usa para `size: 'A4'`. Repetido aqui
  *  como constante porque as coordenadas absolutas da capa e do rodapé
  *  precisam da largura e da altura da folha, e o `pdfkit` só as expõe pela
  *  página, que nem sempre existe na hora de calcular. */
-const A4_LARGURA_PT = 595.28;
-const A4_ALTURA_PT = 841.89;
+export const A4_LARGURA_PT = 595.28;
+export const A4_ALTURA_PT = 841.89;
 
 // ── Capa: geometria do modelo, medida a partir do TOPO da página ──────────
 
@@ -130,7 +129,7 @@ const CAPA_GRAFICO_RECORTE_TOPO_PT = 470.45288;
  *  calculadas do par `cm`+`Tm`+`Td` de cada bloco (`.75 0 0 .75 72 275.64771`
  *  e `.75 0 0 .75 72 319.2865`). */
 const CAPA_TITULO_BASE_PT = 306.6;
-const CAPA_SUBTITULO_BASE_PT = 338.05;
+export const CAPA_SUBTITULO_BASE_PT = 338.05;
 
 // ── Rodapé: geometria do modelo, também a partir do topo ──────────────────
 
@@ -144,81 +143,6 @@ const RODAPE_TEXTO_BASE_PT = 745.4;
 const RODAPE_ENTRELINHA_PT = 21.2;
 
 type Doc = PDFKit.PDFDocument;
-
-export interface RenderPdfInput {
-  documentType: DocumentType;
-  data: DocumentData;
-  gaps: Gap[];
-  title: string;
-}
-
-/**
- * Documento PDF completo, pronto pra download: capa + conteúdo, seção por
- * seção, num Buffer só.
- */
-export function renderPdf(input: RenderPdfInput): Promise<Buffer> {
-  const template = TEMPLATES[input.documentType];
-  // Só a Ata tem o conceito de projeto/data — X1 não, e forçar essa linha
-  // (ou uma lacuna pra ela) na capa de uma entrevista seria inventar um
-  // campo que o documento não pede.
-  const temIdentificacao = template.sections.some((s) => s.id === 'identificacao');
-
-  // `autoFirstPage: false` porque o construtor do pdfkit cria a página 1
-  // ANTES de dar chance de registrar a fonte e o listener de `pageAdded`
-  // abaixo — sem isso a capa sairia em Helvetica e com moldura.
-  const doc = new PDFDocument({
-    size: 'A4',
-    autoFirstPage: false,
-    // `font: null` impede o `pdfkit` de abrir Helvetica no construtor. Ele
-    // faz isso por padrão, e para isso lê `js/data/Helvetica.afm` de dentro
-    // do próprio pacote — um arquivo que este documento NUNCA usa, já que
-    // toda fonte aqui é Barlow embutida. Além de inútil, era frágil: em build
-    // de produção o caminho desse `.afm` chegou a ser reescrito pelo bundler
-    // e a leitura falhava (ver `serverExternalPackages` em `next.config.ts`).
-    // Não pedir a fonte é mais seguro que garantir que ela seja encontrada.
-    font: null as unknown as string,
-    margins: {
-      top: MARGEM_PT,
-      bottom: MARGEM_INFERIOR_PT,
-      left: MARGEM_PT,
-      right: MARGEM_PT,
-    },
-  });
-  registrarFontes(doc);
-  doc.info.Title = input.title;
-
-  const chunks: Buffer[] = [];
-  doc.on('data', (chunk: Buffer) => chunks.push(chunk));
-  const pronto = new Promise<Buffer>((resolve, reject) => {
-    doc.on('end', () => resolve(Buffer.concat(chunks)));
-    doc.on('error', reject);
-  });
-
-  // A capa não leva marca de cabeçalho nem rodapé — ela TEM a marca grande e
-  // o gráfico, e o modelo deixa o pé dela limpo. Como `pageAdded` dispara pra
-  // toda página, inclusive a primeira, a trava é o jeito de dizer "a partir
-  // daqui, sim".
-  let molduraAtiva = false;
-  doc.on('pageAdded', () => {
-    if (molduraAtiva) desenharMoldura(doc);
-  });
-
-  doc.addPage();
-  desenharCapa(
-    doc,
-    template.documentTitle ?? template.label,
-    input.data,
-    input.gaps,
-    temIdentificacao,
-  );
-
-  molduraAtiva = true;
-  doc.addPage();
-  desenharConteudo(doc, input, template);
-
-  doc.end();
-  return pronto;
-}
 
 // ---------------------------------------------------------------------------
 // Capa
@@ -245,7 +169,7 @@ export function renderPdf(input: RenderPdfInput): Promise<Buffer> {
  * regra da identidade, e ele salta aos olhos quando o título abaixo está
  * centrado de verdade.
  */
-function desenharCapa(
+export function desenharCapa(
   doc: Doc,
   titulo: string,
   data: DocumentData,
@@ -300,7 +224,7 @@ function desenharCapa(
  * dos dois lados, então o eixo é o mesmo — e assim um título longo demais
  * quebra dentro da margem em vez de vazar pra fora da página.
  */
-function desenharCentralizado(
+export function desenharCentralizado(
   doc: Doc,
   texto: string,
   tamanho: number,
@@ -314,36 +238,13 @@ function desenharCentralizado(
   });
 }
 
-// ---------------------------------------------------------------------------
-// Conteúdo
-// ---------------------------------------------------------------------------
-
-function desenharConteudo(doc: Doc, input: RenderPdfInput, template: DocumentTemplate): void {
-  const ordenadas = template.sections.slice().sort((a, b) => a.order - b.order);
-  for (const section of ordenadas) {
-    const spec = specForSection(section);
-    const dados = spec.serialize(input.data, section.id);
-
-    // Mesmo teste de vazio que `html.ts`/`escritor.ts` usam — as três saídas
-    // precisam concordar sobre quais seções o documento tem.
-    if (dados === null && section.omitWhenEmpty) continue;
-
-    const gapsDaSecao = input.gaps.filter((g) => g.sectionId === section.id);
-
-    if (temCabecalho(section.id)) desenharTituloSecao(doc, section.title);
-
-    const textoDesenhado = desenharConteudoSecao(doc, section.id, input.data, gapsDaSecao, dados);
-    desenharSobras(doc, gapsDaSecao, textoDesenhado);
-  }
-}
-
 /**
  * Marca no topo e rodapé na base — o que o modelo repete em toda página
  * interna. Desenhado em `pageAdded`, quando o `pdfkit` acabou de zerar o
  * cursor: por isso o cursor é DEVOLVIDO ao canto do texto no fim, senão a
  * primeira linha de conteúdo da página sairia de dentro do rodapé.
  */
-function desenharMoldura(doc: Doc): void {
+export function desenharMoldura(doc: Doc): void {
   doc.image(
     marcaBuffer(),
     (A4_LARGURA_PT - MARCA_CABECALHO_LARGURA_PT) / 2,
@@ -403,7 +304,7 @@ function desenharMoldura(doc: Doc): void {
 /** Folga que o `pdfkit` precisa somar à altura natural da linha pra chegar na
  *  entrelinha do modelo. `currentLineHeight(false)` = (ascendente −
  *  descendente) × tamanho. */
-function folgaDeLinha(doc: Doc, tamanho: number): number {
+export function folgaDeLinha(doc: Doc, tamanho: number): number {
   return Math.max(0, tamanho * ENTRELINHA - doc.currentLineHeight(false));
 }
 
@@ -412,7 +313,7 @@ function folgaDeLinha(doc: Doc, tamanho: number): number {
  * modelo. O `pdfkit` posiciona pelo topo e desce até a base pela ascendente da
  * fonte — a mesma conta, com o mesmo número, que ele faz internamente.
  */
-function topoDaLinhaDeBase(doc: Doc, base: number, tamanho: number): number {
+export function topoDaLinhaDeBase(doc: Doc, base: number, tamanho: number): number {
   // `_font` é interno do `pdfkit`, mas é de onde ele próprio tira a
   // ascendente na hora de desenhar; qualquer outra fonte de verdade
   // divergiria dele. O fallback de 1000 (=1em) é o da Barlow, então na pior
@@ -422,7 +323,7 @@ function topoDaLinhaDeBase(doc: Doc, base: number, tamanho: number): number {
 }
 
 /** Opções de fluxo pra um parágrafo de corpo — margem a margem. */
-const fluxoDeParagrafo = (doc: Doc, tamanho: number) => ({ lineGap: folgaDeLinha(doc, tamanho) });
+export const fluxoDeParagrafo = (doc: Doc, tamanho: number) => ({ lineGap: folgaDeLinha(doc, tamanho) });
 
 /**
  * Um item de lista, com o marcador na coluna dele e o texto na coluna do
@@ -444,7 +345,7 @@ const fluxoDeParagrafo = (doc: Doc, tamanho: number) => ({ lineGap: folgaDeLinha
  * `textoPlano` é o conteúdo do item sem formatação, só pra medir — `escrever`
  * é que desenha de verdade, com os pesos certos.
  */
-function desenharItemDeLista(
+export function desenharItemDeLista(
   doc: Doc,
   marcador: string,
   textoPlano: string,
@@ -471,43 +372,18 @@ function desenharItemDeLista(
 }
 
 /** Opções de fluxo pro TEXTO de um item — largura reduzida pelo recuo. */
-const fluxoDeItem = (doc: Doc) => ({
+export const fluxoDeItem = (doc: Doc) => ({
   width: A4_LARGURA_PT - MARGEM_PT - (MARGEM_PT + LISTA_TEXTO_RECUO_PT),
   lineGap: folgaDeLinha(doc, TAMANHO_ITEM_PT),
 });
 
-/** Lista de textos simples, um bullet cada — Decisões, Outcomes, Outputs. */
-function desenharListaSimples(doc: Doc, textos: string[]): void {
-  for (const texto of textos) {
-    desenharItemDeLista(doc, '•', texto, () => {
-      doc.font(FONTE_REGULAR).fontSize(TAMANHO_ITEM_PT).fillColor(TINTA).text(texto, fluxoDeItem(doc));
-    });
-  }
-  if (textos.length > 0) doc.y += GAP_PARAGRAFO_PT;
-}
-
-function desenharTituloSecao(doc: Doc, titulo: string): void {
+export function desenharTituloSecao(doc: Doc, titulo: string): void {
   doc
     .font(FONTE_NEGRITO)
     .fontSize(TAMANHO_SECAO_PT)
     .fillColor(TINTA)
     .text(titulo, fluxoDeParagrafo(doc, TAMANHO_SECAO_PT));
   doc.y += GAP_ANTES_DA_LISTA_PT;
-}
-
-/** Rótulo em negrito seguido do valor — "DATA: 13/08/2026". Tamanho de CORPO
- *  (12pt), distinto do de item de lista (11pt); os dois já foram confundidos
- *  numa leitura anterior. Devolve o texto puro pro chamador acumular (ver
- *  `desenharSobras`). */
-function linhaRotulada(doc: Doc, rotulo: string, valor: string): string {
-  doc
-    .font(FONTE_NEGRITO)
-    .fontSize(TAMANHO_CORPO_PT)
-    .fillColor(TINTA)
-    .text(`${rotulo}: `, { ...fluxoDeParagrafo(doc, TAMANHO_CORPO_PT), continued: true });
-  doc.font(FONTE_REGULAR).text(valor);
-  doc.y += GAP_PARAGRAFO_PT;
-  return `${rotulo}: ${valor}`;
 }
 
 const lacunaDoCampo = (gaps: Gap[], field: string): Gap | undefined =>
@@ -518,209 +394,4 @@ const lacunaDoCampo = (gaps: Gap[], field: string): Gap | undefined =>
 function lacunaDe(gaps: Gap[], field: string): string {
   const gap = lacunaDoCampo(gaps, field);
   return textoDeLacuna(gap ? gap.question : field);
-}
-
-/**
- * Só DESENHA a linha DATA — o "{projeto} - {data}" que esta seção também
- * carrega já saiu na capa (`construirCapa`), igual ao modelo (`example.pdf`
- * mostra essa linha uma vez só, embaixo do título, não de novo na página de
- * conteúdo).
- *
- * `projeto` entra no texto DEVOLVIDO mesmo sem ser desenhado aqui — é o que
- * faz `desenharSobras` reconhecer que a lacuna de `metadata.projectName` já
- * apareceu (na capa) e não desenhá-la de novo no fim desta seção.
- */
-function desenharIdentificacao(doc: Doc, data: DocumentData, gaps: Gap[]): string {
-  const projeto = data.metadata?.projectName ?? lacunaDe(gaps, 'metadata.projectName');
-  const quando = data.metadata?.date ?? lacunaDe(gaps, 'metadata.date');
-  const linha = linhaRotulada(doc, 'DATA', quando);
-  return `${projeto}\n${linha}`;
-}
-
-/** "[Nome] – [Cargo]" sai em NEGRITO no modelo — só o marcador "●" fica no
- *  peso normal. Confirmado no stream decodificado (fonte `/F8` no texto do
- *  item, `/F7` só no bullet). */
-function desenharParticipantes(doc: Doc, data: DocumentData, gaps: Gap[]): string {
-  doc
-    .font(FONTE_NEGRITO)
-    .fontSize(TAMANHO_CORPO_PT)
-    .fillColor(TINTA)
-    .text('PARTICIPANTES – CARGO:', fluxoDeParagrafo(doc, TAMANHO_CORPO_PT));
-  doc.y += GAP_ANTES_DA_LISTA_PT;
-
-  const linhas = (data.participants ?? []).map((participante) => {
-    const cargo = participante.role ?? lacunaDe(gaps, `participants[${participante.name}].role`);
-    return `${participante.name} – ${cargo}`;
-  });
-  for (const linha of linhas) {
-    desenharItemDeLista(doc, '•', linha, () => {
-      doc.font(FONTE_NEGRITO).fontSize(TAMANHO_ITEM_PT).fillColor(TINTA).text(linha, fluxoDeItem(doc));
-    });
-  }
-  doc.y += GAP_PARAGRAFO_PT;
-
-  return `PARTICIPANTES – CARGO:\n${linhas.join('\n')}`;
-}
-
-/** "TÓPICO:"/"ANDAMENTO:" — mesmo par rotulado que `identificacao` desenha
- *  pra DATA, espelhando `SECTION_RENDERERS.topico_geral` do HTML. Sem esta
- *  função a seção caía no `default` genérico e perdia o rótulo em negrito. */
-function desenharTopicoGeral(doc: Doc, data: DocumentData): string {
-  if (!data.generalTopic) return '';
-  const linhaTopico = linhaRotulada(doc, 'TÓPICO', data.generalTopic.topic);
-  const linhaAndamento = linhaRotulada(doc, 'ANDAMENTO', data.generalTopic.progress);
-  return `${linhaTopico}\n${linhaAndamento}`;
-}
-
-function desenharAssinatura(doc: Doc, data: DocumentData, gaps: Gap[]): string {
-  // A fonte é escolhida ANTES de medir a folga de linha: `folgaDeLinha` lê a
-  // métrica da fonte ativa, e medir antes do `doc.font(...)` daria a métrica
-  // de quem desenhou por último.
-  doc.font(FONTE_REGULAR).fontSize(TAMANHO_CORPO_PT).fillColor(TINTA);
-  const fluxo = fluxoDeParagrafo(doc, TAMANHO_CORPO_PT);
-  doc.text('Atenciosamente,', fluxo);
-
-  const nome = data.signature?.name ?? lacunaDe(gaps, 'signature.name');
-  const cargo = data.signature?.role ?? lacunaDe(gaps, 'signature.role');
-  doc.text(`${nome} – ${cargo}`, fluxo);
-  doc.y += GAP_PARAGRAFO_PT;
-
-  return `Atenciosamente,\n${nome} – ${cargo}`;
-}
-
-/**
- * Numerada — igual ao modelo e a `SECTION_RENDERERS.topicos_discutidos` do
- * HTML. O genérico (`spec.serialize()`) junta os tópicos com "- ", sem
- * número; cair pro genérico aqui perderia a numeração que o modelo mostra.
- */
-function desenharTopicosDiscutidos(doc: Doc, data: DocumentData): string {
-  const topicos = data.topicsDiscussed ?? [];
-  const linhas: string[] = [];
-
-  topicos.forEach((topico, index) => {
-    const plano = `${topico.title}: ${topico.summary}`;
-    desenharItemDeLista(doc, `${index + 1}.`, plano, () => {
-      doc
-        .font(FONTE_NEGRITO)
-        .fontSize(TAMANHO_ITEM_PT)
-        .fillColor(TINTA)
-        .text(`${topico.title}: `, { ...fluxoDeItem(doc), continued: true });
-      doc.font(FONTE_REGULAR).text(topico.summary);
-    });
-    linhas.push(`${index + 1}. ${plano}`);
-  });
-  if (topicos.length > 0) doc.y += GAP_PARAGRAFO_PT;
-
-  return linhas.join('\n');
-}
-
-/**
- * Só `text` — igual a `SECTION_RENDERERS.decisoes` do HTML. `spec.serialize()`
- * inclui confiança e a citação da concordância porque é isso que o Escritor
- * recebe pra redigir com contexto; mas a concordância é evidência da
- * auditoria, não conteúdo da ata, e o markdown do Escritor também não a
- * imprime — cair pro genérico aqui vazaria essa evidência pro documento
- * final, o que o HTML deliberadamente não faz.
- */
-function desenharDecisoes(doc: Doc, data: DocumentData): string {
-  const textos = (data.decisions ?? []).map((d) => d.text);
-  desenharListaSimples(doc, textos);
-  return textos.join('\n');
-}
-
-/** Outcomes e Outputs — lista de bullets, igual ao `lista(...)` que o HTML
- *  usa nessas duas seções. Sem isto elas caíam no genérico, que despeja o
- *  `spec.serialize()` inteiro como um parágrafo só, com "- " no meio do
- *  texto: mesma informação, mas com cara de rascunho, não de lista. */
-function desenharTextosSimples(doc: Doc, itens: ReadonlyArray<{ text: string }>): string {
-  const textos = itens.map((i) => i.text);
-  desenharListaSimples(doc, textos);
-  return textos.join('\n');
-}
-
-/**
- * X1 — o conteúdo principal do documento. Mesmo par "Gente e gestão" /
- * "Entrevistado" do HTML (`render/html.ts`, `SECTION_RENDERERS
- * .perguntas_respostas`) — não pode cair pro genérico mais pobre, é
- * literalmente o que o documento é.
- */
-function desenharPerguntasRespostas(doc: Doc, data: DocumentData, gaps: Gap[]): string {
-  const pares = data.qa ?? [];
-  const partes: string[] = [];
-
-  pares.forEach((par, index) => {
-    const pergunta = par.pergunta ?? lacunaDe(gaps, `qa[${index}].pergunta`);
-    const resposta = par.resposta ?? lacunaDe(gaps, `qa[${index}].resposta`);
-    partes.push(linhaRotulada(doc, 'Gente e gestão', pergunta));
-    partes.push(linhaRotulada(doc, 'Entrevistado', resposta));
-    // Um respiro a MAIS entre um par e o próximo. Sem ele todos os espaços
-    // ficam iguais e as seis linhas viram uma lista corrida, sem mostrar
-    // qual resposta pertence a qual pergunta — que é a única estrutura que
-    // este documento tem. O modelo não decide isto: ele é uma Ata, e não tem
-    // par de pergunta e resposta.
-    doc.y += GAP_PARAGRAFO_PT;
-  });
-
-  return partes.join('\n');
-}
-
-/** Dedicada pras seções com tratamento próprio no HTML; as demais caem no
- *  genérico — título (se `temCabecalho`) já foi desenhado por fora, aqui só
- *  o corpo, reaproveitando `spec.serialize()` em vez de duplicar a extração
- *  de cada campo por seção. */
-function desenharConteudoSecao(
-  doc: Doc,
-  sectionId: string,
-  data: DocumentData,
-  gaps: Gap[],
-  dados: string | null,
-): string {
-  switch (sectionId) {
-    case 'identificacao':
-      return desenharIdentificacao(doc, data, gaps);
-    case 'topico_geral':
-      return desenharTopicoGeral(doc, data);
-    case 'participantes':
-      return desenharParticipantes(doc, data, gaps);
-    case 'assinatura':
-      return desenharAssinatura(doc, data, gaps);
-    case 'topicos_discutidos':
-      return desenharTopicosDiscutidos(doc, data);
-    case 'decisoes':
-      return desenharDecisoes(doc, data);
-    case 'outcomes':
-      return desenharTextosSimples(doc, data.outcomes ?? []);
-    case 'outputs':
-      return desenharTextosSimples(doc, data.outputs ?? []);
-    case 'perguntas_respostas':
-      return desenharPerguntasRespostas(doc, data, gaps);
-    default: {
-      const texto = dados ?? '';
-      if (texto) {
-        doc
-          .font(FONTE_REGULAR)
-          .fontSize(TAMANHO_CORPO_PT)
-          .fillColor(TINTA)
-          .text(texto, fluxoDeParagrafo(doc, TAMANHO_CORPO_PT));
-        doc.y += GAP_PARAGRAFO_PT;
-      }
-      return texto;
-    }
-  }
-}
-
-/**
- * Mesmo papel de `pendenciasSoltas()` em `html.ts`: lacuna que nenhum campo
- * mostrou (tipicamente afirmação descartada pelo Auditor, sem campo próprio
- * pra ocupar) vai pro fim da seção em vez de sumir.
- */
-function desenharSobras(doc: Doc, gaps: Gap[], jaDesenhado: string): void {
-  const soltas = gaps.filter((gap) => !jaDesenhado.includes(gap.question));
-  if (soltas.length === 0) return;
-
-  doc.font(FONTE_NEGRITO).fontSize(TAMANHO_CORPO_PT).fillColor(TINTA);
-  for (const gap of soltas) {
-    doc.text(textoDeLacuna(gap.question), fluxoDeParagrafo(doc, TAMANHO_CORPO_PT));
-  }
-  doc.y += GAP_PARAGRAFO_PT;
 }

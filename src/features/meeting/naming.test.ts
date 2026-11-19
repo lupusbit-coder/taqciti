@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Participant } from '@/shared/types/domain';
-import { cleanMeetingTitle, deriveMeetingTitle, isAutoTitle } from './naming';
+import { cleanMeetingTitle, deriveMeetingTitle } from './naming';
 
 describe('cleanMeetingTitle', () => {
   const CODE = 'gbx-hgdk-ywb';
@@ -46,16 +46,5 @@ describe('deriveMeetingTitle', () => {
     expect(
       deriveMeetingTitle([host, p('Ana'), p('Bruno'), p('Carla')]),
     ).toBe('Reunião com Ana e mais 2');
-  });
-});
-
-describe('isAutoTitle', () => {
-  it('reconhece títulos gerados pela extensão', () => {
-    expect(isAutoTitle('Reunião com Ana')).toBe(true);
-    expect(isAutoTitle('Reunião de 21/07 às 14:00')).toBe(true);
-  });
-
-  it('não marca um nome digitado pela pessoa', () => {
-    expect(isAutoTitle('Kickoff Sympla')).toBe(false);
   });
 });

@@ -1,8 +1,10 @@
 # Dívida: Anthropic e xAI verificados só contra os `.d.ts`
 
-**Estado em 2026-08-12.** Os adaptadores de `anthropic` e `xai` nunca fizeram
+**Estado em 2026-08-12, conferido contra o código em 2026-11-13** (a dívida
+continua aberta). Os adaptadores de `anthropic` e `xai` nunca fizeram
 uma chamada a uma API de verdade. Nenhuma chave desses dois provedores
-existiu neste ambiente; a única configurada é a do Google.
+existiu neste ambiente. Os provedores que já rodaram de verdade são o Google
+e a Groq (os testes ao vivo de `lib/prompts/index.ts` citam os dois).
 
 O que existe de verificação para eles:
 
@@ -50,15 +52,17 @@ espera agora é `providers/shared.ts`, e as esperas aparecem em
 | 10 | Leitura de `usage`: `prompt_tokens` já inclui `prompt_tokens_details.cached_tokens`, e `completion_tokens` já inclui raciocínio | Silencioso, mesmo problema do #4. |
 | 11 | 429 vem com status HTTP 429 (e não 200 com erro no corpo) | O 429 não seria reconhecido e não haveria espera. |
 
-### Google — já provado
+### Google e Groq — já exercitados
 
-O adaptador do Google é o único exercitado contra a API real. Ver o
+O adaptador do Google (e o da Groq, nos testes ao vivo de documentos) já rodou
+contra a API real. Ver o
 `naoVerificado` da resposta de `/api/ai/smoke` para o que continua em aberto
 mesmo nele (cache e espera por 429).
 
 ## Como sair da dívida
 
-Uma chave de cada provedor, e:
+Uma chave de cada provedor, e (a rota de diagnóstico não existe em produção:
+`diagnosticoForaDoAr` em `lib/apiGuard.ts`; rode contra o servidor local):
 
 ```
 curl -X POST http://localhost:3000/api/ai/smoke \

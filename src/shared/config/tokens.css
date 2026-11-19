@@ -53,6 +53,14 @@
   --c-muted: 148 163 177;
   --c-danger: 248 141 141;
 
+  /* O Espectro (02/10/2026): verde é a fala da reunião (as pessoas); VIOLETA
+   * são as ideias que voltam dela — o assistente; ÂMBAR é o que espera a
+   * pessoa. Até 22/10 o violeta e o âmbar viviam como variáveis locais da
+   * HOME e da sidebar; o Preparar foi o primeiro a precisar deles fora delas. */
+  --c-ideia: 155 130 245;
+  --c-ideia-clara: 205 192 252;
+  --c-atencao: 232 196 160;
+
   --color-background: rgb(8 11 14);
   --color-surface: rgb(16 20 26);
   --color-primary: rgb(92 203 133);
@@ -70,29 +78,18 @@
 
   /* ── Profundidade ───────────────────────────────────────────────────────
    *
-   * Quatro níveis, do mais fundo ao mais próximo do usuário. Cada um é uma
-   * placa de vidro: quanto mais alto o nível, menos ele deixa passar e mais
-   * luz recolhe na borda. É a escala inteira de translucidez do produto —
-   * nenhum componente inventa o seu `rgba()`.
+   * Um nível só: a placa de vidro da moldura. Quanto mais alto o nível, menos ele
+   * deixa passar e mais luz recolhe na borda. Nenhum componente inventa o seu
+   * gba().
    *
    *   chrome  moldura do app (cabeçalho, barra de controles) — a mais densa,
    *           porque é ela que precisa segurar texto sobre conteúdo rolando
-   *   raised  cartão/painel que flutua sobre o fundo
-   *   subtle  item de lista, controle secundário
-   *   sunken  campo, trecho rebaixado — vidro que AFUNDA em vez de subir
    */
   --glass-chrome: linear-gradient(
     158deg,
     rgba(30, 37, 47, 0.72),
     rgba(11, 15, 20, 0.82)
   );
-  --glass-raised: linear-gradient(
-    158deg,
-    rgba(255, 255, 255, 0.075),
-    rgba(255, 255, 255, 0.025)
-  );
-  --glass-subtle: rgba(255, 255, 255, 0.045);
-  --glass-sunken: rgba(0, 0, 0, 0.22);
 
   /** Verde atravessando vidro — como o acento aparece em quase todo lugar. */
   --tint-primary: rgba(92, 203, 133, 0.14);
@@ -119,6 +116,16 @@
   --radius-md: 20px;
   --radius-lg: 28px;
   --radius-full: 999px;
+
+  /* ── Barra de rolagem ───────────────────────────────────────────────────
+   * Polegar = tamanho − 2 × respiro. O painel dentro do Meet usa uma barra
+   * mais fina (ver panel.css); é o único que sobrescreve estes valores.
+   */
+  --scroll-size: 10px;
+  --scroll-pad: 3px;
+  --scroll-thumb: rgba(255, 255, 255, 0.14);
+  --scroll-thumb-hover: rgba(255, 255, 255, 0.26);
+  --scroll-thumb-active: rgba(255, 255, 255, 0.36);
 
   /* ── Sombra ─────────────────────────────────────────────────────────────
    * Duas camadas sempre: uma larga e quase invisível que dá o assentamento,
@@ -149,4 +156,50 @@
   --dur-fast: 140ms;
   --dur-base: 220ms;
   --dur-slow: 360ms;
+
+  /* ── Tipo ───────────────────────────────────────────────────────────────
+   *
+   * DM Sans une texto e títulos. A marca conserva a Barlow; ver fontes.css.
+   *
+   * A escala tem CINCO degraus e nenhum abaixo de 11px. Antes eram treze
+   * tamanhos entre 9px e 17px, e os de 9–10,5px eram ilegíveis no Windows —
+   * eram justamente os que carregavam o estado ("DESLIGADA", "CONVERSA").
+   *
+   *   meta     11  horários, contagens, o estado ao lado de um nome
+   *   ui       12  rótulos de botão, nomes de quem fala, abas
+   *   corpo    13  texto corrido da interface
+   *   leitura  14  o que se LÊ de verdade: falas e mensagens
+   *   titulo   17  o nome da reunião, o título de uma tela
+   */
+  --font-texto: 'TaqCiti DM Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-titulo: var(--font-texto);
+  --font-marca: 'Barlow', 'Segoe UI', system-ui, sans-serif;
+  --font-taq: 'TaqCiti Manrope', var(--font-texto);
+  --c-taq-acento: 185 157 255;
+  --c-taq-texto: 224 211 255;
+  --c-taq-enfase: 246 239 255;
+  --lh-rotulo: 1.4;
+  --lh-corpo: 1.55;
+  --lh-leitura: 1.65;
+  --lh-titulo: 1.35;
+  --peso-texto: 400;
+  --peso-enfase: 600;
+  --fs-meta: 11px;
+  --fs-ui: 12px;
+  --fs-corpo: 13px;
+  --fs-leitura: 14px;
+  --fs-titulo: 17px;
+
+  /* ── Densidade ──────────────────────────────────────────────────────────
+   *
+   * O passo de espaço é de 4 em 4 (4/8/12/16), e o controle comum tem 32px
+   * de altura — 36px para a ação principal de um contexto. Em tela de toque
+   * (`pointer: coarse`) os alvos voltam a 44px, em cada folha de estilo.
+   */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --alt-controle: 32px;
+  --alt-controle-principal: 36px;
 }

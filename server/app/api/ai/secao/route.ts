@@ -1,9 +1,10 @@
 /**
- * Roda o pipeline de UMA seção ponta a ponta: Pensante → Auditor.
+ * Roda a apuração (Leitor → Auditor) sobre as seções pedidas, sem montar o
+ * documento — o mesmo `apurar` de `generateStep`, não uma cópia.
  *
- * Existe para exercitar as Fases 3 e 4 antes de a Fase 5 montar o documento
- * inteiro. Recebe a transcrição e o id da seção; devolve os dados
- * estruturados, os vereditos da auditoria, o que foi descartado e as lacunas.
+ * É a rota de diagnóstico: devolve os dados estruturados, os vereditos da
+ * auditoria, o que foi descartado, as lacunas e a saúde das citações por
+ * seção.
  *
  *   curl -X POST http://localhost:3000/api/ai/secao \
  *     -H "x-docciti-key: $DOCCITI_SHARED_KEY" \
@@ -11,17 +12,16 @@
  *     -d '{"sintetica":true,"sections":["participantes","decisoes"],"transcript":"..."}'
  */
 import { NextResponse, type NextRequest } from 'next/server';
-import { corsHeaders, maxTranscriptChars, rejectIfUnauthorized } from '@/lib/apiGuard';
+import { corsHeaders, diagnosticoForaDoAr, maxTranscriptChars, rejectIfUnauthorized } from '@/lib/apiGuard';
 import { activeDataPolicyWarning, AGENT_CONFIG, estimateCost } from '@/lib/ai';
-import { runSection } from '@/lib/agents/sectionPipeline';
+import { apurar } from '@/lib/generateStep';
 import { TEMPLATES } from '@/lib/templates';
+import type { SectionSpec } from '@/lib/templates/types';
 import { isDocumentType } from '@/lib/documentTypes';
-import type { DocumentData } from '@/lib/documentData';
 
-/** Ver o mesmo comentário em app/api/generate/route.ts: diretiva da Vercel,
- *  INERTE no Railway (que roda processo Node de vida longa, não função
- *  serverless). 300 é o teto duro do plano Hobby, confirmado por deploy real;
- *  fica como porta de volta. */
+/** Ver o mesmo comentário em app/api/generate/route.ts: teto da função na
+ *  Vercel, o host de produção. 300 é o teto duro do plano Hobby, confirmado
+ *  por deploy real. */
 export const maxDuration = 300;
 
 export function OPTIONS(request: NextRequest): NextResponse {
@@ -34,6 +34,8 @@ export function OPTIONS(request: NextRequest): NextResponse {
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const headers = corsHeaders(request.headers.get('origin'));
 
+  const foraDoAr = diagnosticoForaDoAr(headers);
+  if (foraDoAr) return foraDoAr;
   const unauthorized = rejectIfUnauthorized(request, headers);
   if (unauthorized) return unauthorized;
 
@@ -98,55 +100,58 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   try {
-    const usage = { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0 };
-    let known: DocumentData = {};
-    const resultados = [];
+    const { data, gapsPorSecao, report } = await apurar({
+      transcript,
+      sections,
+      known: {},
+      answers: [],
+    });
 
-    for (const section of sections) {
-      const run = await runSection({ section, transcript, known, answers: [] });
+    const daSecao = <T extends { sectionId: string }>(section: SectionSpec, itens: T[]): T[] =>
+      itens.filter((item) => item.sectionId === section.id);
 
-      // As seções seguintes veem o que as anteriores determinaram — é o
-      // "não perguntar o que já foi determinado" da especificação.
-      known = run.data;
-
-      usage.inputTokens += run.usage.inputTokens;
-      usage.outputTokens += run.usage.outputTokens;
-      usage.cachedInputTokens += run.usage.cachedInputTokens;
-
-      resultados.push({
+    const resultados = sections.map((section) => {
+      const lida = report.porSecao.find((s) => s.sectionId === section.id);
+      return {
         sectionId: section.id,
         title: section.title,
         audit: section.audit,
-        audited: run.audited,
-        passes: run.passes,
-        verdicts: run.verdicts.map((v) => ({
+        fromUserOnly: section.fromUserOnly === true,
+        verdicts: daSecao(section, report.verdicts).map((v) => ({
           path: v.path,
           supported: v.supported,
           reason: v.reason,
           excerptChars: v.excerpt.length,
         })),
-        discarded: run.discarded,
-        gaps: run.gaps,
-        // A taxa de âncoras é o principal indicador de saúde do Pensante
-        // desde que é ele quem produz `quote`. Citação inexistente aparece
-        // aqui inteira — nada some em silêncio.
-        citacoes: run.quotes,
-        naoLocalizadas: run.unlocatable,
-      });
-    }
+        discarded: daSecao(section, report.discarded),
+        gaps: gapsPorSecao.get(section.id) ?? [],
+        // A taxa de âncoras é o principal indicador de saúde do Leitor, que é
+        // quem produz `quote`. Citação inexistente aparece aqui inteira —
+        // nada some em silêncio.
+        citacoes: lida?.quotes ?? null,
+        naoLocalizadas: lida?.unlocatable ?? [],
+      };
+    });
 
-    const custo = estimateCost(AGENT_CONFIG.pensante.provider, AGENT_CONFIG.pensante.model, usage);
+    // Leitor e Auditor rodam em modelos diferentes, com preços diferentes: a
+    // conta junta os dois pelo preço do Leitor, que é o mais caro — teto, não
+    // valor exato.
+    const custo = estimateCost(AGENT_CONFIG.leitor.provider, AGENT_CONFIG.leitor.model, report.usage);
 
     return RespostaOk({
       modelos: AGENT_CONFIG,
       transcriptChars: transcript.length,
-      usage,
-      custoAproximadoUsd: custo ? Number(custo.totalUsd.toFixed(6)) : null,
+      chamadas: report.calls,
+      usage: report.usage,
+      custoMaximoUsd: custo ? Number(custo.totalUsd.toFixed(6)) : null,
       secoes: resultados,
-      documentData: known,
+      documentData: data,
     });
   } catch (error) {
-    return NextResponse.json({ error: (error as Error).message }, { status: 502, headers });
+    // O detalhe do provedor fica só no log do servidor (S11): a mensagem crua pode
+    // trazer trecho de pedido, nome de modelo ou chave parcial.
+    console.error('[api/ai/secao] falha na apuração', error);
+    return NextResponse.json({ error: 'Falha ao chamar o modelo de IA. Tente de novo.' }, { status: 502, headers });
   }
 
   function RespostaOk(payload: unknown): NextResponse {

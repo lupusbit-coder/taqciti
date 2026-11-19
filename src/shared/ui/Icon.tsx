@@ -5,6 +5,8 @@
 import type { ReactNode } from 'react';
 
 export type IconName =
+  | 'home'
+  | 'info'
   | 'search'
   | 'play'
   | 'pause'
@@ -32,7 +34,14 @@ export type IconName =
   // O menu de conversas da HOME. Duas bolhas, e não um relógio: o que o botão
   // abre são CONVERSAS, e um ícone de histórico já quer dizer "Reuniões" na
   // navegação lateral — dois lugares diferentes não podem ter o mesmo desenho.
-  | 'chats';
+  | 'chats'
+  // Copiar a mensagem ou a resposta da conversa.
+  | 'copy'
+  // Preparar: o que é fixo (o Padrão do CITi, as regras que não mudam), o que
+  // a pessoa ajusta (o Personalizado) e o que busca fora do computador.
+  | 'lock'
+  | 'sliders'
+  | 'globe';
 
 interface IconProps {
   name: IconName;
@@ -44,6 +53,18 @@ interface IconProps {
 const FILLED = new Set<IconName>(['play', 'pause', 'stop']);
 
 const PATHS: Record<IconName, ReactNode> = {
+  home: (
+    <>
+      <path d="m3.5 10 8.5-7 8.5 7" />
+      <path d="M5.5 8.5V21h5v-7h3v7h5V8.5" />
+    </>
+  ),
+  info: (
+    <>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M12 11v6M12 7.5v.1" />
+    </>
+  ),
   search: (
     <>
       <circle cx="11" cy="11" r="7" />
@@ -79,6 +100,31 @@ const PATHS: Record<IconName, ReactNode> = {
     </>
   ),
   check: <path d="M20 6.5L9.2 17.3 4.5 12.6" />,
+  copy: (
+    <>
+      <rect x="8.5" y="8.5" width="11" height="11" rx="2.4" />
+      <path d="M15.5 8.5V6.9A2.4 2.4 0 0 0 13.1 4.5H6.9A2.4 2.4 0 0 0 4.5 6.9v6.2a2.4 2.4 0 0 0 2.4 2.4h1.6" />
+    </>
+  ),
+  lock: (
+    <>
+      <rect x="5" y="11" width="14" height="9" rx="2.4" />
+      <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+    </>
+  ),
+  sliders: (
+    <>
+      <path d="M4 7h10M18 7h2M4 17h2M10 17h10" />
+      <circle cx="16" cy="7" r="2" />
+      <circle cx="8" cy="17" r="2" />
+    </>
+  ),
+  globe: (
+    <>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M3.5 12h17M12 3.5c2.4 2.4 3.6 5.2 3.6 8.5s-1.2 6.1-3.6 8.5c-2.4-2.4-3.6-5.2-3.6-8.5s1.2-6.1 3.6-8.5z" />
+    </>
+  ),
   plus: (
     <>
       <path d="M12 5.5v13" />

@@ -1,38 +1,51 @@
-/**
- * As três seções que não são a conversa: Reuniões, Documentos e Conexões.
+﻿/**
+ * A seção Reuniões.
+ *
+ * (Documentos mora em `Documentos.tsx` e Conexões em `Conexoes.tsx` — as duas
+ * deixaram de ser listas de reuniões disfarçadas e passaram a ter estado
+ * próprio: uma tem coleção e editor, a outra tem sincronização e tokens.)
  *
  * Todas leem dados REAIS ou dizem que não há dado nenhum. Nenhuma inventa lista
  * de exemplo — o protótipo de referência tinha "EXEMPLO DE HISTÓRICO" porque
  * precisava se mostrar com o storage vazio; aqui o storage é de verdade, e
  * vazio é uma informação, não um buraco para preencher com ficção.
- *
- * ── O que veio do painel antigo ────────────────────────────────────────────
- *
- * Abrir uma reunião mostrava a transcrição numa tela cheia à parte, com título
- * editável, copiar, baixar e apagar. Aquela tela saiu, e essas funções estão
- * aqui — mesmas mensagens para o background, mesmos dados, dentro da HOME.
- * Antes, clicar numa reunião aqui levava para fora da página.
  */
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useFecharAoSair } from '@/shared/ui/useFecharAoSair';
 import type { MeetingRecord } from '@/shared/types/domain';
+import type { EstadoDaGravacao, Nota } from '@/features/annotations/notes';
+import type { DocumentoGuardado } from '@/features/documents/store';
+import { documentosDaReuniao } from '@/features/documents/store';
 import { usePlatform } from '@/shared/platform/context';
 import { downloadTranscript, transcriptToText } from '@/features/history/export';
 import { Icon } from '@/shared/ui/Icon';
-import { TranscriptView } from '@/shared/ui/TranscriptView';
 import {
   countWords,
   formatCount,
   formatDate,
   formatDurationHuman,
+  formatOffset,
+  formatSpeechDuration,
   formatTime,
   hostName,
+  speakerLabel,
 } from '@/shared/ui/format';
+import { papelDoFalante } from '@/features/integracoes/colegas';
+import { TrilhaDaConversa, marcasDasFalas } from '@/shared/ui/TrilhaDaConversa';
+import { useColegasDoCiti } from '@/shared/ui/useColegasDoCiti';
+import { GerarDocumento } from './GerarDocumento';
+import { NotasDaReuniao } from './NotasDaReuniao';
+import { PrintsDaReuniao } from './PrintsDaReuniao';
+import { useCabemDuasColunas } from './useLargura';
+import { BuscaDoAcervo, useBuscaDoAcervo, correspondeABusca, dentroDoPeriodo } from '@/shared/ui/BuscaDoAcervo';
+import { ImportarReuniao } from './ImportarReuniao';
+import { Automacoes } from './Automacoes';
 
-function Cabecalho({ titulo, sub }: { titulo: string; sub: string }) {
+/** O título da seção, sem subtítulo: a tela se explica pelo que mostra. */
+function Cabecalho({ titulo }: { titulo: string }) {
   return (
     <header className="tq-pagina-topo">
       <h1>{titulo}</h1>
-      <p>{sub}</p>
     </header>
   );
 }
@@ -41,47 +54,103 @@ function Vazio({ children }: { children: React.ReactNode }) {
   return <p className="tq-vazio">{children}</p>;
 }
 
-/** Só reuniões com transcrição servem de contexto para qualquer coisa. */
-function temConteudo(r: MeetingRecord): boolean {
-  return r.segments.length > 0;
-}
 
 // ---------------------------------------------------------------- Reuniões
+
+interface ReunioesProps {
+  registros: MeetingRecord[];
+  carregado: boolean;
+  /**
+   * Qual reunião está aberta. Controlado por quem renderiza a HOME, e não um
+   * estado interno, porque a navegação vem de fora também: um documento leva à
+   * reunião de origem, e a URL pode pedir uma reunião específica.
+   */
+  abertaId: string | null;
+  onAbrir: (id: string | null) => void;
+  notas: Record<string, Nota>;
+  rascunhosNota: Record<string, string>;
+  estadoDaNota: EstadoDaGravacao;
+  documentos: DocumentoGuardado[];
+  onEscreverNota: (meetingId: string, texto: string) => void;
+  onApagarNota: (meetingId: string) => Promise<boolean>;
+  onAbrirDocumento: (id: string) => void;
+  /** "Criar documento" em texto livre: o pedido segue para a conversa. */
+  onPedirDocumento?: (registro: MeetingRecord, texto: string) => void;
+}
 
 export function PaginaReunioes({
   registros,
   carregado,
-  inicial,
-  onGerar,
-}: {
-  registros: MeetingRecord[];
-  carregado: boolean;
-  /** Reunião que a seção já abre, quando a URL pediu uma. Só o valor INICIAL. */
-  inicial: string | null;
-  onGerar: (id: string) => void;
-}) {
-  const [abertaId, setAbertaId] = useState<string | null>(inicial);
-
+  abertaId,
+  onAbrir,
+  notas,
+  rascunhosNota,
+  estadoDaNota,
+  documentos,
+  onEscreverNota,
+  onApagarNota,
+  onAbrirDocumento,
+  onPedirDocumento = () => {},
+}: ReunioesProps) {
   // A reunião pode sumir (apagada aqui mesmo, ou noutra aba): a tela volta
   // para a lista em vez de ficar num detalhe sem dono.
   const aberta = abertaId ? (registros.find((r) => r.id === abertaId) ?? null) : null;
   useEffect(() => {
-    if (abertaId && carregado && !aberta) setAbertaId(null);
-  }, [abertaId, carregado, aberta]);
+    if (abertaId && carregado && !aberta) onAbrir(null);
+  }, [abertaId, carregado, aberta, onAbrir]);
+  const platform = usePlatform();
+  /** A reunião cuja lixeira foi apertada na lista: a pergunta ocupa o lugar dela. */
+  const [confirmandoId, setConfirmandoId] = useState<string | null>(null);
+  const [erroDaLista, setErroDaLista] = useState('');
+  const busca = useBuscaDoAcervo();
+  const [participante, setParticipante] = useState('');
+  const filtrados = registros.filter((r) => dentroDoPeriodo(r.startedAt, busca.de, busca.ate)
+    && correspondeABusca(busca.consulta, [r.title, notas[r.id]?.texto, ...r.participants.map((p) => p.name),
+      ...r.segments.flatMap((s) => [s.text, s.speaker]),
+      ...(r.revisao?.segmentos.map((s) => s.text) ?? [])])
+    && correspondeABusca(participante, [...r.participants.map((p) => p.name), ...r.segments.map((s) => s.speaker)]));
+
+  const apagar = (id: string) => {
+    void platform
+      .send({ type: 'ui/history/delete', id })
+      .then((resposta) => {
+        if (resposta && typeof resposta === 'object' && 'ok' in resposta && resposta.ok) {
+          setConfirmandoId(null);
+        } else {
+          setErroDaLista('Não foi possível apagar. Encerre a captura e tente novamente.');
+        }
+      })
+      .catch(() => setErroDaLista('Não foi possível apagar a reunião.'));
+  };
 
   if (aberta) {
     return (
       <DetalheDaReuniao
+        key={aberta.id}
         registro={aberta}
-        onVoltar={() => setAbertaId(null)}
-        onGerar={() => onGerar(aberta.id)}
+        nota={rascunhosNota[aberta.id] ?? notas[aberta.id]?.texto ?? ''}
+        estadoDaNota={estadoDaNota}
+        documentos={documentosDaReuniao(documentos, aberta.id)}
+        onEscreverNota={onEscreverNota}
+        onApagarNota={onApagarNota}
+        onAbrirDocumento={onAbrirDocumento}
+        onVoltar={() => onAbrir(null)}
+        onPedirDocumento={onPedirDocumento}
       />
     );
   }
 
+  const grupos = agruparPorSemana(filtrados);
+
   return (
     <div className="tq-pagina">
-      <Cabecalho titulo="Reuniões" sub="O que a extensão capturou neste computador." />
+      <Cabecalho titulo="Reuniões" />
+      <ImportarReuniao onAbrir={onAbrir} />
+      <Automacoes />
+      <BuscaDoAcervo busca={busca} rotulo="Buscar reuniões" total={filtrados.length} />
+      <label className="tq-filtro-participante">Participante<input type="search" value={participante}
+        onChange={(e) => setParticipante(e.target.value)} placeholder="Nome de participante ou falante" /></label>
+      {carregado && registros.length > 0 && filtrados.length === 0 && <Vazio>Nenhuma reunião encontrada. Ajuste a busca ou os filtros.</Vazio>}
 
       {!carregado ? (
         <Vazio>Lendo o histórico…</Vazio>
@@ -91,67 +160,288 @@ export function PaginaReunioes({
           registrar quando o TaqCiti perguntar, e a transcrição aparece aqui.
         </Vazio>
       ) : (
-        <div className="tq-lista">
-          {registros.map((r) => (
-            <button
-              key={r.id}
-              type="button"
-              className="tq-item"
-              onClick={() => setAbertaId(r.id)}
-            >
-              <span>
-                <strong>{r.title}</strong>
-                <small>
-                  {formatDate(r.startedAt)} · {formatTime(r.startedAt)} ·{' '}
-                  {formatDurationHuman(r.durationSeconds)} · {r.segments.length} trecho
-                  {r.segments.length === 1 ? '' : 's'}
-                  {r.status === 'recording' ? ' · gravando' : ''}
-                </small>
-              </span>
-              <Icon name="arrowUpRight" size={16} />
-            </button>
+        <>
+          {erroDaLista && <p role="alert">{erroDaLista}</p>}
+          {grupos.map(([nomeDoGrupo, doGrupo]) => (
+          <section key={nomeDoGrupo} className="tq-grupo" aria-label={nomeDoGrupo}>
+          <h2 className="tq-grupo-titulo">{nomeDoGrupo}</h2>
+          <div className="tq-lista">
+          {doGrupo.map((r) => {
+            const vinculados = documentosDaReuniao(documentos, r.id).length;
+
+            /* A pergunta ocupa o LUGAR do item, e não uma caixa por cima: é o
+               que mantém óbvio qual reunião está prestes a sumir. O texto diz o
+               que VAI JUNTO — ver `features/annotations/vinculos.ts`. */
+            if (confirmandoId === r.id) {
+              return (
+                <div
+                  key={r.id}
+                  className="tq-confirma"
+                  role="alertdialog"
+                  aria-label={`Apagar "${r.title}"?`}
+                >
+                  <p>
+                    <strong>Apagar &ldquo;{r.title}&rdquo;?</strong> A transcrição sai
+                    deste computador para sempre, e com ela as notas, as marcações de
+                    trecho e os prints desta reunião.
+                    {vinculados > 0 && (
+                      <>
+                        {' '}
+                        {vinculados === 1
+                          ? 'O documento gerado a partir dela '
+                          : `Os ${vinculados} documentos gerados a partir dela `}
+                        <strong>{vinculados === 1 ? 'continua' : 'continuam'}</strong> em
+                        Documentos, sem o vínculo.
+                      </>
+                    )}
+                  </p>
+                  <div className="tq-acoes">
+                    <button
+                      type="button"
+                      className="tq-acao tq-acao-perigo"
+                      onClick={() => apagar(r.id)}
+                    >
+                      Apagar
+                    </button>
+                    <button
+                      type="button"
+                      className="tq-acao"
+                      onClick={() => setConfirmandoId(null)}
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              );
+            }
+
+            return (
+              <div key={r.id} className="tq-item-linha">
+                <button type="button" className="tq-item tq-linha-reuniao" onClick={() => onAbrir(r.id)}>
+                  <strong>{r.title}</strong>
+                  {r.importacao && <span className="tq-linha-selo">Importada · {r.importacao.nome}</span>}
+                  <span className="tq-meta">
+                    {r.status === 'recording' ? (
+                      <span className="tq-ao-vivo-txt">Ao vivo agora</span>
+                    ) : (
+                      <span>{formatDate(r.startedAt)}</span>
+                    )}
+                    <span className="tq-relogio">{formatTime(r.startedAt)}</span>
+                    {r.status !== 'recording' && (
+                      <span>{r.importacao && !r.durationSeconds ? 'Duração não informada' : formatDurationHuman(r.durationSeconds)}</span>
+                    )}
+                  </span>
+                  {(r.segments.length > 0 || notas[r.id] || vinculados > 0) && (
+                    <small>
+                      {r.segments.length > 0 && `“${r.segments.at(-1)!.text}”`}
+                      {notas[r.id] && <span className="tq-linha-selo">com nota</span>}
+                      {vinculados > 0 && <span className="tq-linha-selo">com documento</span>}
+                    </small>
+                  )}
+                </button>
+                {/* A que está sendo gravada não se apaga: a captura ainda escreve nela. */}
+                {r.status !== 'recording' && (
+                  <button
+                    type="button"
+                    className="tq-item-apagar"
+                    title={`Apagar "${r.title}"`}
+                    aria-label={`Apagar "${r.title}"`}
+                    onClick={() => {
+                      setErroDaLista('');
+                      setConfirmandoId(r.id);
+                    }}
+                  >
+                    <Icon name="trash" size={16} />
+                  </button>
+                )}
+              </div>
+            );
+          })}
+          </div>
+          </section>
           ))}
-        </div>
+        </>
       )}
     </div>
   );
 }
 
+/** Esta semana e antes: a lista longa lê por tempo, e não como uma fila só. */
+function agruparPorSemana(registros: MeetingRecord[]): Array<[string, MeetingRecord[]]> {
+  const corte = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const recentes = registros.filter((r) => r.startedAt >= corte);
+  const antigas = registros.filter((r) => r.startedAt < corte);
+  return [
+    ['Esta semana', recentes] as [string, MeetingRecord[]],
+    ['Antes', antigas] as [string, MeetingRecord[]],
+  ].filter(([, lista]) => lista.length > 0);
+}
+
 /**
- * Uma reunião por inteiro, dentro da HOME.
+ * A transcrição, na leitura da HOME.
  *
- * O título é editável e a edição vai pelo mesmo `ui/history/rename` de antes —
- * o background continua sendo o dono do histórico. Apagar pede confirmação
- * porque é irreversível e leva a transcrição junto.
+ * Quem fala: VOCÊ em branco, o pessoal do CITi (e-mail @citi.org.br) em verde
+ * e os de fora em roxo — a mesma regra da sidebar. A cor nunca vem sozinha: o
+ * "(Eu)" continua escrito ao lado do nome.
+ * Falas seguidas da mesma pessoa não repetem o nome.
+ *
+ * `content-visibility` em cada fala, no lugar de virtualizar: a reunião de duas
+ * horas rola tão leve quanto a de cinco minutos, e o Ctrl+F continua achando.
+ */
+const idDaFala = (s: MeetingRecord['segments'][number], i: number) => `${s.captionId}:${i}`;
+
+/**
+ * A coluna que rola com a transcrição, e a barra-mapa ao lado — a mesma da
+ * conversa. A barra nativa sai desta coluna (`tq-com-mapa`): duas barras
+ * fazendo o mesmo, lado a lado, era o defeito que a conversa já resolveu.
+ */
+function TranscricaoComMapa({ registro }: { registro: MeetingRecord }) {
+  const [coluna, setColuna] = useState<HTMLDivElement | null>(null);
+  const colegas = useColegasDoCiti(registro.segments.map((s) => s.speaker ?? 'Alguém'));
+  const eu = hostName(registro.participants);
+  const marcas = marcasDasFalas(
+    registro.segments.map((s, i) => {
+      const nome = s.speaker ?? 'Alguém';
+      return {
+        id: idDaFala(s, i),
+        quem: speakerLabel(nome, eu),
+        eu: papelDoFalante(nome, eu, colegas) === 'eu',
+        texto: s.text,
+      };
+    }),
+  );
+  return (
+    <>
+      <div className="tq-coluna-corpo tq-com-mapa" ref={setColuna}>
+        <FalasDaReuniao registro={registro} />
+      </div>
+      <TrilhaDaConversa itens={marcas} rolador={coluna} assunto="reunião" />
+    </>
+  );
+}
+
+function FalasDaReuniao({ registro }: { registro: MeetingRecord }) {
+  const colegas = useColegasDoCiti(registro.segments.map((s) => s.speaker ?? 'Alguém'));
+  if (registro.segments.length === 0)
+    return <p className="tq-vazio">Nenhuma fala foi capturada nesta reunião.</p>;
+  const eu = hostName(registro.participants);
+  return (
+    <ol className="tq-falas" aria-label="Falas da reunião">
+      {registro.segments.map((s, i) => {
+        const nome = s.speaker ?? 'Alguém';
+        const rotulo = speakerLabel(nome, eu);
+        const papel = papelDoFalante(nome, eu, colegas);
+        const seguida = i > 0 && (registro.segments[i - 1]?.speaker ?? 'Alguém') === nome;
+        return (
+          <li
+            key={idDaFala(s, i)}
+            data-tq-turno={idDaFala(s, i)}
+            className={`tq-fala${papel === 'eu' ? ' voce' : papel === 'citi' ? ' citi' : ''}${
+              seguida ? ' seguida' : ''
+            }`}
+            style={{ contentVisibility: 'auto', containIntrinsicSize: 'auto 56px' }}
+          >
+            <div className="tq-fala-quem">
+              <b>{rotulo}</b>
+              <span>{formatOffset(s.startOffsetMs)}</span>
+              {formatSpeechDuration(s.startOffsetMs, s.endOffsetMs) && (
+                <span title="Duração da fala">
+                  {formatSpeechDuration(s.startOffsetMs, s.endOffsetMs)}
+                </span>
+              )}
+            </div>
+            <p className="tq-fala-texto">{s.text}</p>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+/**
+ * Uma reunião por inteiro: transcrição de um lado, notas do outro.
+ *
+ * ── A composição ────────────────────────────────────────────────────────
+ *
+ * Cabeçalho compacto — título editável e uma linha de metadados —, e abaixo
+ * duas colunas de topo alinhado, separadas por espaço e não por moldura: a
+ * transcrição com dois terços da largura, as notas com o resto. As notas estão
+ * sempre ali, inclusive vazias; não há botão para revelá-las.
+ *
+ * Em largura estreita as duas não cabem sem sufocar, e aí elas se ALTERNAM —
+ * nunca duas colunas espremidas. As duas continuam montadas, e a escondida sai
+ * do alcance do teclado: é o que preserva a posição de leitura e o que já foi
+ * escrito ao trocar (ver `useLargura.ts`).
+ *
+ * ── O que saiu daqui ─────────────────────────────────────────────────────
+ *
+ * As ações eram quatro botões soltos no meio da tela, logo abaixo do título, e
+ * "Apagar" era um deles — do mesmo tamanho de "Copiar". Agora são uma faixa
+ * discreta no rodapé, e apagar mora no menu secundário, atrás de um gesto a
+ * mais, com o texto dizendo o que vai junto.
  */
 function DetalheDaReuniao({
   registro,
+  nota,
+  estadoDaNota,
+  documentos,
+  onEscreverNota,
+  onApagarNota,
+  onAbrirDocumento,
   onVoltar,
-  onGerar,
+  onPedirDocumento,
 }: {
   registro: MeetingRecord;
+  nota: string;
+  estadoDaNota: EstadoDaGravacao;
+  documentos: DocumentoGuardado[];
+  onEscreverNota: (meetingId: string, texto: string) => void;
+  onApagarNota: (meetingId: string) => Promise<boolean>;
+  onAbrirDocumento: (id: string) => void;
   onVoltar: () => void;
-  onGerar: () => void;
+  onPedirDocumento: (registro: MeetingRecord, texto: string) => void;
 }) {
+  const [verRevisada, setVerRevisada] = useState(false);
+  const exibindoRevisao = verRevisada && Boolean(registro.revisao);
+  const leitura = exibindoRevisao && registro.revisao
+    ? { ...registro, segments: registro.revisao.segmentos }
+    : registro;
   const platform = usePlatform();
+  const cabemDuas = useCabemDuasColunas();
   const [titulo, setTitulo] = useState(registro.title);
+  const cancelouTitulo = useRef(false);
+  const [foco, setFoco] = useState<'transcricao' | 'notas'>(() =>
+    new URLSearchParams(window.location.search).get('foco') === 'notas'
+      ? 'notas'
+      : 'transcricao',
+  );
+  const [menuAberto, setMenuAberto] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const menuBotaoRef = useRef<HTMLButtonElement | null>(null);
+  useFecharAoSair(menuAberto, useCallback(() => setMenuAberto(false), []), menuRef, menuBotaoRef);
   const [confirmando, setConfirmando] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
 
   // O título vindo do storage manda enquanto ninguém está editando aqui.
   useEffect(() => setTitulo(registro.title), [registro.title]);
 
+  useEffect(() => {
+    if (!aviso) return;
+    const t = setTimeout(() => setAviso(null), 2600);
+    return () => clearTimeout(t);
+  }, [aviso]);
+
   const palavras = countWords(registro.segments.map((s) => s.text));
 
   const copiar = () => {
     void navigator.clipboard
-      .writeText(transcriptToText(registro.segments))
+      .writeText(transcriptToText(leitura.segments))
       .then(() => setAviso('Transcrição copiada'))
       .catch(() => setAviso('Não foi possível copiar'));
   };
 
   return (
-    <div className="tq-pagina">
+    <div className="tq-pagina tq-reuniao">
       <button type="button" className="tq-voltar" onClick={onVoltar}>
         <Icon name="chevron" size={14} className="tq-girado" />
         Reuniões
@@ -167,13 +457,22 @@ function DetalheDaReuniao({
         onKeyDown={(e) => {
           if (e.key === 'Enter') e.currentTarget.blur();
           if (e.key === 'Escape') {
+            // O `blur` roda o `onBlur` NESTE mesmo evento, antes de o estado
+            // desfeito valer: sem a marca, o Escape salvava a edição.
+            cancelouTitulo.current = true;
             setTitulo(registro.title);
             e.currentTarget.blur();
           }
         }}
         onBlur={() => {
+          if (cancelouTitulo.current) {
+            cancelouTitulo.current = false;
+            return;
+          }
           const novo = titulo.trim();
           if (novo.length > 0 && novo !== registro.title) {
+            // Renomear não mexe em vínculo nenhum: nota, marcações, prints e
+            // documentos apontam para o `id`, nunca para o nome.
             void platform.send({
               type: 'ui/history/rename',
               id: registro.id,
@@ -186,48 +485,196 @@ function DetalheDaReuniao({
       />
 
       <p className="tq-meta">
-        {formatDate(registro.startedAt)} · {formatTime(registro.startedAt)} ·{' '}
-        {formatDurationHuman(registro.durationSeconds)}
-        {palavras > 0 && ` · ${formatCount(palavras)} palavras`}
-        {registro.participants.length > 0 &&
-          ` · ${registro.participants.map((p) => p.name).join(', ')}`}
+        <span>{formatDate(registro.startedAt)}</span>
+        <span className="tq-relogio">{formatTime(registro.startedAt)}</span>
+        <span>{registro.importacao && !registro.durationSeconds ? 'Duração não informada' : formatDurationHuman(registro.durationSeconds)}</span>
+        {registro.importacao && <span>Importada de {registro.importacao.nome}</span>}
+        {palavras > 0 && <span>{formatCount(palavras)} palavras</span>}
+        {registro.participants.length > 0 && (
+          <span>{registro.participants.map((p) => p.name).join(', ')}</span>
+        )}
       </p>
 
-      <div className="tq-acoes">
-        <button type="button" className="tq-acao" onClick={copiar}>
+      {/*
+       * As AÇÕES, em pílulas neutras lado a lado — o desenho da HOME antiga.
+       * Nenhuma "chama" atenção: a cor fica para o que a ação produz (a
+       * caixinha da IA, a carta). O que cada uma abre nasce logo abaixo da
+       * fileira, na largura toda, e não num menu flutuante.
+       */}
+      <div className="tq-rodape-acoes tq-acoes-reuniao">
+        <button
+          type="button"
+          className="tq-acao tq-pilula"
+          title="Copiar a transcrição"
+          onClick={copiar}
+        >
+          <Icon name="copy" size={15} />
           Copiar
         </button>
         <button
           type="button"
-          className="tq-acao"
-          onClick={() => downloadTranscript(registro)}
+          className="tq-acao tq-pilula"
+          title="Baixar a transcrição em .txt"
+          onClick={() => downloadTranscript(leitura)}
         >
+          <Icon name="arrowDown" size={15} />
           Baixar .txt
         </button>
-        <button type="button" className="tq-acao" onClick={onGerar}>
-          <Icon name="doc" size={14} />
-          Gerar documento
-        </button>
-        <button
-          type="button"
-          className="tq-acao tq-acao-perigo"
-          onClick={() => setConfirmando(true)}
-        >
-          Apagar
-        </button>
+
+        <GerarDocumento
+          registro={registro}
+          onAbrirDocumento={onAbrirDocumento}
+          onPedirLivre={(texto) => onPedirDocumento(registro, texto)}
+        />
+
+        {/* A que está sendo gravada não se apaga, como na lista: a captura
+            ainda escreve nela, e o pedido seria recusado depois de confirmado. */}
+        {registro.status !== 'recording' && (
+          <div className="tq-menu-secundario" ref={menuRef}>
+            <button
+              type="button"
+              className="tq-acao tq-pilula tq-acao-icone"
+              aria-haspopup="true"
+              ref={menuBotaoRef}
+              aria-expanded={menuAberto}
+              title="Mais ações"
+              aria-label="Mais ações"
+              onClick={() => setMenuAberto((v) => !v)}
+            >
+              <Icon name="chevron" size={14} />
+            </button>
+            {menuAberto && (
+              <div className="tq-menu" role="menu">
+                {registro.revisao && (
+                  <button type="button" role="menuitem" onClick={() => {
+                    setVerRevisada(!verRevisada);
+                    setMenuAberto(false);
+                  }}>
+                    {exibindoRevisao ? 'Ver transcrição original' : 'Ver transcrição revisada por IA'}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="perigo"
+                  onClick={() => {
+                    setMenuAberto(false);
+                    setConfirmando(true);
+                  }}
+                >
+                  Apagar reunião
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {aviso && (
+          <p className="tq-aviso-curto" role="status">
+            {aviso}
+          </p>
+        )}
       </div>
 
-      {aviso && (
-        <p className="tq-aviso-curto" role="status">
-          {aviso}
-        </p>
+      {/* O acesso aos documentos desta reunião: uma linha de atalhos, e não
+          mais um painel permanentemente aberto disputando a largura. */}
+      {documentos.length > 0 && (
+        <div className="tq-vinculados" aria-label="Documentos desta reunião">
+          <Icon name="doc" size={13} />
+          {documentos.map((d) => (
+            <button
+              key={d.id}
+              type="button"
+              className="tq-chip"
+              title={`Abrir "${d.title}"`}
+              onClick={() => onAbrirDocumento(d.id)}
+            >
+              {d.title}
+            </button>
+          ))}
+        </div>
       )}
+
+      {!cabemDuas && (
+        <div className="tq-alternar" role="tablist" aria-label="O que mostrar">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={foco === 'transcricao'}
+            className={foco === 'transcricao' ? 'atual' : undefined}
+            onClick={() => setFoco('transcricao')}
+          >
+            {exibindoRevisao ? 'Revisada por IA' : 'Transcrição'}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={foco === 'notas'}
+            className={foco === 'notas' ? 'atual' : undefined}
+            onClick={() => setFoco('notas')}
+          >
+            Notas
+          </button>
+        </div>
+      )}
+
+      <div className={`tq-reuniao-corpo${cabemDuas ? ' lado-a-lado' : ''}`}>
+        <Coluna
+          rotulo="Transcrição"
+          ativa={cabemDuas || foco === 'transcricao'}
+          empilhada={!cabemDuas}
+        >
+          {/* Em tela estreita a aba "Transcrição", logo acima, já diz o nome:
+              repetir o título embaixo dela era o mesmo rótulo duas vezes. */}
+          {cabemDuas && (
+            <div className="tq-coluna-topo">
+              <h2>{exibindoRevisao ? 'Transcrição revisada por IA' : 'Transcrição'}</h2>
+            </div>
+          )}
+          {/* `scroll={false}`: quem rola é a coluna, e só ela. Uma caixa de
+              rolagem a mais aqui dentro seria a caixa aninhada que engole a
+              roda do mouse. */}
+          <TranscricaoComMapa registro={leitura} />
+        </Coluna>
+
+        <Coluna
+          rotulo="Notas da reunião"
+          ativa={cabemDuas || foco === 'notas'}
+          empilhada={!cabemDuas}
+        >
+          <NotasDaReuniao
+            meetingId={registro.id}
+            tituloDaReuniao={registro.title}
+            texto={nota}
+            estado={estadoDaNota}
+            onEscrever={onEscreverNota}
+            onApagar={onApagarNota}
+          />
+          <PrintsDaReuniao meetingId={registro.id} titulo={registro.title} />
+        </Coluna>
+      </div>
 
       {confirmando && (
         <div className="tq-confirma" role="alertdialog" aria-label="Apagar do histórico?">
+          {/*
+           * O texto diz o que VAI JUNTO. Antes ele falava só da transcrição, e
+           * a nota, as marcações e os prints sumiam em silêncio no mesmo
+           * clique. Ver `features/annotations/vinculos.ts`.
+           */}
           <p>
             <strong>Apagar &ldquo;{registro.title}&rdquo;?</strong> A transcrição sai
-            deste computador para sempre.
+            deste computador para sempre, e com ela as notas, as marcações de trecho e os
+            prints desta reunião.
+            {documentos.length > 0 && (
+              <>
+                {' '}
+                {documentos.length === 1
+                  ? 'O documento gerado a partir dela '
+                  : `Os ${documentos.length} documentos gerados a partir dela `}
+                <strong>{documentos.length === 1 ? 'continua' : 'continuam'}</strong> em
+                Documentos, sem o vínculo.
+              </>
+            )}
           </p>
           <div className="tq-acoes">
             <button
@@ -235,8 +682,22 @@ function DetalheDaReuniao({
               className="tq-acao tq-acao-perigo"
               onClick={() => {
                 setConfirmando(false);
-                void platform.send({ type: 'ui/history/delete', id: registro.id });
-                onVoltar();
+                void platform
+                  .send({ type: 'ui/history/delete', id: registro.id })
+                  .then((resposta) => {
+                    if (
+                      resposta &&
+                      typeof resposta === 'object' &&
+                      'ok' in resposta &&
+                      resposta.ok
+                    )
+                      onVoltar();
+                    else
+                      setAviso(
+                        'Não foi possível apagar. Encerre a captura e tente novamente.',
+                      );
+                  })
+                  .catch(() => setAviso('Não foi possível apagar a reunião.'));
               }}
             >
               Apagar
@@ -251,162 +712,45 @@ function DetalheDaReuniao({
           </div>
         </div>
       )}
-
-      {/* `scroll={false}`: quem rola é a PÁGINA. Uma caixa de rolagem aqui
-          dentro seria a caixa aninhada que engole a roda do mouse. */}
-      <div className="tq-transcricao">
-        <TranscriptView
-          segments={registro.segments}
-          selfName={hostName(registro.participants)}
-          emptyMessage="Nenhuma fala foi capturada nesta reunião."
-          scroll={false}
-        />
-      </div>
     </div>
   );
 }
 
-// -------------------------------------------------------------- Documentos
-
-export function PaginaDocumentos({
-  registros,
-  carregado,
-  onGerar,
+/**
+ * Uma das duas colunas.
+ *
+ * Em largura estreita as duas ficam montadas e empilhadas no mesmo lugar; a
+ * que não está em uso some por `visibility` e recebe `inert`. `visibility`, e
+ * não `display: none`, porque `display: none` destrói a caixa e leva junto o
+ * `scrollTop` — a posição de leitura da transcrição. `inert` porque uma coluna
+ * invisível que ainda recebe o Tab é pior do que uma coluna ausente.
+ */
+function Coluna({
+  rotulo,
+  ativa,
+  empilhada,
+  children,
 }: {
-  registros: MeetingRecord[];
-  carregado: boolean;
-  onGerar: (id: string) => void;
+  rotulo: string;
+  ativa: boolean;
+  empilhada: boolean;
+  children: React.ReactNode;
 }) {
-  const comConteudo = registros.filter(temConteudo);
+  const ref = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    const el = ref.current as (HTMLElement & { inert?: boolean }) | null;
+    if (el) el.inert = !ativa;
+  }, [ativa]);
 
   return (
-    <div className="tq-pagina">
-      <Cabecalho titulo="Documentos" sub="O que suas reuniões podem virar." />
-
-      {/*
-        Estado honesto: documentos gerados NÃO são guardados hoje. Não existe
-        chave de storage para eles (ver STORAGE_KEYS) — a página de geração
-        entrega o arquivo e termina ali. Então esta tela não tem histórico para
-        mostrar, e diz isso, em vez de listar exemplos.
-      */}
-      <div className="tq-aviso">
-        <strong>Ainda não há histórico de documentos.</strong> Os documentos gerados
-        são entregues na hora (download ou Google Docs) e não ficam registrados na
-        extensão. Guardar esse histórico é trabalho pendente — até lá, a lista abaixo
-        é o caminho de ida: as reuniões a partir das quais dá para gerar um documento
-        agora.
-      </div>
-
-      {!carregado ? (
-        <Vazio>Lendo o histórico…</Vazio>
-      ) : comConteudo.length === 0 ? (
-        <Vazio>
-          Nenhuma reunião com transcrição ainda. Sem transcrição não há o que
-          transformar em documento.
-        </Vazio>
-      ) : (
-        <div className="tq-lista">
-          {comConteudo.map((r) => (
-            <button
-              key={r.id}
-              type="button"
-              className="tq-item"
-              onClick={() => onGerar(r.id)}
-            >
-              <span>
-                <strong>{r.title}</strong>
-                <small>
-                  {formatDate(r.startedAt)} · gerar ata, X1, daily, planning ou review
-                </small>
-              </span>
-              <Icon name="doc" size={16} />
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------- Conexões
-
-export function PaginaConexoes({ registros }: { registros: MeetingRecord[] }) {
-  const comConteudo = registros.filter(temConteudo);
-
-  return (
-    <div className="tq-pagina">
-      <Cabecalho
-        titulo="Conexões"
-        sub="Como levar o contexto das suas reuniões para outro assistente."
-      />
-
-      {/*
-        Nenhuma integração existe. Nem ChatGPT, nem Claude: não há OAuth, nem
-        cliente de API, nem chave guardada em lugar nenhum do projeto. O que
-        existe de verdade é a exportação da transcrição — e é ela que este
-        tutorial usa. Prometer "conectar" um botão que não conecta nada seria o
-        tipo de coisa que só se descobre depois de clicar.
-      */}
-      <div className="tq-aviso">
-        <strong>Nenhuma integração automática está implementada.</strong> O TaqCiti
-        não se conecta ao ChatGPT nem ao Claude — não há login, permissão nem envio
-        automático. O caminho abaixo é manual, e funciona hoje.
-      </div>
-
-      <div className="tq-guia">
-        <details open>
-          <summary>1. Baixe a transcrição da reunião</summary>
-          <p>
-            Escolha a reunião na lista abaixo. O arquivo <code>.txt</code> sai com o
-            título, a data e as falas na ordem — é exatamente o que a extensão
-            capturou.
-          </p>
-          {comConteudo.length === 0 ? (
-            <Vazio>Nenhuma reunião com transcrição para exportar ainda.</Vazio>
-          ) : (
-            <div className="tq-lista tq-lista-densa">
-              {comConteudo.slice(0, 6).map((r) => (
-                <button
-                  key={r.id}
-                  type="button"
-                  className="tq-item"
-                  onClick={() => downloadTranscript(r)}
-                >
-                  <span>
-                    <strong>{r.title}</strong>
-                    <small>{formatDate(r.startedAt)} · baixar .txt</small>
-                  </span>
-                  <Icon name="arrowDown" size={16} />
-                </button>
-              ))}
-            </div>
-          )}
-        </details>
-
-        <details>
-          <summary>2. Abra o ChatGPT ou o Claude</summary>
-          <p>
-            Nos dois, arraste o arquivo para o campo de mensagem ou use o anexo. Eles
-            leem <code>.txt</code> direto, sem conversão.
-          </p>
-          <p>
-            Se a transcrição for longa, prefira anexar o arquivo a colar o texto: o
-            anexo não consome o limite da janela de mensagem do mesmo jeito.
-          </p>
-        </details>
-
-        <details>
-          <summary>3. Peça o que você precisa</summary>
-          <p>
-            Um pedido específico rende mais que “resuma”. Por exemplo: “Liste as
-            decisões, quem ficou responsável por cada uma e o que ficou sem dono.”
-          </p>
-          <p>
-            Para uma ata formatada, o próprio TaqCiti já faz — veja a aba Documentos,
-            que usa o servidor do projeto e devolve o arquivo pronto.
-          </p>
-        </details>
-      </div>
-    </div>
+    <section
+      ref={ref}
+      className={`tq-coluna${empilhada ? ' empilhada' : ''}${ativa ? ' ativa' : ''}`}
+      aria-label={rotulo}
+      aria-hidden={!ativa}
+    >
+      {children}
+    </section>
   );
 }

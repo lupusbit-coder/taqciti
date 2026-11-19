@@ -42,3 +42,17 @@ describe('onExecute', () => {
     expect(document.querySelector('taqciti-root')).toBeNull();
   });
 });
+
+describe('shadow root da cápsula', () => {
+  it('é `closed`: a página do Meet não alcança a UI por host.shadowRoot', async () => {
+    // O script da página do Meet roda no mesmo documento e consegue achar o
+    // <taqciti-root>. Com `closed`, `host.shadowRoot` é null, então ela não
+    // alcança nem clica nos botões da cápsula (o `isTrusted` fica como defesa extra).
+    const { getMountPoint, unmountHost } = await import('./ui/mount');
+    getMountPoint();
+    const host = document.querySelector('taqciti-root');
+    expect(host).not.toBeNull();
+    expect((host as HTMLElement).shadowRoot).toBeNull();
+    unmountHost();
+  });
+});

@@ -4,7 +4,7 @@ import { MARCA_CAPA_LARGURA_PT } from './brand';
 import { CINZA_LINHA, TAMANHO_RODAPE_PT, TINTA } from './typography';
 import { TEMPLATES } from '../templates';
 import { textoDeLacuna, type DocumentData, type Gap } from '../documentData';
-import { marcadorDeLacuna } from '../agents/escritor';
+import { marcadorDeLacuna } from '../vazamento';
 
 const completa: DocumentData = {
   metadata: { date: '12/08/2026', projectName: 'Projeto Fênix' },
@@ -24,7 +24,12 @@ const completa: DocumentData = {
   ],
   outcomes: [],
   outputs: [{ text: 'Lista dos endpoints alterados', quotes: [] }],
-  conclusion: { text: 'O projeto segue com a entrega remarcada.' },
+  executiveSummary: [{ text: 'A entrega foi remarcada para 28/08/2026.', quotes: [] }],
+  actionItems: [
+    { acao: 'Enviar a lista de endpoints', responsavel: 'Ana', prazo: 'sexta', quotes: [] },
+    { acao: 'Revisar o contrato da API', quotes: [] },
+  ],
+  openPoints: [{ text: 'Ninguém respondeu quem libera o acesso de produção.', quotes: [] }],
   signature: { name: 'Ana Souza', role: 'Gerente de Projetos' },
 };
 
@@ -39,7 +44,15 @@ const render = (data: DocumentData = completa, gaps: Gap[] = [lacunaCargo]) =>
   renderHtml({ documentType: 'ata', data, gaps, title: 'Ata de Reunião — Projeto Fênix' });
 
 /** As seções que o modelo apresenta COM cabeçalho próprio. */
-const COM_CABECALHO = ['topicos_discutidos', 'decisoes', 'outcomes', 'outputs', 'conclusao'];
+const COM_CABECALHO = [
+  'resumo_executivo',
+  'topicos_discutidos',
+  'decisoes',
+  'encaminhamentos',
+  'outcomes',
+  'outputs',
+  'em_aberto',
+];
 
 describe('cobertura', () => {
   it('toda seção da Ata tem renderizador próprio', () => {
@@ -107,7 +120,8 @@ describe('estilo do modelo institucional', () => {
             quotes: [],
           },
         ],
-        conclusion: { text: 'Fecha com "aspas" & sinais <perigosos>.' },
+        executiveSummary: [{ text: 'Fecha com "aspas" & sinais <perigosos>.', quotes: [] }],
+        actionItems: [{ acao: 'Medir <p95> & p99', responsavel: 'Ana <Souza>', quotes: [] }],
       },
       gaps: [],
       title: 'Ata & <teste>',
@@ -118,6 +132,8 @@ describe('estilo do modelo institucional', () => {
     expect(html).not.toContain('<Ltda>');
     expect(html).not.toContain('<Souza>');
     expect(html).not.toContain('<perigosos>');
+    expect(html).not.toContain('<p95>');
+    expect(html).toContain('Medir &lt;p95&gt; &amp; p99 — responsável: Ana &lt;Souza&gt;');
     expect(html).toContain('&lt;200ms');
     expect(html).toContain('Alpha &amp; Beta &lt;Ltda&gt;');
     expect(html).toContain('&quot;aspas&quot; &amp; sinais &lt;perigosos&gt;');
@@ -173,9 +189,28 @@ describe('estilo do modelo institucional', () => {
   });
 
   it('participantes vêm sob o rótulo do modelo, sem cabeçalho de seção', () => {
+    // O rótulo era "PARTICIPANTES – CARGO:" até 28/10/2026; a reunião quase
+    // nunca diz cargo, e a linha agora traz a atuação de cada um.
     const html = render();
-    expect(html).toContain('PARTICIPANTES &ndash; CARGO:');
-    expect(html).not.toContain('>Participantes e cargos</h2>');
+    expect(html).toContain('PARTICIPANTES:');
+    expect(html).not.toContain('>Participantes</h2>');
+  });
+
+  it('a atuação vem depois do nome, e o cargo só quando foi dito', () => {
+    const html = render({
+      ...completa,
+      participants: [
+        { name: 'Carlos', roleSource: 'unknown', atuacao: 'apresentou o cronograma', quotes: [] },
+      ],
+    });
+    expect(html).toContain('Carlos: apresentou o cronograma');
+  });
+
+  it('encaminhamento sem dono vai para o próprio rótulo, sem célula vazia', () => {
+    const html = render();
+    expect(html).toContain('Enviar a lista de endpoints — responsável: Ana · prazo: sexta');
+    expect(html).toContain('SEM RESPONSÁVEL DEFINIDO:');
+    expect(html.indexOf('SEM RESPONSÁVEL DEFINIDO:')).toBeLessThan(html.indexOf('Revisar o contrato da API'));
   });
 
   it('fecha com "Atenciosamente," e a assinatura', () => {
@@ -208,7 +243,7 @@ describe('escape', () => {
     // `<` solto quebraria a estrutura; um `<script>` seria pior que quebrar.
     const html = render({
       ...completa,
-      conclusion: { text: '<script>alert(1)</script> & "aspas" > fim' },
+      executiveSummary: [{ text: '<script>alert(1)</script> & "aspas" > fim', quotes: [] }],
     });
     expect(html).toContain('&lt;script&gt;');
     expect(html).not.toContain('<script>');
@@ -226,33 +261,42 @@ describe('escape', () => {
   });
 });
 
+/*
+ * Campo ausente NÃO vira "[A preencher: …]". Cargo que a reunião não disse,
+ * quem assina, nome do projeto, afirmação que o Auditor derrubou: a linha
+ * simplesmente não entra no documento do cliente. Só uma dúvida marcada
+ * `extrema` aparece (e hoje nenhuma detecção automática a marca).
+ */
 describe('lacunas', () => {
-  it('cargo ausente vira marcador no lugar do cargo, não linha separada', () => {
+  const extrema: Gap = { ...lacunaCargo, extrema: true };
+
+  it('cargo ausente: sai só o nome, sem marcador', () => {
     const html = render();
-    expect(html).toContain(
-      `Ana &ndash; <span style="font-weight:bold;color:#000000">${escapeHtml(
-        textoDeLacuna(lacunaCargo.question),
-      )}</span>`,
-    );
+    expect(html).toContain('Ana</li>');
+    expect(html).not.toContain('A preencher');
+    expect(html).not.toContain(escapeHtml(lacunaCargo.question));
   });
 
-  it('HTML e markdown mostram a MESMA frase de lacuna', () => {
-    // Se divergirem, a ata em HTML e a em markdown discordam sobre o que
-    // falta — e a estrutura é a mesma nas duas.
-    const nu = marcadorDeLacuna(lacunaCargo).replace(/\*\*/g, '');
-    expect(render()).toContain(escapeHtml(nu));
+  it('uma lacuna extrema aparece no lugar do cargo, e é a mesma frase do markdown', () => {
+    // Se divergirem, a ata em HTML e a em markdown discordam sobre o que falta.
+    const html = render(completa, [extrema]);
+    expect(html).toContain(`Ana &ndash; <span style="font-weight:bold;color:#000000">${escapeHtml(textoDeLacuna(extrema.question))}</span>`);
+    expect(html).toContain(escapeHtml(marcadorDeLacuna(extrema).replace(/\*\*/g, '')));
   });
 
-  it('campo sem lacuna correspondente ainda mostra que falta algo', () => {
-    // `askWhenMissing` vazio faz a seção degradar em silêncio de propósito.
-    // Ali o documento ainda precisa dizer que não se determinou — campo em
-    // branco diria que a reunião não tinha aquilo.
-    expect(render({ ...completa, metadata: {} }, [])).toContain('A preencher');
+  it('campo ausente sem lacuna simplesmente não entra', () => {
+    const html = render({ ...completa, metadata: {}, signature: {} }, []);
+    expect(html).not.toContain('A preencher');
+    expect(html).not.toContain('DATA:');
+    expect(html).not.toContain('Atenciosamente');
   });
 
-  it('lacuna sem campo próprio vai para o fim da seção, não some', () => {
-    // É o caso da afirmação descartada pelo Auditor: ela não tem um campo
-    // para ocupar, mas o leitor precisa ver que ali falta algo.
+  it('"Você" não é nome e não entra na lista de participantes', () => {
+    const html = render({ ...completa, participants: [...completa.participants!, { name: 'Você', roleSource: 'unknown', quotes: [] }] }, []);
+    expect(html).not.toContain('Você');
+  });
+
+  it('afirmação descartada pelo Auditor some sem deixar pergunta no documento', () => {
     const descartada: Gap = {
       sectionId: 'decisoes',
       field: 'decisions[0]',
@@ -260,8 +304,12 @@ describe('lacunas', () => {
       why: 'Rejeitada duas vezes.',
     };
     const html = render(completa, [descartada]);
-    const secao = html.slice(html.indexOf('>Decisões tomadas</h2>'));
-    expect(secao).toContain(escapeHtml(textoDeLacuna(descartada.question)));
+    expect(html).not.toContain(escapeHtml(descartada.question));
+    // Já a dúvida extrema, sem campo próprio, vai para o fim da seção.
+    const secao = render(completa, [{ ...descartada, extrema: true }]);
+    expect(secao.slice(secao.indexOf('>Decisões tomadas</h2>'))).toContain(
+      escapeHtml(textoDeLacuna(descartada.question)),
+    );
   });
 });
 
@@ -280,7 +328,7 @@ describe('omitWhenEmpty', () => {
     expect(render({ ...completa, decisions: [] }, [])).toContain('>Decisões tomadas</h2>');
   });
 
-  it('usa a MESMA regra de vazio que o Escritor', () => {
+  it('usa a MESMA regra de vazio que o markdown', () => {
     // Duas definições de "vazio" fariam o HTML e o markdown discordarem
     // sobre quais seções o documento tem.
     const semNenhum = render({ metadata: { date: '12/08/2026' } }, []);
@@ -382,7 +430,7 @@ describe('X1 — perguntas e respostas', () => {
     expect(html).not.toContain('Ata de reunião</h1>');
   });
 
-  it('campo descartado pela auditoria vira lacuna, não some o par inteiro', () => {
+  it('campo descartado pela auditoria: o par sobra sem o lado que caiu, sem marcador', () => {
     const html = renderHtml({
       documentType: 'x1',
       data: {
@@ -399,6 +447,65 @@ describe('X1 — perguntas e respostas', () => {
       title: 'X1',
     });
     expect(html).toContain('Por que você quer essa vaga?');
-    expect(html).toContain('Qual foi a resposta a esta pergunta?');
+    expect(html).not.toContain('Qual foi a resposta a esta pergunta?');
+    expect(html).not.toContain('A preencher');
+    expect(html).not.toContain('Entrevistado');
+  });
+});
+
+describe('Resumo completo — resumo por período', () => {
+  const data = {
+    periods: [
+      {
+        title: 'Abertura e pauta',
+        start: '00:00:00',
+        end: '00:08:30',
+        summary: 'Maria abriu a reunião e apresentou a pauta.',
+        quotes: [],
+      },
+      {
+        title: 'Integração com a API',
+        start: '00:08:30',
+        end: '00:31:10',
+        summary: 'A equipe explicou o atraso.\nFicou combinado revisar a documentação.',
+        quotes: [],
+      },
+    ],
+  };
+
+  it('mostra os trechos numerados, em ordem, com o intervalo de cada um', () => {
+    const html = renderHtml({ documentType: 'resumo', data, gaps: [], title: 'Resumo' });
+    expect(html).toContain('1. Abertura e pauta (00:00:00 – 00:08:30)');
+    expect(html).toContain('2. Integração com a API (00:08:30 – 00:31:10)');
+    expect(html.indexOf('Abertura e pauta')).toBeLessThan(html.indexOf('Integração com a API'));
+    expect(html).toContain('Ficou combinado revisar a documentação.');
+  });
+
+  it('usa o título próprio e não repete cabeçalho de seção', () => {
+    const html = renderHtml({ documentType: 'resumo', data, gaps: [], title: 'Resumo' });
+    expect(html).toContain('Resumo completo da reunião</h1>');
+    expect(html).not.toContain('Resumo por período</h2>');
+    expect(html).not.toContain('Ata de reunião</h1>');
+  });
+
+  it('sem carimbo, o trecho sai só com o título', () => {
+    const html = renderHtml({
+      documentType: 'resumo',
+      data: { periods: [{ title: 'Único assunto', summary: 'Tudo.', quotes: [] }] },
+      gaps: [],
+      title: 'Resumo',
+    });
+    expect(html).toContain('1. Único assunto<');
+  });
+
+  it('escapa HTML no que vem do modelo', () => {
+    const html = renderHtml({
+      documentType: 'resumo',
+      data: { periods: [{ title: 'A <b>', summary: '<script>x</script>', quotes: [] }] },
+      gaps: [],
+      title: 'Resumo',
+    });
+    expect(html).not.toContain('<script>x');
+    expect(html).toContain('&lt;script&gt;');
   });
 });

@@ -18,17 +18,27 @@
  * é o que acontece quando alguém responde uma lacuna.
  *
  * Uso: `node scripts/smokePdf.mjs` com o servidor já de pé em :3000.
+ *
+ * Credencial: por padrão, o segredo compartilhado (`DOCCITI_SHARED_KEY`, no
+ * header `x-docciti-key`) — é o que o CI usa. Contra um servidor com
+ * `DOCCITI_CHAVE_LEGADA=recusar`, o segredo sozinho toma 401 mesmo com o deploy
+ * saudável; aí defina `SMOKE_ID_TOKEN` com um id_token do Google de uma conta
+ * do domínio, e ele vai como `Authorization: Bearer`. (O valor nunca entra no
+ * repositório nem no log.)
  */
 // `localhost`, não `127.0.0.1`: o `next start` escuta em IPv6 (`::1`) em
 // algumas máquinas, e ali o IP literal v4 dá ECONNREFUSED com o servidor no
 // ar. `localhost` resolve para o que existir.
 const BASE = process.env.SMOKE_BASE_URL ?? 'http://localhost:3000';
 const CHAVE = process.env.DOCCITI_SHARED_KEY;
+const ID_TOKEN = process.env.SMOKE_ID_TOKEN?.trim();
 
-if (!CHAVE) {
-  console.error('DOCCITI_SHARED_KEY não definida — a rota recusaria com 401.');
+if (!CHAVE && !ID_TOKEN) {
+  console.error('Defina DOCCITI_SHARED_KEY (padrão) ou SMOKE_ID_TOKEN — sem nenhum, a rota recusaria com 401.');
   process.exit(1);
 }
+
+const credencial = ID_TOKEN ? { authorization: `Bearer ${ID_TOKEN}` } : { 'x-docciti-key': CHAVE };
 
 /** Mínimo que exercita capa (título + subtítulo), lista e rodapé. */
 const corpo = {
@@ -52,7 +62,7 @@ const conferir = (condicao, mensagem) => {
 
 const resposta = await fetch(`${BASE}/api/answers`, {
   method: 'POST',
-  headers: { 'content-type': 'application/json', 'x-docciti-key': CHAVE },
+  headers: { 'content-type': 'application/json', ...credencial },
   body: JSON.stringify(corpo),
 });
 

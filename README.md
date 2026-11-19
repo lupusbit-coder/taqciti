@@ -1,23 +1,64 @@
-# TaqCITi Standalone
+# TaqCiti
 
-Extensão para Chrome e Edge de transcrição automática de reuniões do Google
-Meet — captura invisível, histórico 100% local. Sem envio a nenhum backend,
-sem conta de produto, sem diagnóstico técnico: só escuta a reunião e guarda
-a transcrição.
+Extensão para Chrome e Edge que transcreve reuniões do Google Meet: captura
+invisível das legendas, histórico no próprio computador, e geração de ata a
+partir do que foi dito.
 
-Extraída do núcleo de captura da extensão TaqCITi (repositório
-`citi-flow-companion`), removendo tudo que dependia da plataforma CITi Flow
-(sincronização, autenticação de produto, fluxo de oportunidade comercial,
-diagnóstico técnico). A extensão original continua existindo e funcionando
-sem nenhuma mudança — este é um projeto separado, para evoluir como produto
-independente.
+> **Nome.** Até a versão 2.1.2 o produto se chamava "TaqCITi Standalone". O
+> sufixo descrevia a ORIGEM — a extração do núcleo de captura da extensão
+> antiga (`citi-flow-companion`), sem a plataforma CITi Flow — e deixou de
+> distinguir coisa alguma: não existe uma edição "não standalone" com que se
+> contrapor. O nome agora é só **TaqCiti**. A extensão original continua
+> existindo e funcionando sem nenhuma mudança; este é um projeto separado.
+
+## O que ela faz
+
+- **Captura** as legendas do Meet enquanto a reunião acontece, sem gravar áudio
+  nem vídeo, e só depois de a pessoa aceitar (ver `src/features/meeting/`).
+- **Guarda** a transcrição, as notas, as marcações de trecho e os prints no
+  `chrome.storage.local`, indexados pela reunião.
+- **Gera documentos** (ata, x1, …) a partir da transcrição, pelo servidor em
+  `server/` — este é o único caminho que sai do computador, e ele começa com um
+  clique explícito.
+- **Responde pelo Taq**, o assistente: busca e lê reuniões e documentos por
+  ferramentas, responde com fontes conferidas e gera Ata ou X1 a partir do
+  catálogo de documentos. O ciclo roda na extensão, e só os trechos consultados
+  vão ao provedor, pelo servidor. Arquitetura, contratos e especialistas
+  planejados em [`docs/taq-agentes.md`](docs/taq-agentes.md).
+- **Sincroniza e expõe um conector**, opcionalmente: a seção Conexões liga a
+  sincronização com o servidor e entrega o endereço do conector MCP, para um
+  cliente de IA ler as reuniões. Desligado é um estado completo — quem nunca
+  ligar nada tem a captura, os documentos e as notas do mesmo jeito.
+
+### O que dá para apagar, e de onde
+
+Tudo que a extensão guarda tem como sair, na superfície em que aparece, e
+sempre atrás de uma confirmação que diz o que vai junto:
+
+| O quê | Onde | O que a confirmação avisa |
+| --- | --- | --- |
+| Reunião | HOME → Reuniões → a reunião → menu secundário do rodapé | Leva junto notas, marcações e prints; os documentos gerados **ficam**, sem o vínculo |
+| Documento | HOME → Documentos, no ícone de lixeira do item — ou dentro do editor, no menu secundário | A reunião de origem não é afetada |
+| Conversa | HOME → menu de conversas (canto superior direito), na lixeira da linha | As mensagens saem para sempre |
+| Notas da reunião | HOME → Reuniões → a reunião → lixeira no topo da coluna de notas | A transcrição não é afetada |
+
+Apagar a nota remove o REGISTRO, e não só o texto: esvaziar o campo à mão deixa
+para trás os originais preservados de versões antigas (ver `apagarNota` em
+`src/features/annotations/notes.ts`).
+
+E apagar aqui basta: a sincronização compara assinaturas por item, então "estava
+guardado e sumiu daqui" vira uma remoção no servidor na passada seguinte (ver
+`src/features/sync/sincronizacao.ts`). Não existe uma segunda lixeira do outro
+lado para lembrar de esvaziar.
 
 ## Rodando localmente
 
 ```bash
 npm install
 npm run dev      # build de desenvolvimento com hot reload
-npm run build    # build de produção em dist/
+npm run build    # build de produção em dist/ (a trava do vite.config.ts exige
+                 # VITE_DOCCITI_SERVER_URL em https e uma chave de produção;
+                 # contra o servidor local use `npm run build:dev`)
 npm run typecheck
 npm test
 ```
@@ -26,29 +67,53 @@ Depois do build, carregue a pasta `dist/` em `chrome://extensions` (Chrome)
 ou `edge://extensions` (Edge) → Modo desenvolvedor → "Carregar sem
 compactação".
 
+O servidor de geração é um projeto Next.js à parte, em `server/`, com o próprio
+`README.md` e o próprio `package.json`.
+
+## Verificação no navegador
+
+`npm test` roda em jsdom, que **não faz layout**: ele prova estrutura e o que
+foi gravado no storage, nunca que algo está visível, alinhado ou dentro da
+caixa. O que depende disso tem passada própria no navegador, com a extensão
+compilada e um perfil temporário isolado — nunca o perfil pessoal:
+
+```bash
+npm run build
+node scripts/verify-apagar.cjs <caminho-do-playwright-core>
+node scripts/verify-meetings-documents.cjs <caminho-do-playwright-core>
+node scripts/verify-preparar.cjs <caminho-do-playwright-core> <pasta-da-build>
+```
+
+(`verify-preparar` precisa da build de desenvolvimento:
+`npx vite build --mode development --outDir <pasta>`; o resultado fica em
+`docs/verification/preparar/`.)
+
+Os relatórios e as capturas ficam em [`docs/verification/`](docs/verification):
+[apagar](docs/verification/apagar/RELATORIO.md) e
+[reuniões e documentos](docs/verification/meetings-documents/RELATORIO.md). A
+primeira delas existe porque uma regra de CSS mais específica deixava a lixeira
+da conversa com 296px de largura — os testes de componente passavam.
+
+Para uma reunião de verdade, com o Meet no meio, o roteiro manual é
+[`docs/roteiro-reuniao-real.md`](docs/roteiro-reuniao-real.md).
+
 ## Distribuição
 
+**Instalar:** peça a um assistente de IA (Claude, ChatGPT) que carregue a
+extensão no seu navegador, ou siga o passo a passo manual de
+[`INSTALL.md`](INSTALL.md). Não há mais instaladores nativos (abandonados em
+13/11/2026): carregar a pasta da extensão é mais simples que qualquer
+instalador.
+
+Cada tag `v*.*.*` dispara `.github/workflows/release.yml`, que builda a
+extensão e publica na **GitHub Release** da tag o zip
+(`taqciti-v<versão>.zip`) e o `SHA256SUMS.txt` dele.
+
 O passo a passo para publicar — servidor no ar, variáveis, tag, e como
-conferir que o instalador realmente fala com o servidor — está em
+conferir que a extensão realmente fala com o servidor — está em
 [`docs/publicar-release.md`](docs/publicar-release.md). Vale ler antes de
 cortar uma tag: a `v2.0.0` foi publicada apontando para `localhost` e só
 funcionava na máquina de quem construiu.
-
-Cada tag `v*.*.*` dispara `.github/workflows/release.yml`, que builda e
-compila três instaladores nativos (Windows `.exe`, Linux `.run`, macOS
-`.pkg` — ver `installer/`) e os publica em dois canais:
-
-- **GitHub Release da tag** — canal técnico/de auditoria. É onde os
-  artefatos ficam versionados de forma permanente, junto do changelog
-  gerado automaticamente; útil para debugar qual build gerou qual arquivo.
-- **Pasta do Google Drive do time** (`GDRIVE_TAQCITI_FOLDER_ID`) — **canal
-  oficial de distribuição pro time**, porque nem todo mundo tem acesso ao
-  GitHub ainda. Um upload repetido da mesma versão sobrescreve o arquivo
-  existente na pasta em vez de duplicar (ver
-  `.github/scripts/upload-to-gdrive.sh`).
-
-Os dois canais coexistem — a Release do GitHub nunca é removida ou
-substituída pelo Drive; o Drive é só um destino adicional.
 
 ## Estrutura
 
@@ -62,17 +127,41 @@ substituída pelo Drive; o Drive é só um destino adicional.
 - `src/features/annotations/` — o que a PESSOA acrescenta a uma reunião: notas,
   marcações de trecho, prints e o aviso no chat. Chaves separadas da
   transcrição, de propósito.
+- `src/features/documents/` — a coleção de documentos guardados: o que a
+  seção Documentos lista, abre, edita e apaga.
 - `src/features/transcription/` — agregação e limpeza da transcrição (puro, sem I/O).
 - `src/features/meeting/` — máquina de estados da reunião, consentimento de
-  captura, nomeação, detecção de próxima reunião.
+  captura, nomeação.
 - `src/features/history/` — histórico local (chrome.storage.local).
+- `src/features/sync/` — a sincronização com o servidor, opcional e explícita.
 - `src/background/` — service worker: roteia mensagens, persiste o histórico,
   abre o painel lateral e a aba da HOME, e faz o print da aba da reunião.
 - `src/document/` — a página de geração de documento a partir de uma reunião.
+- `src/features/taq/` — o assistente **Taq**: orquestrador, ferramentas, catálogo e
+  contratos. Os subsistemas ficam ao lado (`acompanhamento`, `apoio`, `calibracao`,
+  `conducao`, `estado`, `trabalho`). Ver [`docs/arquitetura/taq-assistente.md`](docs/arquitetura/taq-assistente.md).
+- `src/features/integracoes/` — as integrações com o Google (Gmail, Agenda, Docs), todas
+  com confirmação por clique.
+- `src/shared/` — o que as superfícies dividem: componentes de interface, plataforma,
+  configuração, serviços de storage e mensageria.
+- `server/` — o servidor Next.js: geração de documento, conector MCP e sincronização.
+- `docs/` — a documentação; o índice está em [`docs/README.md`](docs/README.md).
 
 Duas superfícies de produto — a sidebar e a HOME — e uma cápsula. O popup e o
 histórico em tela cheia foram removidos numa etapa anterior; o painel flutuante
 injetado na página foi removido nesta, quando a sidebar virou o painel nativo.
+
+## Documentação
+
+- [`docs/README.md`](docs/README.md) — o índice de tudo, com os seis documentos de
+  arquitetura (captura, interface, Taq, servidor de documentos, conector e sincronização,
+  build e release).
+- [`CLAUDE.md`](CLAUDE.md) — o guia de quem vai mexer no código: comandos, convenções e as
+  armadilhas que já custaram caro. Serve igualmente a quem usa o Claude Code no projeto.
+- [`INSTALL.md`](INSTALL.md) — como instalar a extensão.
+
+Este repositório é público: a documentação nunca traz chaves, URLs de produção, IDs de
+conta nem conteúdo de reunião real.
 
 **Limitação conhecida:** a cápsula não consegue abrir o painel lateral sozinha.
 `chrome.sidePanel.open()` exige um gesto do usuário medido no contexto da

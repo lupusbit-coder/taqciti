@@ -1,5 +1,9 @@
 node_modules/
 dist/
+# A build de desenvolvimento (`npm run build:dev`): a mesma extensão, mais os
+# controles de simulação e a população de demonstração. Serve para avaliar a
+# interface cheia; nunca é o que se publica.
+dist-dev/
 release/
 .env
 .env.*
@@ -13,3 +17,6 @@ release/
 # versionada — quem a tiver consegue publicar uma extensão com a MESMA
 # identidade, e portanto herdar o cliente OAuth registrado contra esse ID.
 *.pem
+
+# Demo Sequel da Shaped Fonts: avaliação local, sem redistribuição no repositório.
+/src/shared/fonts/sequel-demo-local/

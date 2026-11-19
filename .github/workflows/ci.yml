@@ -1,7 +1,7 @@
 # Testa os DOIS projetos deste repo a cada push e a cada PR.
 #
 # Por que separado de `release.yml`: aquele dispara só em tag `v*.*.*`, e o
-# que ele faz é EMPACOTAR — compila os instaladores e publica. Ele nunca roda
+# que ele faz é EMPACOTAR — compila o zip da extensão e publica. Ele nunca roda
 # um teste, e nunca toca em `server/`. Ou seja: até aqui nada no CI olhava o
 # servidor de geração de documento, que é metade do produto. Este arquivo é
 # essa metade que faltava, mais o `typecheck`/`test` da extensão, que também
@@ -18,13 +18,18 @@ on:
   pull_request:
   workflow_dispatch: {}
 
+# Só leitura: nenhum job daqui publica nada. Sem isto, o token herda o padrão
+# do repositório, que pode ser escrita.
+permissions:
+  contents: read
+
 jobs:
   extensao:
     name: Extensão (raiz)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 20
           cache: npm
@@ -33,39 +38,12 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
       - run: npm test
+      # A build de produção recusa servidor sem https e a chave de dev
+      # (`vite.config.ts`). Aqui só interessa que COMPILE: valores fictícios.
       - run: npm run build
-
-  # O instalador Windows só era compilado DURANTE uma release — e por isso um
-  # erro de sintaxe nele só aparecia na hora de publicar. Foi o que aconteceu
-  # com a v2.0.0: um comentário `{ ... }` no [Code] citava a constante
-  # `{pf32}`, comentário de chaves não aninha em Pascal, o comentário fechou
-  # no primeiro `}` e o resto da frase virou código ("Unknown identifier
-  # 'costuma'"). O defeito estava no repositório havia dois dias, invisível.
-  #
-  # Compilar aqui é o mesmo trabalho que o `release.yml` faz, sem publicar
-  # nada: se o instalador não compila, o PR fica vermelho em vez de a release
-  # abortar.
-  instalador-windows:
-    name: Instalador Windows
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 20
-          cache: npm
-          cache-dependency-path: package-lock.json
-      - run: npm ci
-      # O .iss empacota `dist/*`; sem o build ele falha por arquivo ausente,
-      # que esconderia um erro de sintaxe de verdade.
-      - run: npm run build
-      - name: Instalar Inno Setup
-        run: choco install innosetup --no-progress -y
-      # Versão fictícia: aqui só interessa se COMPILA. A de verdade sai do
-      # nome da tag, no release.yml.
-      - name: Compilar instalador
-        shell: cmd
-        run: '"C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DAppVersion=0.0.0-ci installer\windows\taqciti.iss'
+        env:
+          VITE_DOCCITI_SERVER_URL: https://ci.invalid
+          VITE_DOCCITI_SHARED_KEY: ci-build-only
 
   servidor:
     name: Servidor (server/)
@@ -74,8 +52,8 @@ jobs:
       run:
         working-directory: server
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 20
           cache: npm
@@ -108,5 +86,5 @@ jobs:
           DOCCITI_SHARED_KEY: ci-build-only
         run: |
           npm run start &
-          npx --yes wait-on http://localhost:3000 --timeout 90000
+          npx --yes wait-on@9.5.1 http://localhost:3000 --timeout 90000
           node scripts/smokePdf.mjs

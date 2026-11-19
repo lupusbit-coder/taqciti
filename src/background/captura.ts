@@ -38,7 +38,10 @@ export type MotivoDeFalha =
   | 'recusado';
 
 export const EXPLICACAO: Record<MotivoDeFalha, string> = {
-  'sem-reuniao': 'Não há reunião em andamento para capturar.',
+  // Diz o que faltou (a aba), não que a reunião não existe: na simulação, e em
+  // qualquer captura sem aba conhecida, a sidebar mostra "Transcrevendo" logo
+  // acima — "não há reunião" contradizia a própria tela.
+  'sem-reuniao': 'O print sai da aba da reunião no Meet, e ela não foi encontrada.',
   'aba-fechada': 'A aba da reunião não está mais aberta.',
   'aba-nao-ativa':
     'Vá até a aba da reunião e tente de novo — o print é da tela dela, e o Chrome só captura a aba que está à vista.',

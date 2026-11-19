@@ -1,11 +1,11 @@
 /**
  * O JSON INTERMEDIÁRIO — `document_data` da especificação.
  *
- * É a camada canônica do documento. O Pensante produz DADOS, não prosa; o
- * Escritor redige a partir daqui; e a renderização da Fase 6 consome isto, e
- * não o markdown. O markdown já perdeu que Maria é participante com cargo de
- * origem `user`; renderizar dele obrigaria a reparsear o que a estrutura já
- * sabia.
+ * É a camada canônica do documento. O Leitor produz estes DADOS numa leitura
+ * só da reunião, e tudo que o cliente vê — markdown, HTML, PDF — é montado em
+ * código a partir daqui. O markdown já perdeu que Maria é participante com
+ * cargo de origem `user`; renderizar dele obrigaria a reparsear o que a
+ * estrutura já sabia.
  *
  * Duas propriedades sustentam a auditoria:
  *
@@ -80,6 +80,39 @@ export interface Participant {
   /** Ausente quando não há evidência. Ausência é lacuna, não "desconhecido". */
   role?: string;
   roleSource: RoleSource;
+  /**
+   * O que a pessoa FEZ na reunião ("apresentou o cronograma; validou a
+   * proposta"), por evidência. Entrou em 28/10/2026 porque a reunião quase
+   * nunca diz cargo, e uma lista de nomes soltos não informa nada; o que ela
+   * mostra é a atuação de cada um. É conferida à parte do nome (claim
+   * `participants[i].atuacao`): atuação reprovada some e a pessoa fica.
+   */
+  atuacao?: string;
+  quotes: AnchoredQuote[];
+}
+
+/**
+ * Uma frase com a citação que a sustenta. É a unidade de prova do resumo
+ * executivo e dos pontos em aberto: cada frase é conferida SOZINHA, e a que
+ * não se sustenta cai sem levar as outras. Parágrafo inteiro contra um punhado
+ * de citações foi o que deixou "vou mandar logo" virar "logomarca".
+ */
+export interface Afirmacao {
+  text: string;
+  quotes: AnchoredQuote[];
+}
+
+/**
+ * Uma ação que ficou combinada. `responsavel` e `prazo` só existem se a
+ * reunião os disse: responsável é quem ASSUMIU ("eu faço", "deixa comigo") ou
+ * foi designado e aceitou; "alguém deveria" não define dono. Sem dono, a ação
+ * sai em "Sem responsável definido", que é informação, e não num campo vazio.
+ */
+export interface Encaminhamento {
+  acao: string;
+  responsavel?: string;
+  /** Como foi dito ("até sexta", "dia 12"), nunca convertido em data. */
+  prazo?: string;
   quotes: AnchoredQuote[];
 }
 
@@ -154,18 +187,55 @@ export interface QaExchange {
   quotesResposta: AnchoredQuote[];
 }
 
+/**
+ * Um trecho da reunião, do Resumo completo. `start`/`end` são os carimbos
+ * `HH:MM:SS` da própria transcrição — copiados, nunca calculados — e somem
+ * quando a transcrição não os traz. O resumo é prosa condensada, então a
+ * evidência é uma lista de citações do trecho, auditada como o X1 audita as
+ * respostas.
+ */
+export interface MeetingPeriod {
+  title: string;
+  start?: string;
+  end?: string;
+  summary: string;
+  quotes: AnchoredQuote[];
+}
+
+/** "00:00:00 – 00:12:40", só com o início, ou `''` sem carimbo. Uma função só
+ *  para markdown, HTML e PDF mostrarem o mesmo intervalo. */
+export function rotuloDoPeriodo(period: Pick<MeetingPeriod, 'start' | 'end'>): string {
+  if (period.start && period.end) return `${period.start} – ${period.end}`;
+  if (period.start) return `a partir de ${period.start}`;
+  return '';
+}
+
 export interface DocumentData {
   metadata?: Metadata;
+  /** Ata e Resumo — duas ou três frases para quem não esteve na reunião. */
+  executiveSummary?: Afirmacao[];
   generalTopic?: GeneralTopic;
   participants?: Participant[];
   topicsDiscussed?: DiscussedTopic[];
   decisions?: Decision[];
   outcomes?: Outcome[];
   outputs?: Output[];
+  /** Ata — as ações combinadas, com dono e prazo só quando ditos. */
+  actionItems?: Encaminhamento[];
+  /** Ata ("Em aberto") e Resumo ("Pontos de atenção") — o que ficou sem resposta. */
+  openPoints?: Afirmacao[];
+  /**
+   * A Conclusão da Ata até 28/10/2026, quando o resumo executivo no topo a
+   * substituiu. Fica no tipo porque documentos salvos ainda a trazem: o PDF
+   * (`doCatalogo.ts`) continua a mostrá-la; o HTML, que sai das seções do
+   * template, não.
+   */
   conclusion?: Conclusion;
   signature?: Signature;
   /** X1 — pares pergunta/resposta, na ordem em que apareceram na entrevista. */
   qa?: QaExchange[];
+  /** Resumo completo — os trechos da reunião, do começo ao fim. */
+  periods?: MeetingPeriod[];
   /** Por seção, para os templates que ainda não têm estrutura própria. */
   generic?: Record<string, GenericItem[]>;
 }
@@ -178,7 +248,17 @@ export interface Gap {
   /** Pergunta objetiva ao usuário. Vem de `askWhenMissing` quando existe. */
   question: string;
   why: string;
+  /**
+   * Só uma dúvida EXTREMA vira pergunta ao usuário e aparece no documento.
+   * Cargo faltando, quem assina, nome do projeto, afirmação que o Auditor
+   * derrubou: nada disso justifica um campo `[A preencher]` no documento que
+   * o cliente lê — o campo simplesmente não entra. Ver `soDuvidasExtremas`.
+   */
+  extrema?: boolean;
 }
+
+/** As lacunas que valem uma pergunta. Nenhuma detecção automática marca `extrema` hoje. */
+export const soDuvidasExtremas = (gaps: Gap[]): Gap[] => gaps.filter((gap) => gap.extrema === true);
 
 /**
  * O texto da lacuna como o leitor do documento a vê.
@@ -220,7 +300,7 @@ export interface AuditableClaim {
 }
 
 export interface SectionDataSpec {
-  /** Schema que o Pensante deve satisfazer para esta seção. */
+  /** A fatia desta seção no schema que o Leitor deve satisfazer. */
   schema: JsonSchema;
   /**
    * Enxerta a resposta do modelo no DocumentData acumulado, ancorando as
@@ -230,50 +310,52 @@ export interface SectionDataSpec {
   /**
    * Afirmações que PODEM ser auditadas nesta seção — capacidade, não política.
    * Quem decide se a auditoria roda é o `audit` do `SectionSpec`, lido por
-   * `runSection`. Espelhar a política aqui duplicaria a mesma decisão em dois
+   * `apurar` (generateStep.ts). Espelhar a política aqui duplicaria a mesma decisão em dois
    * lugares, e é assim que eles divergem.
    */
   claims(data: DocumentData, sectionId: string): AuditableClaim[];
   /** Remove as afirmações rejeitadas pelo Auditor. */
   drop(data: DocumentData, paths: Set<string>, sectionId: string): void;
   /**
-   * Os dados DESTA seção em texto, para o Escritor — ou `null` quando não há
-   * nada.
+   * Os dados DESTA seção em texto — ou `null` quando não há nada.
    *
    * `null` é o que decide `omitWhenEmpty`: seção vazia com a marca some do
-   * documento em vez de aparecer com um título e nada embaixo. Vive aqui, e
-   * não no Escritor, porque saber o que é "vazio" nesta seção é conhecimento
-   * da seção — e o Escritor é genérico de propósito.
+   * documento em vez de aparecer com um título e nada embaixo. É a MESMA
+   * regra no markdown, no HTML e no PDF, e vive aqui porque saber o que é
+   * "vazio" nesta seção é conhecimento da seção.
    *
    * As citações NÃO entram: elas são evidência para a auditoria, não texto
-   * para a ata. O Escritor redige a partir dos dados, e não da transcrição.
+   * para a ata.
    */
   serialize(data: DocumentData, sectionId: string): string | null;
   /**
-   * Markdown da seção montado em CÓDIGO, sem chamar modelo.
+   * Markdown da seção, montado em CÓDIGO a partir dos dados — em TODAS as
+   * seções.
    *
-   * Presente só onde a seção é pura estrutura — Identificação, Participantes,
-   * Assinatura. Ali o Escritor não tem prosa para escrever: ele receberia uma
-   * lista de nomes e devolveria a mesma lista de nomes. A chamada seria custo
-   * pago por nada e risco de graça, porque um modelo que reescreve uma lista
-   * de participantes pode perder um nome ou trocar um acento — e ninguém
-   * confere lista de nome.
-   *
-   * Ausente = a seção tem prosa de verdade e vai para o Escritor.
+   * Havia um Escritor, um modelo que reescrevia os dados em prosa. Ele saiu
+   * porque era redundante duas vezes: o HTML e o PDF, que são o que o cliente
+   * recebe, já saíam direto de `DocumentData` e nunca leram o texto dele; e o
+   * Leitor já escreve os campos de texto na forma final. Sobrava uma chamada
+   * por seção para produzir um markdown que podia discordar do PDF.
    */
-  renderPlain?(data: DocumentData, sectionId: string, gaps: Gap[]): string;
+  markdown(data: DocumentData, section: SectionSpec, gaps: Gap[]): string;
 }
 
-/** O marcador de lacuna em markdown. Igual ao do Escritor, e pelo mesmo
- *  `textoDeLacuna`, para as duas rotas não divergirem. */
-function marcador(gap: Gap | undefined, campo: string): string {
-  return `**${textoDeLacuna(gap ? gap.question : campo)}**`;
+/** `## Título` + corpo; corpo vazio vira só o título, e a lacuna vem depois. */
+function secaoMarkdown(section: SectionSpec, corpo: string[]): string {
+  return [`## ${section.title}`, ...(corpo.length > 0 ? ['', ...corpo] : [])].join('\n');
+}
+
+/** O marcador de lacuna em markdown. Igual ao de `vazamento.ts`, e pelo
+ *  mesmo `textoDeLacuna`, para os dois não divergirem. */
+function marcador(gap: Gap | undefined): string | null {
+  return gap?.extrema === true ? `**${textoDeLacuna(gap.question)}**` : null;
 }
 
 const lacunaDoCampo = (gaps: Gap[], field: string): Gap | undefined =>
   gaps.find((g) => g.field === field);
 
-/** Lista para o Escritor, ou `null` quando não sobrou item. */
+/** Lista em markdown, ou `null` quando não sobrou item. */
 function bullets(items: string[]): string | null {
   const linhas = items.filter((linha) => linha.trim());
   return linhas.length > 0 ? linhas.map((linha) => `- ${linha}`).join('\n') : null;
@@ -288,9 +370,15 @@ const QUOTES: JsonSchema = {
     'procurada na transcrição, e a que não for encontrada invalida a afirmação.',
 };
 
+/**
+ * Lista de afirmações com citação, uma claim por item. `prosa` = o documento a
+ * mostra como um parágrafo corrido (resumo executivo); a prova continua frase a
+ * frase nos dados.
+ */
 function listSpec(
-  key: 'outcomes' | 'outputs',
+  key: 'outcomes' | 'outputs' | 'executiveSummary' | 'openPoints',
   itemDescription: string,
+  { prosa = false, afirma = '' }: { prosa?: boolean; afirma?: string } = {},
 ): SectionDataSpec {
   return {
     schema: {
@@ -318,7 +406,7 @@ function listSpec(
     claims(data) {
       return (data[key] ?? []).map((item, index) => ({
         path: `${key}[${index}]`,
-        text: item.text,
+        text: `${afirma}${item.text}`,
         anchors: located(item.quotes),
       }));
     },
@@ -328,7 +416,40 @@ function listSpec(
     serialize(data) {
       return bullets((data[key] ?? []).map((item) => item.text));
     },
+    markdown(data, section) {
+      const textos = (data[key] ?? []).map((item) => item.text);
+      if (prosa) return secaoMarkdown(section, textos.length > 0 ? [juntarFrases(textos)] : []);
+      const lista = bullets(textos);
+      return secaoMarkdown(section, lista ? [lista] : []);
+    },
   };
+}
+
+/** Frases soltas como um parágrafo: cada uma termina em pontuação, uma vez só. */
+export function juntarFrases(frases: string[]): string {
+  return frases
+    .map((f) => f.trim())
+    .filter(Boolean)
+    .map((f) => (/[.!?…]$/.test(f) ? f : `${f}.`))
+    .join(' ');
+}
+
+/**
+ * "Nome – cargo: atuação", com cada parte só quando existe. `cargo` vem de
+ * fora porque cada saída decide o que mostrar no lugar de um cargo ausente.
+ */
+export function linhaDoParticipante(p: Pick<Participant, 'name' | 'atuacao'>, cargo?: string | null): string {
+  const nome = cargo ? `${p.name} – ${cargo}` : p.name;
+  return p.atuacao ? `${nome}: ${p.atuacao}` : nome;
+}
+
+/** "Ação — responsável: X · prazo: Y", igual no markdown e no HTML. */
+export function linhaDoEncaminhamento(e: Encaminhamento): string {
+  const extras = [
+    e.responsavel ? `responsável: ${e.responsavel}` : '',
+    e.prazo ? `prazo: ${e.prazo}` : '',
+  ].filter(Boolean);
+  return extras.length > 0 ? `${e.acao} — ${extras.join(' · ')}` : e.acao;
 }
 
 /** Fallback para seção sem estrutura própria — templates placeholder. */
@@ -375,6 +496,10 @@ const GENERIC_SPEC: SectionDataSpec = {
   serialize(data, sectionId) {
     return bullets((data.generic?.[sectionId] ?? []).map((item) => item.text));
   },
+  markdown(data, section) {
+    const lista = bullets((data.generic?.[section.id] ?? []).map((item) => item.text));
+    return secaoMarkdown(section, lista ? [lista] : []);
+  },
 };
 
 /**
@@ -415,15 +540,14 @@ export const SECTION_DATA_SPECS: Record<string, SectionDataSpec> = {
         data.metadata?.projectName ? `Projeto: ${data.metadata.projectName}` : '',
       ]);
     },
-    renderPlain(data, _sectionId, gaps) {
-      const projeto = data.metadata?.projectName ?? marcador(lacunaDoCampo(gaps, 'metadata.projectName'), 'projeto');
-      const quando = data.metadata?.date ?? marcador(lacunaDoCampo(gaps, 'metadata.date'), 'data');
+    markdown(data, _section, gaps) {
+      const projeto = data.metadata?.projectName ?? marcador(lacunaDoCampo(gaps, 'metadata.projectName'));
+      const quando = data.metadata?.date ?? marcador(lacunaDoCampo(gaps, 'metadata.date'));
+      const subtitulo = [projeto, quando].filter(Boolean).join(' - ');
       return [
         '## Identificação',
-        '',
-        `${projeto} - ${quando}`,
-        '',
-        `**DATA:** ${quando}`,
+        ...(subtitulo ? ['', subtitulo] : []),
+        ...(quando ? ['', `**DATA:** ${quando}`] : []),
       ].join('\n');
     },
   },
@@ -450,6 +574,15 @@ export const SECTION_DATA_SPECS: Record<string, SectionDataSpec> = {
         `Andamento: ${data.generalTopic.progress}`,
       ]);
     },
+    // Mesmas linhas rotuladas do HTML (TÓPICO / ANDAMENTO).
+    markdown(data, section) {
+      if (!data.generalTopic) return secaoMarkdown(section, []);
+      return secaoMarkdown(section, [
+        `**TÓPICO:** ${data.generalTopic.topic}`,
+        '',
+        `**ANDAMENTO:** ${data.generalTopic.progress}`,
+      ]);
+    },
   },
 
   participantes: {
@@ -468,6 +601,13 @@ export const SECTION_DATA_SPECS: Record<string, SectionDataSpec> = {
                   'OMITA quando não houver evidência na reunião. Não escreva "desconhecido".',
               },
               roleSource: { type: 'string', enum: ['meeting', 'user', 'unknown'] },
+              atuacao: {
+                type: 'string',
+                description:
+                  'O que a pessoa fez NESTA reunião, em poucas palavras e com verbos no ' +
+                  'passado ("apresentou o cronograma; levantou a dúvida sobre o acesso"). ' +
+                  'OMITA se as falas dela não mostram nada além de presença.',
+              },
               quotes: QUOTES,
             },
             required: ['name', 'roleSource', 'quotes'],
@@ -490,46 +630,154 @@ export const SECTION_DATA_SPECS: Record<string, SectionDataSpec> = {
           name: limparRotuloDeSelf(p.name),
           ...(p.role ? { role: p.role } : {}),
           roleSource: p.role ? (p.roleSource ?? 'meeting') : 'unknown',
+          ...(p.atuacao?.trim() ? { atuacao: p.atuacao.trim() } : {}),
           quotes: anchorQuotes(p.quotes, locate),
         }));
     },
     claims(data) {
-      return (data.participants ?? []).map((p, index) => ({
-        path: `participants[${index}]`,
-        // O que se audita é a afirmação inteira: quem participou E qual o
-        // cargo. Auditar só o nome deixaria o cargo passar sem conferência,
-        // e cargo inventado é o erro que a Ata mais precisa evitar.
-        text: p.role
-          ? `${p.name} participou da reunião e tem o cargo/papel de ${p.role}.`
-          : `${p.name} participou da reunião.`,
-        anchors: located(p.quotes),
-      }));
+      return (data.participants ?? []).flatMap((p, index) => [
+        {
+          path: `participants[${index}]`,
+          // O que se audita é a afirmação inteira: quem participou E qual o
+          // cargo. Auditar só o nome deixaria o cargo passar sem conferência,
+          // e cargo inventado é o erro que a Ata mais precisa evitar.
+          text: p.role
+            ? `${p.name} participou da reunião e tem o cargo/papel de ${p.role}.`
+            : `${p.name} participou da reunião.`,
+          anchors: located(p.quotes),
+        },
+        // A atuação é outra afirmação: reprovada, cai só ela, e a pessoa fica.
+        ...(p.atuacao
+          ? [
+              {
+                path: `participants[${index}].atuacao`,
+                text: `Na reunião, ${p.name} ${p.atuacao}`,
+                anchors: located(p.quotes),
+              },
+            ]
+          : []),
+      ]);
     },
     drop(data, paths) {
-      data.participants = (data.participants ?? []).filter(
-        (_, index) => !paths.has(`participants[${index}]`),
-      );
+      data.participants = (data.participants ?? [])
+        .map((p, index) => {
+          if (!paths.has(`participants[${index}].atuacao`)) return p;
+          const { atuacao: _fora, ...resto } = p;
+          return resto;
+        })
+        .filter((_, index) => !paths.has(`participants[${index}]`));
     },
     serialize(data) {
       return bullets(
         (data.participants ?? []).map(
-          (p) => `${p.name} — ${p.role ?? 'cargo não determinado'} (origem: ${p.roleSource})`,
+          (p) =>
+            `${p.name} — ${p.role ?? 'cargo não determinado'} (origem: ${p.roleSource})` +
+            (p.atuacao ? `; na reunião: ${p.atuacao}` : ''),
         ),
       );
     },
-    renderPlain(data, _sectionId, gaps) {
-      const linhas = (data.participants ?? []).map((p) => {
-        const cargo =
-          p.role ?? marcador(lacunaDoCampo(gaps, `participants[${p.name}].role`), `cargo de ${p.name}`);
-        // "Você" não é nome: sai como lacuna, e a pessoa continua na lista.
-        const nome = ehRotuloDeSelf(p.name)
-          ? marcador(lacunaDoCampo(gaps, `participants[${p.name}].name`), `nome de "${p.name}"`)
-          : p.name;
-        return `- ${nome} – ${cargo}`;
-      });
-      return ['## Participantes e cargos', '', '**PARTICIPANTES – CARGO:**', '', ...linhas].join('\n');
+    markdown(data, _section, gaps) {
+      // "Você" não é nome: sem nome real, a linha não entra (e nenhuma pergunta
+      // é feita). Sem cargo, sai só o nome; sem atuação, nada depois dele.
+      const linhas = (data.participants ?? [])
+        .filter((p) => !ehRotuloDeSelf(p.name))
+        .map((p) => `- ${linhaDoParticipante(p, p.role ?? marcador(lacunaDoCampo(gaps, `participants[${p.name}].role`)))}`);
+      return ['## Participantes', '', ...linhas].join('\n');
     },
   },
+
+  encaminhamentos: {
+    schema: {
+      type: 'object',
+      properties: {
+        items: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              acao: {
+                type: 'string',
+                description: 'A ação combinada, com verbo no infinitivo ("Enviar a lista de acessos").',
+              },
+              responsavel: {
+                type: 'string',
+                description:
+                  'Nome de quem ASSUMIU a ação ("eu faço", "deixa comigo") ou foi designado e ' +
+                  'aceitou. OMITA se ninguém assumiu — "alguém deveria" não define dono.',
+              },
+              prazo: {
+                type: 'string',
+                description: 'O prazo como foi DITO ("até sexta", "dia 12"). OMITA se ninguém disse.',
+              },
+              quotes: QUOTES,
+            },
+            required: ['acao', 'quotes'],
+          },
+        },
+      },
+      required: ['items'],
+    },
+    merge(data, payload, _sectionId, locate) {
+      data.actionItems = (
+        (payload as { items?: { acao?: string; responsavel?: string; prazo?: string; quotes?: unknown }[] })
+          ?.items ?? []
+      )
+        .filter((i) => i?.acao?.trim())
+        .map((i) => ({
+          acao: i.acao!.trim(),
+          ...(i.responsavel?.trim() && !ehRotuloDeSelf(i.responsavel) ? { responsavel: limparRotuloDeSelf(i.responsavel.trim()) } : {}),
+          ...(i.prazo?.trim() ? { prazo: i.prazo.trim() } : {}),
+          quotes: anchorQuotes(i.quotes, locate),
+        }));
+    },
+    claims(data) {
+      // A afirmação inteira vai ao Auditor: a ação, quem a assumiu e o prazo.
+      // Dono ou prazo que a reunião não sustenta derruba o item, e não só o
+      // campo — um encaminhamento com dono errado é pior que nenhum.
+      return (data.actionItems ?? []).map((e, index) => ({
+        path: `actionItems[${index}]`,
+        text:
+          `Ficou combinado na reunião: ${e.acao}` +
+          (e.responsavel ? `; ${e.responsavel} assumiu a tarefa` : '') +
+          (e.prazo ? `; prazo dito: ${e.prazo}` : '') +
+          '.',
+        anchors: located(e.quotes),
+      }));
+    },
+    drop(data, paths) {
+      data.actionItems = (data.actionItems ?? []).filter((_, index) => !paths.has(`actionItems[${index}]`));
+    },
+    serialize(data) {
+      return bullets((data.actionItems ?? []).map(linhaDoEncaminhamento));
+    },
+    markdown(data, section) {
+      const todos = data.actionItems ?? [];
+      const comDono = bullets(todos.filter((e) => e.responsavel).map(linhaDoEncaminhamento));
+      const semDono = bullets(todos.filter((e) => !e.responsavel).map(linhaDoEncaminhamento));
+      return secaoMarkdown(section, [
+        ...(comDono ? [comDono] : []),
+        ...(semDono ? [...(comDono ? [''] : []), '**Sem responsável definido:**', '', semDono] : []),
+      ]);
+    },
+  },
+
+  resumo_executivo: listSpec(
+    'executiveSummary',
+    'Uma frase do resumo executivo, curta e factual, sustentada pelas próprias citações.',
+    { prosa: true },
+  ),
+  // O Auditor precisa saber que a frase afirma uma PENDÊNCIA. Sem isso, na
+  // primeira geração ao vivo (28/10/2026) ele leu "ambiente de homologação"
+  // como fato concluído e o derrubou com o motivo "não houve aprovação" —
+  // justamente o que provava que o ponto ficou em aberto.
+  em_aberto: listSpec('openPoints', 'Uma pergunta, pendência ou assunto que a reunião deixou sem resposta.', {
+    afirma: 'Ficou EM ABERTO ao fim da reunião (sem resposta, sem decisão ou sem encaminhamento): ',
+  }),
+  pontos_de_atencao: listSpec(
+    'openPoints',
+    'Uma dúvida, preocupação ou risco que alguém levantou e que ficou sem resposta.',
+    { afirma: 'Alguém levantou na reunião, e ficou sem resposta: ' },
+  ),
 
   topicos_discutidos: {
     schema: {
@@ -566,6 +814,14 @@ export const SECTION_DATA_SPECS: Record<string, SectionDataSpec> = {
     drop: () => {},
     serialize(data) {
       return bullets((data.topicsDiscussed ?? []).map((t) => `${t.title}: ${t.summary}`));
+    },
+    // Numerada: o guidance pede numeração "para facilitar referência futura",
+    // e o HTML numera também.
+    markdown(data, section) {
+      return secaoMarkdown(
+        section,
+        (data.topicsDiscussed ?? []).map((t, i) => `${i + 1}. **${t.title}:** ${t.summary}`),
+      );
     },
   },
 
@@ -647,10 +903,8 @@ export const SECTION_DATA_SPECS: Record<string, SectionDataSpec> = {
       );
     },
     serialize(data) {
-      // A concordância entra porque o guidance da Ata pede para preservar a
-      // concordância explícita do cliente quando houver. É o único lugar em
-      // que uma citação chega ao Escritor, e chega como conteúdo pedido pela
-      // especificação, não como evidência de auditoria.
+      // Resumo de diagnóstico, com confiança e concordância. Não vai para o
+      // documento — o markdown desta seção é `markdown`, só com o texto.
       return bullets(
         (data.decisions ?? []).map(
           (d) =>
@@ -658,6 +912,11 @@ export const SECTION_DATA_SPECS: Record<string, SectionDataSpec> = {
             `${d.agreement?.quote ? `; concordância: "${d.agreement.quote}"` : ''})`,
         ),
       );
+    },
+    // Só `text`, como no HTML: a concordância é evidência para a auditoria.
+    markdown(data, section) {
+      const lista = bullets((data.decisions ?? []).map((d) => d.text));
+      return secaoMarkdown(section, lista ? [lista] : []);
     },
   },
 
@@ -678,6 +937,9 @@ export const SECTION_DATA_SPECS: Record<string, SectionDataSpec> = {
     drop: () => {},
     serialize(data) {
       return data.conclusion?.text ?? null;
+    },
+    markdown(data, section) {
+      return secaoMarkdown(section, data.conclusion ? [data.conclusion.text] : []);
     },
   },
 
@@ -700,24 +962,25 @@ export const SECTION_DATA_SPECS: Record<string, SectionDataSpec> = {
     claims: () => [],
     drop: () => {},
     serialize(data) {
-      // Nunca `null`: a assinatura é o fechamento da ata e existe mesmo sem
-      // nome — nesse caso ela sai com lacuna, e não sumindo.
+      // Sem nome de quem assina, o fecho não existe: a reunião não diz quem
+      // assina, e um "Atenciosamente" sobre um campo vazio é pior que nenhum.
+      if (!data.signature?.name) return null;
       return bullets([
-        `Nome de quem assina: ${data.signature?.name ?? '(não determinado)'}`,
-        `Cargo de quem assina: ${data.signature?.role ?? '(não determinado)'}`,
+        `Nome de quem assina: ${data.signature.name}`,
+        ...(data.signature.role ? [`Cargo de quem assina: ${data.signature.role}`] : []),
       ]);
     },
-    renderPlain(data, _sectionId, gaps) {
-      const nome = data.signature?.name ?? marcador(lacunaDoCampo(gaps, 'signature.name'), 'quem assina');
-      const cargo = data.signature?.role ?? marcador(lacunaDoCampo(gaps, 'signature.role'), 'cargo de quem assina');
-      return ['## Assinatura', '', 'Atenciosamente,', '', `${nome} – ${cargo}`].join('\n');
+    markdown(data, section) {
+      if (!data.signature?.name) return secaoMarkdown(section, []);
+      const assina = data.signature.role ? `${data.signature.name} – ${data.signature.role}` : data.signature.name;
+      return ['## Assinatura', '', 'Atenciosamente,', '', assina].join('\n');
     },
   },
 
   /**
    * X1 — pares pergunta do entrevistador / resposta do candidato.
    *
-   * UMA chamada ao Pensante devolve a lista INTEIRA de pares (mesmo padrão de
+   * A leitura devolve a lista INTEIRA de pares (mesmo padrão de
    * `topicos_discutidos`/`decisoes`/`participantes`), não uma seção por
    * pergunta — isso manteria o custo fixo mesmo com entrevistas de tamanhos
    * bem diferentes, em vez de gastar uma chamada por pergunta ou travar num
@@ -826,22 +1089,115 @@ export const SECTION_DATA_SPECS: Record<string, SectionDataSpec> = {
         )
         .join('\n');
     },
-    // `renderPlain`, e não Escritor: fidelidade ao que foi perguntado/
-    // respondido importa mais que prosa reescrita, e um modelo redigindo de
-    // novo arrisca alterar o sentido de uma resposta — o mesmo raciocínio de
-    // Identificação/Participantes/Assinatura.
-    renderPlain(data, _sectionId, gaps) {
+    markdown(data, _section, gaps) {
       const pares = data.qa ?? [];
       const blocos = pares.map((par, index) => {
-        const pergunta =
-          par.pergunta ??
-          marcador(lacunaDoCampo(gaps, `qa[${index}].pergunta`), `a pergunta ${index + 1}`);
-        const resposta =
-          par.resposta ??
-          marcador(lacunaDoCampo(gaps, `qa[${index}].resposta`), `a resposta ${index + 1}`);
-        return [`**Gente e gestão:** ${pergunta}`, '', `**Entrevistado:** ${resposta}`].join('\n');
+        const pergunta = par.pergunta ?? marcador(lacunaDoCampo(gaps, `qa[${index}].pergunta`));
+        const resposta = par.resposta ?? marcador(lacunaDoCampo(gaps, `qa[${index}].resposta`));
+        return [
+          ...(pergunta ? [`**Gente e gestão:** ${pergunta}`] : []),
+          ...(pergunta && resposta ? [''] : []),
+          ...(resposta ? [`**Entrevistado:** ${resposta}`] : []),
+        ].join('\n');
       });
       return ['## Perguntas e respostas', '', blocos.join('\n\n')].join('\n');
+    },
+  },
+
+  /**
+   * Resumo completo — a reunião em trechos, na ordem do relógio.
+   *
+   * Como o X1, devolve a lista INTEIRA numa leitura só: o número de trechos
+   * acompanha a duração e o conteúdo da reunião, e não um teto fixo. Cada
+   * trecho é uma afirmação auditável (o resumo + suas citações); trecho
+   * rejeitado sai inteiro, e o resto do documento segue.
+   */
+  resumo_por_periodo: {
+    schema: {
+      type: 'object',
+      properties: {
+        periodos: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              titulo: {
+                type: 'string',
+                description: 'Nome curto do assunto dominante do trecho.',
+              },
+              inicio: {
+                type: 'string',
+                description:
+                  'Carimbo HH:MM:SS do começo do trecho, COPIADO de um carimbo [HH:MM:SS] ' +
+                  'da transcrição. Omita se a transcrição não tiver carimbos.',
+              },
+              fim: {
+                type: 'string',
+                description:
+                  'Carimbo HH:MM:SS do fim do trecho (o início do trecho seguinte, ou o ' +
+                  'último carimbo da reunião). Omita se não houver carimbos.',
+              },
+              resumo: {
+                type: 'string',
+                description:
+                  'O que foi tratado neste trecho, em prosa condensada, sem inventar nada.',
+              },
+              quotes: QUOTES,
+            },
+            required: ['titulo', 'resumo', 'quotes'],
+          },
+        },
+      },
+      required: ['periodos'],
+    },
+    merge(data, payload, _sectionId, locate) {
+      data.periods = (
+        (
+          payload as {
+            periodos?: {
+              titulo?: string;
+              inicio?: string;
+              fim?: string;
+              resumo?: string;
+              quotes?: unknown;
+            }[];
+          }
+        )?.periodos ?? []
+      )
+        .filter((periodo) => periodo?.titulo && periodo?.resumo)
+        .map((periodo) => ({
+          title: periodo.titulo!,
+          ...(periodo.inicio?.trim() ? { start: periodo.inicio.trim() } : {}),
+          ...(periodo.fim?.trim() ? { end: periodo.fim.trim() } : {}),
+          summary: periodo.resumo!,
+          quotes: anchorQuotes(periodo.quotes, locate),
+        }));
+    },
+    claims(data) {
+      return (data.periods ?? []).map((periodo, index) => ({
+        path: `periods[${index}]`,
+        text: `Na reunião foi tratado (${periodo.title}): ${periodo.summary}`,
+        anchors: located(periodo.quotes),
+      }));
+    },
+    drop(data, paths) {
+      data.periods = (data.periods ?? []).filter((_, index) => !paths.has(`periods[${index}]`));
+    },
+    serialize(data) {
+      const periodos = data.periods ?? [];
+      if (periodos.length === 0) return null;
+      return periodos
+        .map((p) => `${[rotuloDoPeriodo(p), p.title].filter(Boolean).join(' · ')}: ${p.summary}`)
+        .join('\n');
+    },
+    markdown(data, section) {
+      const blocos = (data.periods ?? []).map((p, index) => {
+        const intervalo = rotuloDoPeriodo(p);
+        return [`### ${index + 1}. ${p.title}${intervalo ? ` (${intervalo})` : ''}`, '', p.summary].join(
+          '\n',
+        );
+      });
+      return secaoMarkdown(section, blocos.length > 0 ? [blocos.join('\n\n')] : []);
     },
   },
 };

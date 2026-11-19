@@ -1,0 +1,41 @@
+{
+  "quando": "2026-11-11T13:47:09.638Z",
+  "verificacoes": {
+    "cartoes_na_home": [
+      "Análise — [TESTE] Escopo do Painel Aurora",
+      "Compromissos sugeridos",
+      "Compromissos registrados",
+      "Decisões",
+      "Achados",
+      "Rascunho de e-mail",
+      "[TESTE] Revisão do escopo",
+      "Captura — [TESTE] Escopo do Painel Aurora"
+    ],
+    "botao_enviar_ausente": true,
+    "botao_agendar_ausente": true,
+    "agenda_sem_convidados": true,
+    "compromisso_concluido_persistiu": true,
+    "reabrir_visivel_apos_recarregar": true,
+    "trecho_visivel": true,
+    "acompanhamento_secoes": [
+      "Compromissos\n1",
+      "Decisões\n1",
+      "Achados\n1"
+    ],
+    "achado_resolvido_some_dos_abertos": true,
+    "sem_rolagem_lateral_390": true,
+    "acompanhamento_sem_rolagem_lateral_390": true,
+    "sidebar_cartoes": [
+      "Análise — [TESTE] Escopo do Painel Aurora",
+      "Compromissos sugeridos",
+      "Compromissos registrados",
+      "Decisões",
+      "Achados",
+      "Rascunho de e-mail",
+      "[TESTE] Revisão do escopo",
+      "Captura — [TESTE] Escopo do Painel Aurora"
+    ],
+    "sidebar_sem_rolagem_lateral": true
+  },
+  "falhas": []
+}

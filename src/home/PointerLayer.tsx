@@ -30,14 +30,20 @@
  *   - **Nada disso captura evento.** `pointer-events: none` nas duas camadas.
  *   - **Some no toque.** Em `pointer: coarse` não existe cursor para
  *     acompanhar, e um evento de toque desliga a camada.
- *   - **O caret é do campo.** `cursor: none` troca o desenho do PONTEIRO; o
- *     traço de inserção e a seleção do texto não são afetados.
+ *   - **O campo é do sistema.** Sobre `input`, `textarea`, `select` e área
+ *     editável o cursor NATIVO volta (I-beam, alça de redimensionar) e o ponto
+ *     desenhado sai; o anel fica, menor. Antes `cursor: none` valia também ali,
+ *     e o campo de notas perdia o I-beam e a alça de `resize: vertical`.
  *
  * ── O brilho verde pertence ao campo de escrita, e a mais nada ─────────────
  *
  * Existe UM sinal verde, e ele acende exclusivamente dentro da área marcada
  * com `data-tq-escrita`. Sobre os outros controles o anel apenas fecha e ganha
  * contraste, sem cor.
+ *
+ * Sobre o que é do Taq (a resposta, a marca, `data-tq-ia`) o anel se abre em
+ * dois arcos no violeta das ideias e dá um quarto de volta ao entrar — uma vez,
+ * não em laço. É a única reação "de IA", e é contextual.
  *
  * `prefers-reduced-motion` mata o atraso e o giro: o anel passa a colar no
  * ponto. A informação (onde estou, onde escrevo) continua; o movimento sai.
@@ -61,6 +67,17 @@ const ANEL_CSS = 30;
  */
 const PERSEGUICAO_MS = 150;
 
+const CONTROLES = 'button, a, summary, [role="button"], [role="tab"], label';
+/** Onde o Taq fala: a resposta, a marca e o que estiver marcado como dele. */
+const AREAS_DO_TAQ = '.tq-turno-agente, .tq-marca, [data-tq-ia]';
+/**
+ * Onde se digita. O MESMO conjunto de `home.css`, que devolve o cursor nativo
+ * nesses campos — o I-beam e a alça de redimensionar do `textarea` são
+ * informação que o ponto desenhado não substitui.
+ */
+const CAMPOS =
+  'input:not([type="button"], [type="submit"], [type="reset"], [type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"]), textarea, select, [contenteditable]:not([contenteditable="false"])';
+
 export function PointerLayer({ comMovimento }: Props) {
   const pontoRef = useRef<HTMLDivElement | null>(null);
   const anelRef = useRef<HTMLDivElement | null>(null);
@@ -80,6 +97,7 @@ export function PointerLayer({ comMovimento }: Props) {
     let quadro = 0;
     let anterior = 0;
     let giro = 0;
+    let ultimoAlvo: Element | null = null;
 
     const passo = (t: number) => {
       quadro = 0;
@@ -136,6 +154,13 @@ export function PointerLayer({ comMovimento }: Props) {
         desligar();
         return;
       }
+      // Diálogos modais (visualizador de imagem, por exemplo) ficam fora do
+      // cursor desenhado: o overlay cobre a camada e `cursor: none` apagaria
+      // o cursor nativo, deixando o "Baixar" sem cursor nenhum.
+      if ((e.target as Element | null)?.closest?.('[role="dialog"]')) {
+        desligar();
+        return;
+      }
       mouse.x = e.clientX;
       mouse.y = e.clientY;
       if (!dentro) {
@@ -151,17 +176,36 @@ export function PointerLayer({ comMovimento }: Props) {
       }
 
       /*
-       * Dois sinais distintos, e a ordem importa: primeiro "isto é onde se
-       * escreve" (verde), depois "isto é clicável" (só a forma). `closest`
-       * cobre o caso comum de o alvo ser um filho do elemento marcado.
+       * Os sinais, em ordem de prioridade: "isto é onde se escreve" (verde),
+       * "isto é clicável" (só a forma), "isto é o Taq" (o anel se abre em dois
+       * arcos violeta). `closest` cobre o alvo ser filho do elemento marcado.
+       *
+       * Só recalcula quando o alvo MUDA: o mouse passa dezenas de eventos
+       * sobre o mesmo elemento, e subir a árvore a cada um é trabalho jogado.
        */
       const alvo = e.target as Element | null;
-      const naEscrita = !!alvo?.closest?.('[data-tq-escrita]');
-      anel.classList.toggle('sobre-escrita', naEscrita);
-      anel.classList.toggle(
-        'sobre-controle',
-        !naEscrita && !!alvo?.closest?.('button, a, summary, [role="button"]'),
-      );
+      if (alvo !== ultimoAlvo) {
+        ultimoAlvo = alvo;
+        const naEscrita = !!alvo?.closest?.('[data-tq-escrita]');
+        const noControle = !naEscrita && !!alvo?.closest?.(CONTROLES);
+        const noTaq = !naEscrita && !noControle && !!alvo?.closest?.(AREAS_DO_TAQ);
+        // Campo de texto: o I-beam do sistema volta (ver home.css) e o ponto
+        // sai, para não haver dois cursores. O anel fica, menor.
+        const noCampo = !!alvo?.closest?.(CAMPOS);
+        anel.classList.toggle('sobre-escrita', naEscrita);
+        anel.classList.toggle('sobre-controle', noControle);
+        anel.classList.toggle('sobre-campo', noCampo);
+        ponto.classList.toggle('sobre-campo', noCampo);
+        if (noTaq !== anel.classList.contains('sobre-taq')) {
+          anel.classList.toggle('sobre-taq', noTaq);
+          // Um quarto de volta ao ENTRAR na resposta do Taq — um gesto, e não
+          // um giro contínuo: parado sobre o texto, o anel fica parado.
+          if (noTaq && comMovimentoRef.current) {
+            giro += 90;
+            rotor.style.transform = `rotate(${giro}deg)`;
+          }
+        }
+      }
       acordar();
     };
 

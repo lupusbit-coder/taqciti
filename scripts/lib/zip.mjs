@@ -2,13 +2,11 @@
  * Montagem e leitura de arquivos ZIP, sem dependência externa.
  *
  * Nasceu dentro de `scripts/package-release.mjs` (o zip da extensão, para
- * "Carregar sem compactação") e foi extraído para cá quando
- * `scripts/package-distribution.mjs` passou a precisar do mesmo motor para
- * montar o pacote de distribuição — e, além de montar, para **reabrir e
- * conferir** o que acabou de gravar antes de qualquer publicação.
- *
- * Duas coisas que a versão original não fazia e que o pacote de distribuição
- * exige:
+ * "Carregar sem compactação") e foi extraído para cá quando o pacote de
+ * distribuição dos instaladores passou a precisar do mesmo motor. Os
+ * instaladores e o pacote saíram em 13/11/2026; hoje o único cliente é
+ * `package-release.mjs`. As duas capacidades abaixo ficaram porque não custam
+ * nada e continuam corretas para qualquer zip:
  *
  *   1. **Permissão de execução por arquivo.** O instalador Linux é um `.run`
  *      autoextraível: sem o bit de execução ele não roda. Um ZIP só carrega

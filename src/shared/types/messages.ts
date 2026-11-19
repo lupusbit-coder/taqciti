@@ -4,6 +4,7 @@
  * atravessando fronteiras de contexto.
  */
 import { z } from 'zod';
+import { importacaoSchema } from '@/features/importacao/transcricao';
 
 export const participantSchema = z.object({
   name: z.string().min(1).max(120),
@@ -87,6 +88,7 @@ export const sessionStateSchema = z.object({
   droppedSegments: z.number(),
   reconnectCount: z.number(),
   captureDegradedCount: z.number().int().nonnegative().default(0),
+  captureHealthy: z.boolean().default(true),
   lastChunkAt: z.number().int().nonnegative().nullable().default(null),
   wasDiscardedAndRestarted: z.boolean(),
   captionLanguage: z.enum(['pt', 'en', 'unknown']).default('unknown'),
@@ -105,6 +107,8 @@ const contentMessages = z.discriminatedUnion('type', [
     meetingCode: z.string().min(1).max(64),
     title: z.string().max(300),
     captionsEnabled: z.boolean(),
+    /** A pessoa escolheu continuar ESTA gravação (id do histórico), da mesma sala. */
+    continuarId: z.string().min(1).max(100).optional(),
   }),
   z.object({ type: z.literal('meet/ended') }),
   z.object({ type: z.literal('meet/captions'), enabled: z.boolean() }),
@@ -129,6 +133,15 @@ const contentMessages = z.discriminatedUnion('type', [
     type: z.literal('meet/captureDegraded'),
     reason: z.enum(['parser', 'stall']),
   }),
+  /**
+   * A captura voltou a ler as legendas.
+   *
+   * Existe porque a ida já era contada e a VOLTA não era: só a cápsula, dentro
+   * da aba do Meet, sabia que a interrupção tinha acabado. A sidebar é página
+   * da extensão e nunca enxergou o DOM da reunião — sem este recado, ela ficaria
+   * avisando de uma interrupção resolvida até a reunião terminar.
+   */
+  z.object({ type: z.literal('meet/captureRecovered') }),
 ]);
 
 /**
@@ -145,6 +158,11 @@ const paraAbaDaReuniao = z.discriminatedUnion('type', [
    * parecer sucesso.
    */
   z.object({ type: z.literal('meet/sendChatNotice'), text: z.string().min(1).max(300) }),
+  /**
+   * "Gravar esta reunião", pedido pela sidebar: a aba aceita a captura desta sala
+   * e começa. A resposta é `{ ok }`; `false` quando a página não é uma sala.
+   */
+  z.object({ type: z.literal('meet/gravarAgora') }),
 ]);
 
 /**
@@ -184,6 +202,8 @@ export const uiMessageSchema = z.discriminatedUnion('type', [
     secao: homeSectionSchema.optional(),
     /** Abre já nesta reunião do histórico, dentro de "Reuniões". */
     recordId: z.string().max(200).optional(),
+    /** Abre já neste documento, dentro de "Documentos" — o link de uma fonte citada. */
+    documentId: z.string().max(200).optional(),
   }),
   /**
    * "Estou aqui" — o painel se anuncia ao montar, e é assim que o estado ao
@@ -218,6 +238,12 @@ export const uiMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('ui/print') }),
   /** Manda o aviso para o chat do Meet da reunião em andamento. */
   z.object({ type: z.literal('ui/chatNotice'), text: z.string().min(1).max(300) }),
+  /**
+   * Começa a gravar a reunião que está aberta no Meet, a qualquer momento — o
+   * caminho à mão para quando o automático não perguntou. O background acha a
+   * aba do Meet (a sidebar não alcança content script) e a manda gravar.
+   */
+  z.object({ type: z.literal('ui/gravarAgora') }),
   z.object({ type: z.literal('ui/getState') }),
   z.object({ type: z.literal('ui/pause') }),
   z.object({ type: z.literal('ui/resume') }),
@@ -227,11 +253,46 @@ export const uiMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('ui/reset') }),
   z.object({ type: z.literal('ui/dismissLanguageWarning') }),
   z.object({ type: z.literal('ui/history/delete'), id: z.string() }),
+  z.object({ type: z.literal('ui/history/import'), dados: importacaoSchema }).strict(),
   z.object({
     type: z.literal('ui/history/rename'),
     id: z.string(),
     title: z.string().min(1).max(200),
   }),
+  /**
+   * Devolve ao histórico uma reunião que o Taq tinha mandado para a lixeira
+   * (ver `features/taq/lixeira.ts`). Passa pelo background porque ele é o dono
+   * único da escrita do histórico — o mesmo `upsertRecord` da captura.
+   *
+   * Estrito: o background grava o registro como veio, então um campo extra
+   * não pode entrar no histórico por aqui. O remetente manda o `MeetingRecord`
+   * inteiro (`domain.ts`); por isso os campos dele estão listados.
+   * `endedAt`, `durationSeconds`, `participants`, `status` e `metadata` são
+   * obrigatórios no tipo mas opcionais aqui DE PROPÓSITO: a lixeira guarda o
+   * registro como o histórico o tinha, e uma reunião gravada por versão antiga
+   * pode não ter algum deles. Recusar a mensagem deixaria a pessoa sem poder
+   * recuperar a reunião. O background regrava `status` como 'ready'.
+   */
+  z.object({
+    type: z.literal('ui/history/restore'),
+    record: z
+      .object({
+        id: z.string().min(1),
+        meetingCode: z.string().optional(),
+        importacao: z.object({ nome: z.string(), formato: z.enum(['txt', 'vtt', 'srt', 'midia']), hash: z.string(), importadaEm: z.number() }).optional(),
+        title: z.string(),
+        startedAt: z.number(),
+        endedAt: z.number().optional(),
+        durationSeconds: z.number().optional(),
+        participants: z.array(participantSchema).optional(),
+        presentNow: z.array(participantSchema).optional(),
+        speakersObserved: z.array(speakerObservationSchema).optional(),
+        segments: z.array(z.unknown()),
+        status: z.enum(['recording', 'ready']).optional(),
+        metadata: z.unknown().optional(),
+      })
+      .strict(),
+  }).strict(),
 ]);
 
 /** Broadcast do background → todos os contextos. */
@@ -249,10 +310,3 @@ export const messageSchema = z.union([
 export type ExtensionMessage = z.infer<typeof messageSchema>;
 /** Um comando emitido por uma UI — o vocabulário da camada de plataforma. */
 export type UiCommand = z.infer<typeof uiMessageSchema>;
-export type MessageOf<T extends ExtensionMessage['type']> = Extract<
-  ExtensionMessage,
-  { type: T }
->;
-
-/** Respostas possíveis a mensagens que esperam retorno. */
-export const stateResponseSchema = meetingStateSchema;

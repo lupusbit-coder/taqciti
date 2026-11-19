@@ -18,7 +18,7 @@
  *     -d '{"models":["gemini-2.5-flash"],"sintetica":true,"transcript":"..."}'
  */
 import { NextResponse, type NextRequest } from 'next/server';
-import { corsHeaders, maxTranscriptChars, rejectIfUnauthorized } from '@/lib/apiGuard';
+import { corsHeaders, diagnosticoForaDoAr, maxTranscriptChars, rejectIfUnauthorized } from '@/lib/apiGuard';
 import {
   activeDataPolicyWarning,
   estimateCost,
@@ -34,14 +34,16 @@ import {
   type BenchOutput,
 } from '@/lib/ai/bench';
 
-/** Ver o mesmo comentário em app/api/generate/route.ts: diretiva da Vercel,
- *  INERTE no Railway. Vários modelos em sequência, com pausa entre eles, era o
- *  caso mais fácil de estourar o teto de função lá. 300 é o teto duro do plano
- *  Hobby, confirmado por deploy real; fica como porta de volta. */
+/** Ver o mesmo comentário em app/api/generate/route.ts: teto da função na
+ *  Vercel, o host de produção. Vários modelos em sequência, com pausa entre
+ *  eles, é o caso mais fácil de estourá-lo — daí `MAX_MODELOS`. 300 é o teto
+ *  duro do plano Hobby, confirmado por deploy real. */
 export const maxDuration = 300;
 
 /** Pausa entre modelos, para não empilhar requisições numa chave free tier. */
 const PAUSA_ENTRE_MODELOS_MS = 2_000;
+
+const MAX_MODELOS = 3;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -76,6 +78,8 @@ export function OPTIONS(request: NextRequest): NextResponse {
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const headers = corsHeaders(request.headers.get('origin'));
 
+  const foraDoAr = diagnosticoForaDoAr(headers);
+  if (foraDoAr) return foraDoAr;
   const unauthorized = rejectIfUnauthorized(request, headers);
   if (unauthorized) return unauthorized;
 
@@ -120,6 +124,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (!Array.isArray(body.models) || body.models.length === 0) {
     return NextResponse.json(
       { error: '"models" é obrigatório: uma lista de modelos a comparar.' },
+      { status: 400, headers },
+    );
+  }
+  // Cada modelo é uma chamada realista, com 16 mil tokens de saída: sem teto,
+  // um único POST multiplicava a conta pelo tamanho da lista.
+  if (body.models.length > MAX_MODELOS) {
+    return NextResponse.json(
+      { error: `No máximo ${MAX_MODELOS} modelos por rodada.` },
       { status: 400, headers },
     );
   }
@@ -188,11 +200,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         statementsCompletos: statements,
       });
     } catch (error) {
+      console.error('[api/ai/bench] falha em ' + spec.provider + ':' + spec.model, error);
       results.push({
         provider: spec.provider,
         model: spec.model,
         ok: false,
-        erro: (error as Error).message,
+        // Detalhe só no log do servidor (S11); o cliente recebe texto genérico.
+        erro: 'Falha ao chamar este modelo.',
       });
     }
   }

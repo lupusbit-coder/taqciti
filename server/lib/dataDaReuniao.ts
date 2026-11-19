@@ -26,15 +26,15 @@
  *
  * Por isso a conversão é explícita, via `Intl` com `timeZone`, e nunca pelos
  * getters locais do `Date` (que dependeriam do fuso da máquina onde o servidor
- * roda — hoje um contêiner do Railway em `mia1`, Miami, que não é o fuso de
- * ninguém envolvido na reunião).
+ * roda — hoje uma função da Vercel, cujo relógio é UTC e não o fuso de
+ * ninguém envolvido na reunião; antes, um contêiner em Miami).
  */
 
 /**
  * O fuso em que as datas são escritas.
  *
  * Constante e não "o fuso do servidor", porque o servidor não tem nada a ver
- * com a reunião: ele roda em Miami hoje e pode rodar em qualquer lugar amanhã,
+ * com a reunião: já rodou em Miami, hoje roda em UTC, e pode rodar em qualquer lugar amanhã,
  * e a data da ata mudaria junto sem ninguém mexer em nada.
  *
  * `DOCCITI_TIMEZONE` sobrescreve, para quando houver time fora do Brasil. O
@@ -60,6 +60,14 @@ export function fusoDoDocumento(): string {
  */
 export function formatarDataDaReuniao(iso: string | undefined): string | undefined {
   if (!iso?.trim()) return undefined;
+
+  // "2026-10-20", sem horário, é um DIA DO CALENDÁRIO e não um instante: o
+  // `Date` o lê como meia-noite UTC, e no fuso do Brasil isso é o dia anterior.
+  const soData = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso.trim());
+  if (soData) {
+    const conferido = new Date(`${soData[0]}T12:00:00Z`);
+    return Number.isNaN(conferido.getTime()) ? undefined : `${soData[3]}/${soData[2]}/${soData[1]}`;
+  }
 
   const quando = new Date(iso);
   if (Number.isNaN(quando.getTime())) return undefined;

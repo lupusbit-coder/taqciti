@@ -5,25 +5,32 @@
  * Trocar o provedor de um agente é editar `config.ts` ou exportar uma
  * variável de ambiente — nenhum outro arquivo muda.
  */
-import { AGENT_CONFIG, activeProviders, type MatrixEntry } from './config';
+import { AGENT_CONFIG, type MatrixEntry } from './config';
 import { estimateCost, type CostBreakdown } from './pricing';
 import { anthropicProvider } from './providers/anthropic';
 import { googleProvider } from './providers/google';
+import { groqProvider } from './providers/groq';
+import { mockProvider } from './providers/mock';
+import { openaiProvider } from './providers/openai';
 import { xaiProvider } from './providers/xai';
 import {
   PROVIDER_IDS,
+  ProviderError,
   type AgentName,
-  type Capability,
   type CompletionRequest,
   type CompletionResult,
+  type JsonSchema,
   type Provider,
   type ProviderId,
 } from './types';
 
 const PROVIDERS: Record<ProviderId, Provider> = {
   anthropic: anthropicProvider,
+  openai: openaiProvider,
   google: googleProvider,
   xai: xaiProvider,
+  groq: groqProvider,
+  mock: mockProvider,
 };
 
 export function getProvider(id: ProviderId): Provider {
@@ -42,41 +49,6 @@ export async function complete(
 ): Promise<CompletionResult> {
   const { provider, model } = resolveAgent(agent);
   return provider.complete(model, req);
-}
-
-/** Janela de contexto do modelo deste agente — o janelamento da Fase 2
- *  consulta isto em vez de assumir um número. */
-export function maxContextTokensFor(agent: AgentName): number {
-  const { provider, model } = resolveAgent(agent);
-  return provider.maxContextTokens(model);
-}
-
-export function supportsFor(agent: AgentName, capability: Capability): boolean {
-  return resolveAgent(agent).provider.supports(capability);
-}
-
-/** Custo estimado de um resultado, a partir de `meta` + `usage`. */
-export function costOf(result: CompletionResult): CostBreakdown | undefined {
-  return estimateCost(result.meta.provider, result.meta.model, result.usage);
-}
-
-/**
- * Custo de uma execução da matriz. Difere de `estimateCost` num ponto: uma
- * configuração marcada `billing: 'free-tier'` custa zero mesmo que o modelo
- * tenha preço pago na tabela — que é o caso do `gemini-2.5-flash`, usado em
- * desenvolvimento no free tier e cobrado normalmente numa chave paga.
- *
- * O harness da Fase 8 deve somar por aqui, não por `estimateCost` direto,
- * senão reporta um custo que ninguém pagou.
- */
-export function costForEntry(
-  entry: MatrixEntry,
-  usage: { inputTokens: number; outputTokens: number; cachedInputTokens?: number },
-): CostBreakdown | undefined {
-  if (entry.billing === 'free-tier') {
-    return { inputUsd: 0, cachedInputUsd: 0, outputUsd: 0, totalUsd: 0, longContextTier: false };
-  }
-  return estimateCost(entry.provider, entry.model, usage);
 }
 
 export interface CapabilityRow {
@@ -104,30 +76,6 @@ export function capabilityTable(): CapabilityRow[] {
   });
 }
 
-/**
- * Falha cedo e alto se um provedor configurado estiver sem chave. A falta
- * das chaves dos provedores NÃO configurados é normal e não pode quebrar
- * nada — o objetivo é comparar os três sem ser obrigado a assinar os três.
- */
-export function assertConfiguredProvidersHaveKeys(): void {
-  const envVarByProvider: Record<ProviderId, string> = {
-    anthropic: 'ANTHROPIC_API_KEY',
-    google: 'GOOGLE_API_KEY',
-    xai: 'XAI_API_KEY',
-  };
-
-  const missing = activeProviders()
-    .filter((id) => !process.env[envVarByProvider[id]]?.trim())
-    .map((id) => `${envVarByProvider[id]} (provedor ${id})`);
-
-  if (missing.length > 0) {
-    throw new Error(
-      `Chave de API ausente para provedor configurado: ${missing.join(', ')}. ` +
-        'Defina em server/.env.local — ver server/.env.example.',
-    );
-  }
-}
-
 export {
   API_KEY_ENV_VAR,
   describeSkips,
@@ -140,7 +88,10 @@ export {
   COMPARISON_MATRIX,
   DEFAULT_AGENT_CONFIG,
   activeDataPolicyWarning,
+  aceitaSinteticaDoCliente,
   activeProviders,
+  politicaDeDadosNaoDeclarada,
+  recusaPorPoliticaDeDados,
   agentConfigFor,
   cheapestProductionEntry,
   dataPolicyWarning,

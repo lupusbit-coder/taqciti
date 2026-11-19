@@ -3,9 +3,9 @@
  * pronto para alguém sem contexto técnico instalar via "Carregar sem compactação".
  * Sem dependências externas: zip montado à mão (deflate via zlib + estrutura ZIP).
  *
- * Este é o zip da EXTENSÃO crua — não confundir com o pacote de distribuição
- * (`scripts/package-distribution.mjs`), que junta guia + os três instaladores
- * nativos. Os dois compartilham o motor de ZIP em `scripts/lib/zip.mjs`.
+ * É o que a release publica (ver `.github/workflows/release.yml`). Até
+ * 13/11/2026 havia também um pacote de distribuição com guia e três
+ * instaladores nativos; os instaladores foram abandonados e ele saiu junto.
  */
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';

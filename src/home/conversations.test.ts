@@ -16,9 +16,20 @@ import {
   lerConversas,
   observarConversas,
   tituloDe,
+  renomearConversa,
 } from './conversations';
 
 describe('conversas do assistente', () => {
+  it('renomeia preservando mensagens concorrentes e não recria conversa apagada', async () => {
+    installChromeStorageMock();
+    const id = await acrescentarMensagem(null, { texto: 'Primeira mensagem' });
+    await Promise.all([renomearConversa(id, '  Planejamento  semanal '), acrescentarMensagem(id, { texto: 'Segunda mensagem' })]);
+    expect((await lerConversas())[0]?.title).toBe('Planejamento semanal');
+    expect((await lerConversas())[0]?.messages).toHaveLength(2);
+    expect(await renomearConversa(id, '  ')).toBe(false);
+    await apagarConversa(id);
+    expect(await renomearConversa(id, 'Apagada')).toBe(false);
+  });
   beforeEach(() => {
     installChromeStorageMock();
   });

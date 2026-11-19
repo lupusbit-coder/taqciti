@@ -22,10 +22,10 @@ import {
   type Question,
   type RenderedSection,
 } from './generateStep';
-import { assertSemVazamento } from './agents/escritor';
+import { assertSemVazamento } from './vazamento';
 import { formatarDataDaReuniao } from './dataDaReuniao';
 import { renderHtml } from './render/html';
-import { renderPdf } from './render/pdf';
+import { DocumentoSemConteudoError, renderPdfDoCatalogo } from './documentos/doCatalogo';
 
 export { DOCUMENT_TYPES, isDocumentType };
 export type { DocumentType };
@@ -115,9 +115,9 @@ export async function generateDocument(
 
   const html = renderHtml({ documentType: input.documentType, data: documentData, gaps, title });
 
-  // O HTML sai do `DocumentData`, que veio do Pensante — outro caminho que o
-  // do Escritor, e portanto uma segunda porta por onde a instrução de autoria
-  // do PDF poderia chegar ao cliente. A guarda vale para os dois.
+  // O HTML sai do `DocumentData` por outro renderizador que o do markdown, e
+  // portanto é uma segunda porta por onde a instrução de autoria do PDF
+  // poderia chegar ao cliente. A guarda vale para os dois.
   assertSemVazamento(html, 'o HTML do documento');
 
   // Sem `assertSemVazamento` própria aqui: o PDF desenha exatamente os
@@ -132,9 +132,18 @@ export async function generateDocument(
   // sem PDF nesta chamada.
   let pdf: string | undefined;
   try {
-    const pdfBuffer = await renderPdf({ documentType: input.documentType, data: documentData, gaps, title });
+    const pdfBuffer = await renderPdfDoCatalogo({
+      documentType: input.documentType,
+      data: documentData,
+      gaps,
+      ...(input.title ? { tituloDaReuniao: input.title } : {}),
+    });
     pdf = pdfBuffer.toString('base64');
   } catch (error) {
+    // Documento sem conteúdo não é "PDF que falhou": é um pedido que não faz
+    // sentido para esta reunião (X1 numa reunião de equipe), e quem pediu
+    // precisa saber — em vez de receber uma capa e mais nada.
+    if (error instanceof DocumentoSemConteudoError) throw error;
     console.error('[generateDocument] falha ao gerar o PDF — devolvendo sem ele', error);
   }
 

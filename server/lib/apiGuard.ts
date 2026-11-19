@@ -7,7 +7,8 @@
  * rota, cada requisição custa dinheiro e qualquer um que descubra a URL
  * gasta a cota de outra pessoa. O que atende ou recusa é o SEGREDO
  * COMPARTILHADO (`rejectIfUnauthorized`), somado ao teto de
- * `maxTranscriptChars` — nunca o CORS, pelo motivo detalhado em
+ * `maxTranscriptChars` — nunca o CORS. O CORS (só a extensão, desde 11/2026)
+ * impede apenas que uma página web use o navegador de quem a visita; ver
  * `corsHeaders`.
  *
  * Limite honesto: o segredo viaja dentro do bundle da extensão, então quem
@@ -48,51 +49,103 @@ function secretsMatch(provided: string, expected: string): boolean {
 }
 
 /**
- * Reflete QUALQUER origem — e isto não afrouxa a tranca.
+ * Variável que restringe o CORS a origens exatas, separadas por vírgula
+ * (tipicamente `chrome-extension://<id da extensão publicada>`). O valor real
+ * fica só no painel do host: este repositório é público.
+ */
+export const ORIGENS_PERMITIDAS_ENV = 'DOCCITI_ORIGENS_PERMITIDAS';
+
+/** Origem de uma extensão do Chrome/Edge: o id tem 32 letras de `a` a `p`. */
+const ORIGEM_DE_EXTENSAO = /^chrome-extension:\/\/[a-p]{32}$/;
+
+/**
+ * A origem pode ler a resposta? Com `DOCCITI_ORIGENS_PERMITIDAS` definida, só
+ * as origens listadas. Sem ela, qualquer origem `chrome-extension://` — o
+ * padrão que não quebra o desenvolvimento local nem o `dist-dev`, cujo id
+ * (unpacked) difere do da loja e muda de máquina para máquina.
+ */
+function origemPermitida(origin: string): boolean {
+  const lista = (process.env[ORIGENS_PERMITIDAS_ENV] ?? '')
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean);
+  if (lista.length > 0) return lista.includes(origin);
+  return ORIGEM_DE_EXTENSAO.test(origin);
+}
+
+/**
+ * Só a extensão lê a resposta; página web nenhuma.
  *
- * Um `fetch` disparado de dentro de um content script carrega a origem da
- * PÁGINA para fins de CORS, não a da extensão (`chrome-extension://` só é a
- * origem de chamadas feitas de dentro de uma página própria da extensão, tipo
- * `document/index.html`). Sem `Access-Control-Allow-Origin` de volta, o
- * navegador bloqueia o POST antes de sair, e a extensão nunca vê um 401/200 —
- * só um `fetch` que lança.
+ * Até 11/2026 esta função refletia QUALQUER origem, porque o painel era um
+ * content script em `<all_urls>`, e um `fetch` de content script carrega a
+ * origem da PÁGINA: uma lista de origens precisaria conter a internet, e
+ * tentativas anteriores (só `chrome-extension://`; depois também o Meet)
+ * quebraram a geração de documento. Isso deixou de valer: o content script
+ * foi reduzido ao Meet (21/10/2026, plano de segurança), e quem chama o
+ * servidor hoje são só páginas da extensão (Home, sidebar) e o service
+ * worker — todos com origem `chrome-extension://<id>`. O content script do
+ * Meet não chama o servidor.
  *
- * A tentação, daí, é listar as origens permitidas. Ela não funciona aqui, por
- * duas razões independentes:
+ * O que isto passa a defender: uma página web usando o navegador de quem a
+ * visita para chamar o servidor. Toda rota que gasta ou identifica exige um
+ * header próprio (`x-docciti-key` ou `Authorization`), o que obriga preflight;
+ * sem `Access-Control-Allow-Origin` no preflight, o navegador nem envia o POST.
  *
- *   1. **O painel roda em toda página.** O content script é declarado para
- *      `<all_urls>` (ver `manifest.config.ts`), e o "Gerar Documento" do
- *      `MeetingScreen` é alcançável pelo histórico em QUALQUER aba, não só na
- *      do Meet — é literalmente o que `src/content/standalone.tsx` existe para
- *      fazer. A lista precisaria conter a internet inteira. Com
- *      `https://meet.google.com` sozinho, gerar documento funcionava na aba do
- *      Meet e falhava em todas as outras, com a MESMA mensagem de "servidor
- *      fora do ar" — que manda quem for investigar para o lugar errado.
+ * O que continua igual: requisição SEM `Origin` (curl, servidor, teste) segue
+ * para o handler sem cabeçalho de origem — CORS é regra do navegador, e quem
+ * recusa esses chamadores é a autenticação (`autorizarIa`,
+ * `rejectIfUnauthorized`), nunca o CORS.
  *
- *   2. **CORS não defende esta rota de nada.** É uma regra que o NAVEGADOR
- *      aplica a páginas. `curl`, um script de servidor ou um bot ignoram o
- *      cabeçalho por completo — verificado: um POST sem `Origin` nenhum chega
- *      ao handler e é recusado pelo segredo, não pelo CORS. O único ataque que
- *      uma lista de origens impediria é uma página web usando o navegador de
- *      quem a visita, com uma chave que já viaja pública dentro do bundle.
- *
- * Quem segura o abuso é `rejectIfUnauthorized` e o teto de
- * `maxTranscriptChars`. O cabeçalho deste arquivo já dizia isso; o código é
- * que tinha parado de admitir.
+ * Origem recusada não vira 403: a rota responde normalmente, só sem
+ * `Access-Control-Allow-Origin`, e o navegador bloqueia a leitura. Recusar no
+ * servidor quebraria um chamador legítimo cuja origem não previmos sem
+ * proteger nada a mais, já que a autenticação é que decide.
  *
  * Sem `Access-Control-Allow-Credentials` de propósito: não há cookie nem
- * sessão nesta rota, e refletir a origem COM credenciais seria outra conversa.
+ * sessão nestas rotas.
  */
-export function corsHeaders(origin: string | null): Record<string, string> {
+export function corsHeaders(
+  origin: string | null,
+  /**
+   * Os métodos que a rota aceita. O padrão cobre as rotas de geração, que só
+   * fazem POST; as rotas do conector listam e revogam, e precisam dizer isso
+   * no preflight — um método fora desta lista é bloqueado pelo navegador
+   * antes de a requisição sair, e o handler nunca chega a ser chamado.
+   */
+  metodos = 'POST, OPTIONS',
+): Record<string, string> {
   const headers: Record<string, string> = {
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': `Content-Type, ${SHARED_KEY_HEADER}`,
+    'Access-Control-Allow-Methods': metodos,
+    // `Authorization` entra porque é por ele que o token do Google chega nas
+    // rotas de identidade. Ver `lib/identidade/rota.ts`.
+    'Access-Control-Allow-Headers': `Content-Type, Authorization, ${SHARED_KEY_HEADER}`,
     Vary: 'Origin',
   };
-  if (origin) {
+  if (origin && origemPermitida(origin)) {
     headers['Access-Control-Allow-Origin'] = origin;
   }
   return headers;
+}
+
+/**
+ * As rotas de diagnóstico (`/api/ai/bench`, `/smoke`, `/secao`) não existem em
+ * produção.
+ *
+ * Elas servem a quem desenvolve: escolhem modelo e provedor pelo corpo, rodam
+ * a apuração completa ou todos os provedores de uma vez. Atrás do segredo
+ * compartilhado — que está no bundle — eram um jeito de qualquer um escolher o
+ * modelo mais caro e multiplicar a conta. A extensão não chama nenhuma delas.
+ *
+ * `DOCCITI_DIAGNOSTICO=ligado` reabre, para uma verificação pontual pós-deploy;
+ * a variável deve voltar a sair logo depois.
+ */
+export function diagnosticoForaDoAr(headers: Record<string, string>): NextResponse | null {
+  const producao = process.env.VERCEL_ENV === 'production';
+  const liberado = process.env.DOCCITI_DIAGNOSTICO?.trim().toLowerCase() === 'ligado';
+  if (producao && !liberado) {
+    return NextResponse.json({ error: 'Não encontrado.' }, { status: 404, headers });
+  }
+  return null;
 }
 
 /**

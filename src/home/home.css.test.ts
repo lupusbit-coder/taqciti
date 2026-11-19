@@ -85,10 +85,10 @@ describe('o compositor não ganha moldura ao ser focado', () => {
     expect(css).toMatch(/\.tq-campo textarea:focus-visible\s*\{[^}]*outline:\s*none/);
   });
 
-  /* O foco precisa continuar anunciado — sem moldura, por revelação. */
-  it('o foco revela os controles e a dica de teclas', () => {
+  /* O foco precisa continuar anunciado — sem moldura, por revelação. (A dica
+     "Enter envia" saiu da tela em 18/10/2026: era auto-explicação.) */
+  it('o foco revela os controles', () => {
     expect(css).toMatch(/\.tq-escrita:focus-within \.tq-campo-acoes/);
-    expect(css).toMatch(/\.tq-escrita:focus-within \.tq-dica-teclas/);
   });
 });
 
@@ -107,6 +107,14 @@ describe('o cursor nativo e o desenhado nunca coexistem', () => {
     expect(regras).toHaveLength(1);
     expect(regras[0]).toContain('tq-pointer-in');
   });
+
+  // O I-beam e a alça de `resize: vertical` são informação que o ponto
+  // desenhado não substitui: nos campos, o cursor volta a ser o do sistema.
+  it('nos campos de texto o cursor é o do sistema', () => {
+    expect(css).toMatch(
+      /body\.tq-pointer-in \.tq-home\s*:is\([\s\S]*?textarea,[\s\S]*?\)\s*\{\s*cursor:\s*auto/,
+    );
+  });
 });
 
 describe('o texto exibido não é selecionável, o rascunho é', () => {
@@ -118,5 +126,24 @@ describe('o texto exibido não é selecionável, o rascunho é', () => {
     expect(css).toMatch(
       /\.tq-home textarea,\s*\.tq-home input\s*\{[^}]*user-select:\s*text/,
     );
+  });
+});
+
+/*
+ * O reset do botão não pode vencer as classes de botão. Escrito como
+ * `.tq-home button` (0,1,1), ele apagava a moldura do `.tq-acao`, o verde do
+ * `.tq-acao-principal` e o vermelho do `.tq-acao-perigo`: "Reproduzir",
+ * "Pedir alteração" e "Aplicar ao meu assistente" viravam texto solto
+ * (varredura de 11/11/2026). Com `:where`, o reset tem especificidade zero na raiz.
+ */
+describe('o reset do botão perde para qualquer classe de botão', () => {
+  it('o reset mora em :where(.tq-home), não em .tq-home', () => {
+    expect(bloco(':where(.tq-home) button')).toMatch(/border:\s*0/);
+    expect(css).not.toMatch(/(^|[,}])\s*\.tq-home button\s*\{/m);
+  });
+
+  it('as classes de ação dizem moldura e cor, que agora valem', () => {
+    expect(bloco('.tq-acao')).toMatch(/border:\s*1px solid/);
+    expect(bloco('.tq-acao-principal')).toMatch(/background:/);
   });
 });

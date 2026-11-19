@@ -1,0 +1,213 @@
+/**
+ * Variante "ata" — o visual do modelo da Ata (`example.pdf`): capa com marca
+ * preta e gráfico, marca no cabeçalho, rodapé institucional, texto em Barlow.
+ *
+ * Não redesenha nada: reaproveita as funções de layout de `render/pdf.ts`, o
+ * mesmo código que produz a Ata e o X1. Um documento de estrutura nova nesta
+ * variante sai, portanto, com a mesma moldura de uma Ata — e uma mudança no
+ * modelo da Ata vale para os dois.
+ */
+import {
+  A4_ALTURA_PT,
+  A4_LARGURA_PT,
+  CAPA_SUBTITULO_BASE_PT,
+  desenharCapa,
+  desenharCentralizado,
+  desenharItemDeLista,
+  desenharMoldura,
+  desenharTituloSecao,
+  fluxoDeItem,
+  fluxoDeParagrafo,
+  MARGEM_INFERIOR_PT,
+  MARGEM_PT,
+} from '../../render/pdf';
+import { FONTE_NEGRITO, FONTE_REGULAR } from '../../render/fonts';
+import {
+  CINZA_LINHA,
+  COR_SUBTITULO_CAPA,
+  GAP_PARAGRAFO_PT,
+  TAMANHO_CORPO_PT,
+  TAMANHO_ITEM_PT,
+  TAMANHO_SUBTITULO_CAPA_PT,
+  TAMANHO_TITULO_PT,
+  TINTA,
+} from '../../render/typography';
+import type { Bloco, ContentTree } from '../contentTree';
+import type { VarianteVisual } from '../perfil';
+import { registrarBloco, type RegistroDeLayout } from './inspecao';
+import { bufferDoAtivo, desenharImagem } from './imagens';
+import { desenharSumario, entradasDoSumario, type TemaDeSumario } from './sumario';
+import { desenharTabela, type TemaDeTabela } from './tabela';
+import { escreverRico, textoPlano } from './texto';
+
+type Doc = PDFKit.PDFDocument;
+
+export interface ContextoAta {
+  doc: Doc;
+  arvore: ContentTree;
+  avisos: string[];
+  recursosUsados: Set<string>;
+  layout: RegistroDeLayout;
+  variante: VarianteVisual;
+  paginasDosTitulos?: ReadonlyMap<string, number>;
+}
+
+/** Margens do documento nesta variante: as da Ata. */
+export const MARGENS_ATA = { top: 72, bottom: 140, left: 72, right: 72 } as const;
+
+function desenharCapaDaAta(ctx: ContextoAta, capa: Extract<Bloco, { tipo: 'capa' }>): void {
+  const { doc } = ctx;
+  doc.addPage();
+  desenharCapa(doc, capa.titulo, {}, [], false);
+  ctx.recursosUsados.add('marca-preta');
+  ctx.recursosUsados.add('capa-grafico');
+
+  if (!capa.subtitulo) return;
+  // O subtítulo mora numa linha de base fixa do modelo. Título que quebra em
+  // duas linhas invadiria essa linha: melhor omitir o subtítulo e avisar do
+  // que sobrepor texto sobre texto.
+  doc.font(FONTE_NEGRITO).fontSize(TAMANHO_TITULO_PT);
+  if (doc.widthOfString(capa.titulo) > doc.page.width - 144) {
+    ctx.avisos.push(
+      'O título é longo demais para a capa da Ata e o subtítulo foi omitido para não sobrepor o texto.',
+    );
+    return;
+  }
+  desenharCentralizado(doc, capa.subtitulo, TAMANHO_SUBTITULO_CAPA_PT, CAPA_SUBTITULO_BASE_PT, COR_SUBTITULO_CAPA);
+}
+
+function desenharCorpo(ctx: ContextoAta, bloco: Bloco): void {
+  const { doc } = ctx;
+  switch (bloco.tipo) {
+    case 'titulo':
+      if (bloco.nivel === 1) {
+        desenharTituloSecao(doc, textoPlano(bloco.texto));
+      } else {
+        doc.font(FONTE_NEGRITO).fontSize(TAMANHO_CORPO_PT).fillColor(TINTA);
+        doc.text(textoPlano(bloco.texto), fluxoDeParagrafo(doc, TAMANHO_CORPO_PT));
+        doc.y += 4;
+      }
+      return;
+    case 'paragrafo':
+      doc.font(FONTE_REGULAR).fontSize(TAMANHO_CORPO_PT).fillColor(TINTA);
+      escreverRico(doc, bloco.texto, FONTE_REGULAR, FONTE_NEGRITO, fluxoDeParagrafo(doc, TAMANHO_CORPO_PT));
+      doc.y += GAP_PARAGRAFO_PT;
+      return;
+    case 'lista':
+      bloco.itens.forEach((item, indice) => {
+        desenharItemDeLista(doc, bloco.ordenada ? `${indice + 1}.` : '•', textoPlano(item), () => {
+          doc.font(FONTE_REGULAR).fontSize(TAMANHO_ITEM_PT).fillColor(TINTA);
+          escreverRico(doc, item, FONTE_REGULAR, FONTE_NEGRITO, fluxoDeItem(doc));
+        });
+      });
+      doc.y += GAP_PARAGRAFO_PT;
+      return;
+    case 'tabela': {
+      const tema: TemaDeTabela = {
+        x: MARGEM_PT,
+        largura: A4_LARGURA_PT - MARGEM_PT * 2,
+        fonteCabecalho: FONTE_NEGRITO,
+        tamanhoCabecalho: TAMANHO_ITEM_PT,
+        corCabecalho: TINTA,
+        fundoCabecalho: null,
+        caixaAltaNoCabecalho: false,
+        espacamentoDeLetras: 0,
+        fonteCelula: FONTE_REGULAR,
+        fonteCelulaNegrito: FONTE_NEGRITO,
+        tamanhoCelula: TAMANHO_ITEM_PT,
+        corCelula: TINTA,
+        entrelinha: 1.3,
+        corDoFilete: CINZA_LINHA,
+        fundoListra: null,
+        corDoFileteFinal: null,
+        paddingX: 6,
+        paddingY: 5,
+        espacoDepois: 6,
+      };
+      desenharTabela(doc, bloco.cabecalho, bloco.linhas, tema, () => A4_ALTURA_PT - MARGEM_INFERIOR_PT);
+      if (bloco.legenda) {
+        doc.font(FONTE_REGULAR).fontSize(TAMANHO_ITEM_PT).fillColor(TINTA);
+        doc.text(bloco.legenda, MARGEM_PT, doc.y, fluxoDeParagrafo(doc, TAMANHO_ITEM_PT));
+      }
+      doc.y += GAP_PARAGRAFO_PT;
+      return;
+    }
+    case 'sumario': {
+      desenharTituloSecao(doc, 'Sumário');
+      const tema: TemaDeSumario = {
+        x: MARGEM_PT,
+        largura: A4_LARGURA_PT - MARGEM_PT * 2,
+        fonteNivel1: FONTE_NEGRITO,
+        tamanhoNivel1: TAMANHO_CORPO_PT,
+        corNivel1: TINTA,
+        fonteNivel2: FONTE_REGULAR,
+        tamanhoNivel2: TAMANHO_ITEM_PT,
+        corNivel2: '#555555',
+        fontePagina: FONTE_REGULAR,
+        corPagina: TINTA,
+        corDoFilete: CINZA_LINHA,
+        recuoNivel2: 16,
+        paddingY: 4,
+        larguraDoNumero: 30,
+      };
+      desenharSumario(doc, entradasDoSumario(ctx.arvore), ctx.paginasDosTitulos, tema, () => A4_ALTURA_PT - MARGEM_INFERIOR_PT);
+      return;
+    }
+    case 'imagem': {
+      const buffer = bufferDoAtivo(ctx.variante, bloco.ativoId);
+      if (!buffer) throw new Error(`Ativo "${bloco.ativoId}" indisponível na variante ${ctx.variante.id}.`);
+      desenharImagem(doc, buffer, { x: MARGEM_PT, larguraMax: A4_LARGURA_PT - MARGEM_PT * 2, alturaMax: 280 }, () => A4_ALTURA_PT - MARGEM_INFERIOR_PT);
+      ctx.recursosUsados.add(bloco.ativoId);
+      if (bloco.legenda) {
+        doc.font(FONTE_REGULAR).fontSize(TAMANHO_ITEM_PT).fillColor('#555555');
+        doc.text(bloco.legenda, MARGEM_PT, doc.y, fluxoDeParagrafo(doc, TAMANHO_ITEM_PT));
+      }
+      doc.y += GAP_PARAGRAFO_PT;
+      return;
+    }
+    case 'referencia':
+      doc.font(FONTE_REGULAR).fontSize(TAMANHO_ITEM_PT).fillColor('#555555');
+      escreverRico(doc, bloco.texto, FONTE_REGULAR, FONTE_NEGRITO, fluxoDeParagrafo(doc, TAMANHO_ITEM_PT));
+      doc.y += 6;
+      return;
+    case 'quebra_de_secao':
+      doc.addPage();
+      return;
+    case 'capa':
+      // A capa é desenhada por quem chama, no começo; aqui só chegaria se ela
+      // viesse depois — e `validarArvore` já recusa isso.
+      throw new Error('A capa só pode ser o primeiro bloco.');
+    default: {
+      // Tipo novo no schema sem desenhista aqui falha na compilação do TypeScript.
+      const naoTratado: never = bloco;
+      throw new Error(`Bloco não tratado pelo compilador: ${JSON.stringify(naoTratado)}`);
+    }
+  }
+}
+
+function desenharEregistrar(ctx: ContextoAta, bloco: Bloco): void {
+  desenharCorpo(ctx, bloco);
+  if (bloco.tipo !== 'quebra_de_secao') registrarBloco(ctx.layout, ctx.doc, bloco.tipo, bloco.blockId);
+}
+
+export function desenharAta(ctx: ContextoAta): void {
+  const { doc, arvore } = ctx;
+  // A moldura vale só depois da capa: `pageAdded` dispara também para ela.
+  let molduraAtiva = false;
+  doc.on('pageAdded', () => {
+    if (molduraAtiva) desenharMoldura(doc);
+  });
+
+  const [primeiro, ...resto] = arvore.blocos;
+  if (primeiro?.tipo === 'capa') {
+    desenharCapaDaAta(ctx, primeiro);
+    molduraAtiva = true;
+    doc.addPage();
+    resto.forEach((bloco) => desenharEregistrar(ctx, bloco));
+  } else {
+    molduraAtiva = true;
+    doc.addPage();
+    arvore.blocos.forEach((bloco) => desenharEregistrar(ctx, bloco));
+  }
+  ctx.recursosUsados.add('marca-preta');
+}

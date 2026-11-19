@@ -57,105 +57,19 @@ export function formatOffset(offsetMs: number): string {
   return formatElapsedClock(offsetMs);
 }
 
-export function initialsOf(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  const first = parts[0]?.[0] ?? '?';
-  const last = parts.length > 1 ? (parts[parts.length - 1]?.[0] ?? '') : '';
-  return (first + last).toUpperCase();
-}
-
 /**
- * Paleta das pessoas — matizes escolhidos a dedo, TODOS fora da faixa do verde
- * (~110–165). O verde é a voz da marca: se uma pessoa também for verde, o olho
- * confunde falante com interface.
+ * Quanto durou a fala, ao lado do horário: "12 s", "1 min 05 s". Fala sem
+ * duração conhecida (fim antes do início, ou ainda sem fim) não mostra nada —
+ * melhor que "0 s", que seria um número inventado.
  */
-const SPEAKER_HUES = [8, 26, 44, 178, 196, 212, 236, 262, 288, 318, 338] as const;
-
-const SESSION_COLORS = {
-  dark: [
-    '#ff8a80', '#ffb74d', '#ffe082', '#4dd0e1', '#64b5f6', '#90caf9',
-    '#9fa8da', '#b39ddb', '#ce93d8', '#f48fb1', '#80cbc4', '#bcaaa4',
-  ],
-  light: [
-    '#a52714', '#8a4b00', '#735c00', '#006064', '#0d47a1', '#12538a',
-    '#283593', '#4527a0', '#6a1b9a', '#880e4f', '#005b4f', '#5d4037',
-  ],
-} as const;
-
-export type SpeakerColorTheme = keyof typeof SESSION_COLORS;
-
-function hashName(name: string): number {
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) {
-    hash = (hash * 31 + name.charCodeAt(i)) | 0;
-  }
-  return Math.abs(hash);
-}
-
-function hueForName(name: string): number {
-  const index = hashName(name) % SPEAKER_HUES.length;
-  return SPEAKER_HUES[index] ?? SPEAKER_HUES[0];
-}
-
-/** Cor determinística por nome: mesma pessoa, mesma cor, em qualquer tela. */
-export function colorForName(name: string): string {
-  const palette = SESSION_COLORS.dark;
-  return palette[hashName(name) % palette.length] ?? palette[0];
-}
-
-/**
- * Paleta da SESSÃO: o hash só escolhe a preferência inicial; colisões fazem
- * probing nos tons ainda livres. Assim nomes com o mesmo hash não recebem a
- * mesma cor quando aparecem juntos. A ordem é a primeira aparição e permanece
- * estável enquanto novas falas são anexadas.
- */
-export function assignSpeakerColors(
-  names: readonly string[],
-  theme: SpeakerColorTheme = 'dark',
-): ReadonlyMap<string, string> {
-  const palette = SESSION_COLORS[theme];
-  const result = new Map<string, string>();
-  const used = new Set<number>();
-  for (const raw of names) {
-    const name = raw.trim() || 'Falante';
-    if (result.has(name)) continue;
-    const preferred = hashName(name) % palette.length;
-    let index = preferred;
-    if (used.size < palette.length) {
-      for (let offset = 0; offset < palette.length; offset += 1) {
-        const candidate = (preferred + offset) % palette.length;
-        if (!used.has(candidate)) {
-          index = candidate;
-          break;
-        }
-      }
-    }
-    used.add(index);
-    result.set(name, palette[index] ?? palette[0]);
-  }
-  return result;
-}
-
-function relativeLuminance(hex: string): number {
-  const channels = [1, 3, 5].map((offset) => Number.parseInt(hex.slice(offset, offset + 2), 16));
-  const linear = channels.map((channel) => {
-    const value = channel / 255;
-    return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
-  });
-  return 0.2126 * linear[0]! + 0.7152 * linear[1]! + 0.0722 * linear[2]!;
-}
-
-/** Exportado para a verificação WCAG automatizada da paleta. */
-export function contrastRatio(foreground: string, background: string): number {
-  const a = relativeLuminance(foreground);
-  const b = relativeLuminance(background);
-  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
-}
-
-/** Gradiente determinístico do avatar — mesma pessoa, mesmo par de tons. */
-export function gradientForName(name: string): string {
-  const hue = hueForName(name);
-  return `linear-gradient(140deg, hsl(${hue} 68% 64%), hsl(${(hue + 34) % 360} 64% 48%))`;
+export function formatSpeechDuration(startOffsetMs: number, endOffsetMs: number): string {
+  const ms = endOffsetMs - startOffsetMs;
+  if (!Number.isFinite(ms) || ms <= 0) return '';
+  const total = Math.max(1, Math.round(ms / 1000));
+  if (total < 60) return `${total} s`;
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m} min ${String(s).padStart(2, '0')} s`;
 }
 
 /** Palavras de um conjunto de falas — usado nas estatísticas da reunião. */
@@ -170,4 +84,29 @@ export function countWords(texts: readonly string[]): number {
 export function formatCount(value: number): string {
   if (value < 1000) return String(value);
   return `${(value / 1000).toFixed(1).replace('.', ',')} mil`;
+}
+
+/**
+ * "1 compromisso", "3 compromissos": a contagem com plural de verdade. "compromisso(s)"
+ * lia como formulário, e o texto passa pela tela e pela atividade do Taq.
+ */
+export function contar(n: number, um: string, varios: string): string {
+  return `${n} ${n === 1 ? um : varios}`;
+}
+
+/**
+ * O fuso com nome de gente: "America/Recife" vira "Horário Padrão de Brasília".
+ * O identificador IANA cru aparecia no cartão de horário como jargão. Se o
+ * motor não souber nomear (ou o id for inválido), devolve o próprio id: nunca
+ * esconde o fuso.
+ */
+export function nomeDoFuso(fuso: string, quando: number = Date.now()): string {
+  try {
+    const nome = new Intl.DateTimeFormat('pt-BR', { timeZone: fuso, timeZoneName: 'longGeneric' })
+      .formatToParts(quando)
+      .find((p) => p.type === 'timeZoneName')?.value;
+    return nome || fuso;
+  } catch {
+    return fuso;
+  }
 }

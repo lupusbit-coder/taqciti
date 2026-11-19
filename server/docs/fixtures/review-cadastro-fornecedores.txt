@@ -1,0 +1,51 @@
+[00:00] Helena: Bom, vamos lá. Review da tela de cadastro de fornecedores. Helena: a gente mostra o que foi feito e depois a lista de problemas que apareceram no teste.
+[00:20] Caio: beleza. Primeiro o layout novo, né?
+[00:24] Helena: isso. O formulário agora tem as abas Dados, Endereço e Contato. Campos obrigatórios marcados com asterisco.
+[00:41] Otávio: eu sou o PM aqui, então eu vou perguntar primeiro: o layout novo está aceito por todo mundo ou ainda tem algo a mudar?
+[00:52] Caio: aceito. Pode seguir com ele.
+[00:55] Otávio: ótimo, então o layout fica.
+[01:02] Helena: a busca de CEP preenche rua, bairro e cidade sozinha. Mostrei no ambiente de teste e funcionou nos quarenta CEPs da planilha.
+[01:18] Caio: quarenta de quarenta?
+[01:20] Helena: quarenta de quarenta.
+[01:25] Otávio: então a gente mantém a busca automática de CEP como está.
+[01:31] Helena: ok. Agora os problemas.
+[01:36] Caio: o primeiro é o duplicado. Quando o usuário cadastra um CNPJ que já existe, a tela não avisa, e aí a lista mostra o fornecedor duas vezes.
+[01:52] Helena: é, eu vi isso também. Acho que é o cache da lista, mas não tive tempo de confirmar.
+[02:03] Otávio: fica anotado como hipótese, então. Não é causa confirmada.
+[02:08] Helena: certo, hipótese.
+[02:12] Caio: segundo: quando a pessoa volta de uma aba pra outra, alguns campos somem. Já aconteceu com o telefone duas vezes.
+[02:24] Otávio: some tudo ou só o telefone?
+[02:27] Caio: só o telefone, mas a pessoa perde o que digitou.
+[02:33] Helena: isso eu não sei reproduzir ainda. Pode ser da aba Contato.
+[02:40] Otávio: ok. Tem alguma gravidade combinada pra isso?
+[02:44] Caio: não sei, não defini.
+[02:47] Otávio: então não vamos classificar agora.
+[02:52] Helena: outra coisa: a tela demora uns quatro segundos pra abrir a lista com mil fornecedores. Eu vi isso de passagem no teste.
+[03:08] Caio: quatro segundos é muito pra uma lista?
+[03:11] Otávio: não sei se é muito. A gente não combinou meta nenhuma pra isso. Deixa como observação.
+[03:19] Caio: tá, observação.
+[03:22] Otávio: vamos pensar numa coisa: o botão de exportar. Helena, você tinha dito que ia pra versão dois.
+[03:31] Helena: é, eu tinha falado. Fechado, o exportar vai pra versão dois.
+[03:38] Caio: não, espera. Eu preciso do exportar na versão um pro fechamento deste mês. Não dá pra esperar a dois.
+[03:49] Otávio: então volta atrás: o exportar continua na versão um.
+[03:54] Helena: combinado, fica na um.
+[03:58] Otávio: o filtro por data, a gente ainda não sabe como fazer. Pode ser por mês ou por intervalo livre. Ninguém decidiu.
+[04:09] Caio: é, ainda em aberto.
+[04:12] Otávio: e a acessibilidade, o contraste das abas? Alguém olhou?
+[04:17] Helena: não olhei.
+[04:19] Otávio: então fica em aberto também.
+[04:23] Otávio: uma coisa que a gente tinha sugerido antes: modo escuro na tela. Seria legal, mas fica pra depois, sem data.
+[04:34] Caio: concordo que é legal, mas não é agora.
+[04:38] Otávio: então não entra.
+[04:41] Helena: vou trocar a mensagem de erro do CNPJ, que hoje diz só "inválido". Ela tem que dizer o que está errado.
+[04:52] Otávio: Yasmin, você fica com a mensagem de erro do CNPJ? Até sexta.
+[04:58] Yasmin: pode deixar, eu faço até sexta.
+[05:02] Otávio: fechado. Yasmin, sexta.
+[05:06] Caio: e o aviso de duplicado? Quem pega?
+[05:09] Helena: eu pego, mas só depois de confirmar a causa.
+[05:14] Otávio: ok, Helena investiga o duplicado. Sem prazo por enquanto.
+[05:20] Yasmin: só uma pergunta: o Marcelo do financeiro mandou e-mail pedindo o relatório de fornecedores por CNPJ. Ele não está aqui, mas vale saber.
+[05:33] Otávio: anotado. Não decidimos nada sobre isso hoje.
+[05:38] Otávio: recapitulando. O layout novo fica. A busca de CEP fica. O exportar fica na versão um. Modo escuro fica pra depois. Yasmin troca a mensagem do CNPJ até sexta. Helena investiga o duplicado. Pendências: filtro por data, contraste, o duplicado e o campo de telefone que some, e a lentidão da lista.
+[06:01] Caio: fechou.
+[06:02] Helena: fechou.

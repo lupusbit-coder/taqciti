@@ -1,0 +1,557 @@
+/*
+ * A resposta do Taq — HOME e sidebar. Mesma paleta da conversa (cinzas sobre
+ * fundo escuro, âmbar para o que não saiu como devia, verde só no que é ação).
+ * Sem caixa em volta da resposta: o que a separa da pergunta é o alinhamento,
+ * como no resto da conversa.
+ */
+
+.tq-resp {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.tq-resp-texto {
+  margin: 0;
+  font-size: var(--fs-leitura);
+  line-height: var(--lh-leitura);
+  color: rgb(222 225 228);
+}
+
+/*
+ * ── O Markdown da resposta (ver Markdown.tsx) ─────────────────────────────
+ *
+ * TUDO em `em`, relativo ao corpo da resposta. A HOME lê a resposta em 15px e
+ * a sidebar em 14px; com o `###` em 14px fixos, o título saía MENOR que o
+ * parágrafo na HOME, e o código (13px fixos) encolhia de um jeito diferente em
+ * cada tela. Relativo, a hierarquia é a mesma onde quer que a resposta apareça.
+ *
+ * As cores de destaque vêm de variáveis. A resposta do Taq é lilás nas duas
+ * telas (`.tq-turno-agente`), e o negrito e o título eram brancos de outra
+ * paleta na sidebar — pareciam colados de outro documento. O destaque agora é
+ * o mesmo lilás, mais claro; fora da conversa (pergunta rápida) fica neutro.
+ *
+ * Ritmo: conversa, não página. Parágrafos a ~0,65em, título com respiro ACIMA
+ * e colado ao que ele intitula, itens de lista próximos mas separáveis.
+ */
+.tq-md {
+  --tq-md-enfase: rgb(242 244 246);
+  --tq-md-sub: rgb(214 218 222);
+  --tq-md-marcador: rgb(140 146 152);
+  --tq-md-traco: rgb(255 255 255 / 0.14);
+  text-wrap: pretty;
+}
+
+.tq-turno-agente .tq-md,
+.tq-agente-trabalhando .tq-md {
+  --tq-md-enfase: rgb(236 232 254);
+  --tq-md-sub: rgb(205 192 252);
+  --tq-md-marcador: rgb(155 130 245 / 0.8);
+  --tq-md-traco: rgb(155 130 245 / 0.32);
+}
+
+.tq-md > * {
+  margin: 0;
+}
+
+.tq-md > * + * {
+  margin-top: 0.65em;
+}
+
+.tq-md > * + :is(h3, h4) {
+  margin-top: 1.1em;
+}
+
+.tq-md > :is(h3, h4) + * {
+  margin-top: 0.3em;
+}
+
+.tq-md h3,
+.tq-md h4 {
+  font-weight: var(--peso-enfase);
+  line-height: var(--lh-titulo);
+  color: var(--tq-md-enfase);
+  text-wrap: balance;
+}
+
+.tq-md h3 {
+  font-size: 1.07em;
+  letter-spacing: -0.005em;
+}
+
+.tq-md h4 {
+  font-size: 1em;
+  color: var(--tq-md-sub);
+}
+
+.tq-md strong {
+  font-weight: var(--peso-enfase);
+  color: var(--tq-md-enfase);
+}
+
+/* `list-style` explícito: a lista da conversa (`.tq-turnos`) zera o dela, e
+   isso é herdado pelas listas de dentro da resposta. */
+.tq-md ul,
+.tq-md ol {
+  padding-left: 1.3em;
+  list-style: disc outside;
+}
+
+.tq-md ol {
+  list-style-type: decimal;
+}
+
+.tq-md li {
+  padding-left: 0.15em;
+}
+
+.tq-md li + li,
+.tq-md li > ul {
+  margin-top: 0.3em;
+}
+
+.tq-md li > ul {
+  list-style-type: circle;
+}
+
+.tq-md li::marker {
+  color: var(--tq-md-marcador);
+  font-variant-numeric: tabular-nums;
+}
+
+.tq-md code {
+  padding: 0.1em 0.35em;
+  border-radius: 5px;
+  background: rgb(255 255 255 / 0.07);
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, 'SFMono-Regular', monospace;
+  font-size: 0.86em;
+}
+
+.tq-md pre {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgb(255 255 255 / 0.06);
+  background: rgb(255 255 255 / 0.04);
+  overflow-x: auto;
+  white-space: pre;
+  line-height: var(--lh-corpo);
+}
+
+.tq-md pre code {
+  padding: 0;
+  background: none;
+}
+
+.tq-md blockquote {
+  padding-left: 0.85em;
+  border-left: 2px solid var(--tq-md-traco);
+  opacity: 0.86;
+}
+
+.tq-md hr {
+  margin-block: 1em;
+  border: 0;
+  border-top: 1px solid rgb(255 255 255 / 0.1);
+}
+
+.tq-md a {
+  color: rgb(170 226 190);
+  text-decoration: underline;
+  text-decoration-color: rgb(170 226 190 / 0.4);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+  transition: text-decoration-color 0.15s;
+}
+
+.tq-md a:hover {
+  text-decoration-color: currentColor;
+}
+
+/* A referência no meio do texto: pequena, e abre a fonte. */
+.tq-md-refs {
+  display: inline-flex;
+  gap: 2px;
+  margin-left: 3px;
+  vertical-align: 0.08em;
+}
+
+.tq-md .tq-md-ref {
+  padding: 0 0.4em;
+  border: 0;
+  border-radius: 6px;
+  background: rgb(144 223 173 / 0.1);
+  color: rgb(170 226 190);
+  font: inherit;
+  font-size: 0.76em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.6;
+}
+
+.tq-md button.tq-md-ref {
+  cursor: pointer;
+}
+
+.tq-md button.tq-md-ref:hover {
+  background: rgba(144, 223, 173, 0.2);
+}
+
+/* O domínio ao lado de um link escrito pelo modelo: quem clica vê para onde vai. */
+.tq-md .tq-md-dominio {
+  font-size: 0.8em;
+  opacity: 0.7;
+}
+.tq-resp-selo {
+  display: inline-block;
+  margin: 0 0 6px;
+  font-size: var(--fs-meta);
+  letter-spacing: 0.04em;
+  color: rgb(240 205 160);
+}
+
+.tq-resp-docs {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.tq-resp-docs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(144, 223, 173, 0.28);
+  background: rgba(144, 223, 173, 0.06);
+  color: rgb(214 236 222);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tq-resp-docs button:hover {
+  background: rgba(144, 223, 173, 0.12);
+}
+
+.tq-resp-docs strong {
+  font-weight: 500;
+  color: rgb(235 237 239);
+}
+
+.tq-resp-aberto {
+  margin: 12px 0 0;
+  font-size: 12px;
+  line-height: 1.7;
+  color: rgb(214 196 170);
+}
+
+.tq-resp-aberto strong {
+  font-weight: 500;
+}
+
+.tq-resp-aberto ul {
+  margin: 2px 0 0;
+  padding-left: 18px;
+}
+
+.tq-resp-fontes {
+  margin: 12px 0 0;
+  font-size: 12px;
+  color: rgb(160 163 167);
+}
+
+/* O mesmo chevron desenhado das seções dos cartões (ver cartoesDoTaq.css). */
+.tq-resp-fontes summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  list-style: none;
+  cursor: pointer;
+  width: fit-content;
+  padding: 2px 0;
+}
+
+.tq-resp-fontes summary::-webkit-details-marker {
+  display: none;
+}
+
+.tq-resp-fontes summary::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  margin: 0 2px 0 1px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg);
+  opacity: 0.7;
+  transition: transform 0.2s var(--motion-flow);
+}
+
+.tq-resp-fontes[open] > summary::before {
+  transform: rotate(45deg);
+}
+
+.tq-resp-fontes summary:hover {
+  color: rgb(235 237 239);
+}
+
+.tq-resp-fontes ol {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.tq-resp-fontes li button {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: 8px;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+}
+
+.tq-resp-fontes li button:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.tq-resp-ref {
+  color: rgb(144 223 173);
+  font-variant-numeric: tabular-nums;
+}
+
+.tq-resp-origem {
+  color: rgb(205 208 211);
+  min-width: 0;
+}
+
+.tq-resp-fontes q {
+  grid-column: 2;
+  margin-top: 2px;
+  font-size: var(--fs-ui);
+  line-height: 1.6;
+  color: rgb(150 153 157);
+}
+
+.tq-resp-nota,
+.tq-resp-limites {
+  margin: 8px 0 0;
+  font-size: var(--fs-meta);
+  line-height: 1.6;
+  color: rgb(132 135 139);
+}
+
+/* ------------------------------------------------------ estado da execução */
+
+.tq-exec {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 10px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: rgb(186 189 193);
+}
+
+.tq-exec-etapa {
+  color: rgb(214 236 222);
+}
+
+.tq-exec-tempo {
+  font-variant-numeric: tabular-nums;
+  color: rgb(140 143 147);
+}
+
+/* Os passos já feitos: discretos, acima da etapa em curso. */
+.tq-exec-passos {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: rgb(140 143 147);
+}
+
+.tq-exec-passos li {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.tq-exec-passos svg {
+  flex: none;
+  color: rgb(var(--c-primary) / 0.7);
+}
+
+.tq-exec-fim {
+  color: rgb(152 155 158);
+}
+
+.tq-exec-falha {
+  color: rgb(240 205 160);
+}
+
+.tq-exec-cancelar {
+  font-size: var(--fs-ui);
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: rgb(205 208 211);
+  cursor: pointer;
+}
+
+.tq-exec-cancelar:hover {
+  border-color: rgba(255, 255, 255, 0.3);
+  color: rgb(244 247 250);
+}
+
+/* ----------------------------------------- opções de uma pergunta do Taq */
+
+.tq-resp-opcoes {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.tq-resp-opcoes button {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(144, 223, 173, 0.28);
+  background: rgba(144, 223, 173, 0.05);
+  color: rgb(222 236 227);
+  font-size: var(--fs-corpo);
+  text-align: left;
+  cursor: pointer;
+}
+
+.tq-resp-opcoes button:hover:not(:disabled) {
+  background: rgba(144, 223, 173, 0.12);
+}
+
+.tq-resp-opcoes button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.tq-resp-opcoes strong {
+  font-weight: 500;
+}
+
+.tq-resp-opcoes span {
+  font-size: var(--fs-meta);
+  line-height: 1.5;
+  color: rgb(160 170 164);
+}
+
+.tq-resp-copiavel {
+  margin: 12px 0 0;
+}
+
+.tq-resp-copiavel pre {
+  margin: 0 0 8px;
+  padding: 10px 12px;
+  max-height: 260px;
+  overflow: auto;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.03);
+  font-size: var(--fs-ui);
+  line-height: 1.6;
+  color: rgb(205 208 211);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.tq-resp-copiavel button {
+  font-size: var(--fs-ui);
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: rgb(222 225 228);
+  cursor: pointer;
+}
+
+.tq-resp-op {
+  margin: 0;
+  font-size: 12px;
+  color: rgb(205 208 211);
+}
+
+.tq-resp-op-falha {
+  color: rgb(240 205 160);
+}
+
+.tq-resp-desfazer {
+  font-size: var(--fs-ui);
+  padding: 1px 8px;
+  margin-left: 4px;
+  border-radius: 999px;
+  border: 1px solid rgba(144, 223, 173, 0.35);
+  color: rgb(214 236 222);
+  cursor: pointer;
+}
+
+.tq-resp-desfeito {
+  color: rgb(170 214 186);
+}
+
+/* Copiar — da resposta e da mensagem da pessoa (ver BotaoCopiar.tsx). Discreto
+   até o turno receber o mouse; pelo teclado, sempre visível ao focar. */
+.tq-resp-acoes {
+  display: flex;
+  margin-top: 8px;
+}
+
+.tq-resp-acoes .tq-copiar,
+.tq-voce-acoes .tq-copiar {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: rgb(150 156 162);
+  font: inherit;
+  font-size: var(--fs-meta);
+  cursor: pointer;
+  opacity: 0.55;
+  transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.tq-turno:hover .tq-copiar,
+.tq-copiar:focus-visible,
+.tq-resp-acoes .tq-copiar.copiado,
+.tq-voce-acoes .tq-copiar.copiado {
+  opacity: 1;
+}
+
+.tq-resp-acoes .tq-copiar:hover,
+.tq-voce-acoes .tq-copiar:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: rgb(222 225 228);
+}
+
+.tq-resp-acoes .tq-copiar.copiado,
+.tq-voce-acoes .tq-copiar.copiado {
+  color: rgb(170 226 190);
+}
+.tq-resp-web {
+  margin-block: 16px;
+  font-size: 0.875rem;
+}
+.tq-resp-web h3 { font-size: inherit; }
+.tq-resp-web a { color: var(--color-primary, #6941c6); text-decoration: underline; }
+.tq-resp-web iframe { width: 100%; height: 180px; border: 0; }

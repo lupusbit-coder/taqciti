@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildNormalizedIndex, createLocator, excerptFor } from './anchoring';
+import { buildNormalizedIndex, createLocator } from './anchoring';
 
 const transcript = [
   '**Carlos:** Boa tarde, Ana. Vamos revisar a modelagem do banco de dados?',
@@ -103,25 +103,5 @@ describe('buildNormalizedIndex', () => {
   it('o mapa tem um offset por caractere normalizado', () => {
     const index = buildNormalizedIndex('  Olá   mundo  ');
     expect(index.originalOffset).toHaveLength(index.text.length);
-  });
-});
-
-describe('excerptFor', () => {
-  it('recorta exatamente sem folga', () => {
-    const anchor = createLocator(transcript).locate('PostgreSQL')!;
-    expect(excerptFor(transcript, anchor)).toBe('PostgreSQL');
-  });
-
-  it('acrescenta folga em volta, que é o que o Auditor precisa ler', () => {
-    const anchor = createLocator(transcript).locate('PostgreSQL')!;
-    const comFolga = excerptFor(transcript, anchor, 30);
-    expect(comFolga).toContain('Minha sugestão é PostgreSQL');
-    expect(comFolga.length).toBeGreaterThan('PostgreSQL'.length);
-  });
-
-  it('não estoura os limites do texto', () => {
-    const anchor = { start: 0, end: 5 };
-    expect(() => excerptFor(transcript, anchor, 10_000)).not.toThrow();
-    expect(excerptFor(transcript, anchor, 10_000)).toBe(transcript);
   });
 });

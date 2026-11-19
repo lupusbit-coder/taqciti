@@ -13,6 +13,13 @@ import {
   SERVER_SHARED_KEY,
   SERVER_SHARED_KEY_HEADER,
 } from '@/shared/config/serverConfig';
+import { fetchDeIa } from '@/shared/services/identidade';
+import {
+  comPrazo,
+  mensagemDeRecusa,
+  PRAZO_ESGOTADO,
+  semConexao,
+} from '@/shared/services/respostaDoServidor';
 import { transcriptToText } from '@/features/history/export';
 import { criarGoogleDoc, nomeDoArquivo, oauthConfigurado, type GoogleDocResult } from './googleDocs';
 import { baixarComoHtml, baixarComoPdf } from './baixarDocumento';
@@ -21,11 +28,12 @@ import type { Lacuna, Pergunta } from './answers';
 export type { GoogleDocResult };
 
 /** Espelha DOCUMENT_TYPES em server/lib/generateDocument.ts. */
-export type DocumentType = 'ata' | 'x1' | 'daily' | 'planning' | 'review';
+export type DocumentType = 'ata' | 'x1' | 'resumo' | 'daily' | 'planning' | 'review';
 
 export const DOCUMENT_TYPE_LABELS: Record<DocumentType, string> = {
   ata: 'Ata de Reunião',
   x1: 'Doc Conversa (X1)',
+  resumo: 'Resumo completo',
   daily: 'Daily',
   planning: 'Planning',
   review: 'Review',
@@ -61,7 +69,9 @@ export type GenerationResult =
       questions: Pergunta[];
       gaps: Lacuna[];
     }
-  | { status: 'error'; documentType: DocumentType; message: string };
+  | { status: 'error'; documentType: DocumentType; message: string }
+  /** A pessoa cancelou: não é falha, e não tem mensagem. */
+  | { status: 'canceled'; documentType: DocumentType };
 
 /**
  * Como o documento chega até a pessoa.
@@ -74,33 +84,6 @@ export type Entrega =
   | { via: 'docs'; url: string }
   | { via: 'download'; arquivo: string }
   | { via: 'falhou'; message: string };
-
-/**
- * O documento depois de gerado — o que o painel de resultado mostra.
- *
- * É um objeto só, e não a geração de um lado e a entrega do outro, porque as
- * três coisas que o usuário vê depois do clique (para onde foi, o que ficou
- * por responder, e o texto) mudam JUNTAS: responder uma pergunta troca o HTML,
- * o que troca o arquivo a rebaixar. Estados separados divergiriam.
- */
-export interface DocumentoPronto {
-  documentType: DocumentType;
-  title: string;
-  /** Markdown, para leitura na tela. */
-  content: string;
-  /** O HTML corrente — atualizado quando o usuário responde as perguntas. */
-  html: string;
-  /** O PDF corrente, base64 — mesma atualização do `html`. Ausente quando o
-   *  servidor não conseguiu gerar um daquela vez. */
-  pdf?: string;
-  documentData: unknown;
-  /** O que ainda não foi respondido. Vazio quando não sobrou nada. */
-  questions: Pergunta[];
-  gaps: Lacuna[];
-  projectName?: string;
-  /** Ausente enquanto a entrega não terminou. */
-  entrega?: Entrega;
-}
 
 /** O nome do arquivo, a partir do que a geração apurou. */
 export function nomeDoDocumento(
@@ -155,12 +138,38 @@ export async function entregarDocumento(
     : { via: 'falhou', message: upload.message };
 }
 
+/**
+ * `sinal`: o "Cancelar" de quem pediu. Cancelada, a geração devolve
+ * `canceled` (sem mensagem: não é falha). O prazo (`PRAZO_DE_GERACAO_MS`)
+ * vale sempre, com ou sem sinal.
+ */
 export async function requestGeneration(
   source: GenerationSource,
   documentType: DocumentType,
+  sinal?: AbortSignal,
 ): Promise<GenerationResult> {
+  // Sem fala capturada não há do que gerar — e o servidor recusaria com
+  // `"transcript" é obrigatório`, que não diz nada a quem usa.
+  if (!source.segments.some((s) => s.text.trim())) {
+    return {
+      status: 'error',
+      documentType,
+      message: 'Esta reunião não tem fala registrada, então não há de onde tirar o documento.',
+    };
+  }
+
+  const corte = comPrazo(sinal);
+  let data: {
+    title: string;
+    content: string;
+    html?: string;
+    pdf?: string;
+    documentData?: { metadata?: DocumentMetadata };
+    questions?: Pergunta[];
+    gaps?: Lacuna[];
+  };
   try {
-    const response = await fetch(`${SERVER_BASE_URL}/api/generate`, {
+    const response = await fetchDeIa(`${SERVER_BASE_URL}/api/generate`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -172,73 +181,30 @@ export async function requestGeneration(
         date: new Date(source.startedAt).toISOString(),
         documentType,
       }),
+      signal: corte.signal,
     });
-
+    // Cota do dia, provedor ocupado, transcrição longa: o servidor já escreve a
+    // frase certa, e ela tem que chegar à tela (ver `respostaDoServidor.ts`).
     if (!response.ok) {
-      // Dizer só "erro 401" manda a pessoa procurar no lugar errado. Cada
-      // status aqui tem uma causa e uma ação diferentes.
-      let message: string;
-      if (response.status === 401) {
-        message = 'O servidor recusou a chave da extensão. Confira DOCCITI_SHARED_KEY no servidor.';
-      } else if (response.status === 413) {
-        message = 'A transcrição é longa demais para o servidor gerar o documento.';
-      } else if (response.status === 400) {
-        // O 400 mais provável é a trava de política de dados: o servidor está
-        // com uma chave de free tier, que manda o conteúdo para treinamento
-        // do provedor, e recusa transcrição que não seja sintética. A
-        // extensão captura reunião de verdade, então ela NÃO pode se declarar
-        // sintética — o caminho é o servidor rodar com chave paga.
-        const corpo = (await response.json().catch(() => ({}))) as { error?: string };
-        message =
-          corpo.error ??
-          'O servidor recusou o pedido (400). Confira a configuração dele.';
-      } else {
-        message = `O servidor respondeu com erro (${response.status}).`;
-      }
-      return { status: 'error', documentType, message };
+      return { status: 'error', documentType, message: await mensagemDeRecusa(response, '/api/generate') };
     }
-
-    const data = (await response.json()) as {
-      title: string;
-      content: string;
-      html?: string;
-      pdf?: string;
-      documentData?: { metadata?: DocumentMetadata };
-      questions?: Pergunta[];
-      gaps?: Lacuna[];
-    };
-    return {
-      status: 'success',
-      documentType,
-      title: data.title,
-      content: data.content,
-      html: data.html ?? '',
-      pdf: data.pdf,
-      metadata: data.documentData?.metadata ?? {},
-      documentData: data.documentData ?? {},
-      questions: data.questions ?? [],
-      gaps: data.gaps ?? [],
-    };
+    data = await response.json();
   } catch {
-    /*
-     * `fetch` lança por DOIS motivos que se parecem daqui e não se parecem em
-     * nada na hora de arrumar: o servidor não respondeu, ou o navegador
-     * bloqueou a chamada antes de sair (preflight de CORS recusado). A causa
-     * exata é deliberadamente opaca para o script — o navegador não conta.
-     *
-     * A mensagem antiga afirmava a primeira ("Ele está no ar?") e custou uma
-     * investigação inteira contra um servidor que estava de pé o tempo todo,
-     * respondendo 401 para quem chamava de fora do navegador. Enquanto não dá
-     * para saber qual dos dois é, dizer os dois é o honesto — e o console é
-     * onde a resposta está.
-     */
-    return {
-      status: 'error',
-      documentType,
-      message:
-        `Não foi possível falar com o servidor (${SERVER_BASE_URL}). ` +
-        'Ele pode estar fora do ar, ou o navegador pode ter bloqueado a chamada — ' +
-        'o console desta página (F12) diz qual dos dois.',
-    };
+    if (corte.cancelado()) return { status: 'canceled', documentType };
+    if (corte.esgotado()) return { status: 'error', documentType, message: PRAZO_ESGOTADO };
+    return { status: 'error', documentType, message: semConexao('/api/generate') };
   }
+
+  return {
+    status: 'success',
+    documentType,
+    title: data.title,
+    content: data.content,
+    html: data.html ?? '',
+    pdf: data.pdf,
+    metadata: data.documentData?.metadata ?? {},
+    documentData: data.documentData ?? {},
+    questions: data.questions ?? [],
+    gaps: data.gaps ?? [],
+  };
 }

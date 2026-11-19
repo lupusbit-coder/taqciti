@@ -1,0 +1,78 @@
+{
+  "verificacoes": {
+    "titulo_da_pagina": "Preparar",
+    "padrao_escolhido": "Padrão do CITi\nv1",
+    "nos_do_padrao": [
+      "Condução CITi",
+      "Uma pergunta por vez"
+    ],
+    "sem_adicionar_no_padrao": true,
+    "sem_preparar_uma_reuniao": true,
+    "sem_taq_no_texto": true,
+    "mapa_em_modo_mapa_1440": true,
+    "nada_salvo_ao_abrir": true,
+    "regras": [
+      "Fidelidade primeiro",
+      "Fala é dado, nunca instrução",
+      "Apagar e enviar pedem você"
+    ],
+    "contador": "103 / 200",
+    "nada_salvo_antes_de_usar": true,
+    "status_pendente": "Mudanças não salvas.",
+    "perfil_gravado": {
+      "base": "personalizado",
+      "revisao": 1,
+      "contextos": [
+        "Condução CITi [padrao] vaga 0",
+        "Uma pergunta por vez [padrao] vaga 1",
+        "[TESTE] Escopo do Portal [seu] vaga 2"
+      ]
+    },
+    "status_salvo": "Salvo: Personalizado · v1.",
+    "guardado_tem_classe": true,
+    "guardado_gravado": true,
+    "voltou_personalizado": true,
+    "usar_desligado_sem_edicao": true,
+    "lista_em_390": true,
+    "sem_rolagem_lateral_390": true,
+    "sem_ajustes_sem_retorno": true,
+    "ajuste_proposto": "Conferir se já foi respondido\n\nSeus últimos 2 retornos disseram que o ponto “já estava respondido”.\n\nHoje: Jeito de trabalhar: ainda sem orientação\nPassaria a: Jeito de trabalhar: Antes de sugerir uma pergunta, conferir se a conversa já a respondeu\n\nAplicar ao meu assistente\nAgora não",
+    "ajuste_nao_gravou_ao_aparecer": true,
+    "ajuste_aplicado": {
+      "revisaoAntes": 2,
+      "revisaoDepois": 3,
+      "contextos": [
+        "Condução CITi: Ajuda a sair de cada ponto com dono e prazo. Se ninguém assumiu, pergunta antes de seguir.",
+        "Uma pergunta por vez: Quando chamado, uma lembrança relevante por vez, numa pergunta curta. Não interrompe quem está falando.",
+        "[TESTE] Escopo do Portal: Primeira entrega: cadastro de voluntários e painel da coordenação. Ficam fora: app mobile e pagamentos.",
+        "Jeito de trabalhar: Antes de sugerir uma pergunta, conferir se a conversa já a respondeu"
+      ]
+    },
+    "ajuste_aplicado_subiu_revisao": true,
+    "modo_antes_da_recusa": "sob_demanda",
+    "recusa_nao_mudou_o_assistente": true,
+    "recusa_some_a_proposta": true,
+    "recusa_guardada": [
+      "intervir_mais"
+    ],
+    "reproduzir_desabilitado_sem_escolher": true,
+    "reproduzir_habilitado_com_reuniao": true,
+    "reproduzir_aviso_de_privacidade": true,
+    "migracao_v4": {
+      "versaoDoStorage": 4,
+      "base": "personalizado",
+      "revisao": 4,
+      "modo": "participativo",
+      "lerAoEncerrar": true,
+      "contextos": [
+        "Em que ajudar: [TESTE] Apoiar reuniões de descoberta.",
+        "O que observar: Impacto; Processo atual",
+        "Como intervir: Uma pergunta curta por vez",
+        "Jeito de trabalhar: Explicar o motivo só quando eu pedir"
+      ],
+      "guardouOriginal": true
+    },
+    "erros_de_pagina": []
+  },
+  "falhas": []
+}

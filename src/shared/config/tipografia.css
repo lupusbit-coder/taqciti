@@ -1,0 +1,99 @@
+/* Acabamento compartilhado: só texto e entrada de conteúdo, sem caixas novas. */
+:root,
+:host {
+  font-optical-sizing: auto;
+}
+
+:where(button, input, textarea, select) {
+  font-family: inherit;
+}
+
+::placeholder {
+  font-weight: var(--peso-texto);
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+/* Mesmo movimento da chegada de conteúdo da HOME, com deslocamento menor.
+   A chave React das falas é estável: mudar o texto não reinicia a animação. */
+@keyframes tq-texto-chegar {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .tq-resp-texto,
+  .tq-aviso-curto,
+  .tq-fino,
+  .tq-fala-texto:not(.tq-cinetico) {
+    animation: tq-texto-chegar 200ms var(--motion-flow);
+  }
+}
+
+/*
+ * ── Transcrição cinética (ver TextoCinetico.tsx) ────────────────────────────
+ *
+ * Cada palavra nova sobe ~0,4em (8px na legenda, 6px na lista), acende e se
+ * acomoda com um assentamento mínimo — sem elástico. O deslocamento é em `em`
+ * para valer igual na legenda grande e no corpo de leitura.
+ *
+ * `fill-mode: backwards` só segura o estado inicial durante o atraso do lote.
+ * O fim da animação NÃO é fixado: a opacidade final é a do próprio elemento,
+ * então uma palavra provisória termina de entrar já apagada, sem salto.
+ *
+ * `inline-block` é o que permite `transform` numa palavra; o espaço entre elas
+ * continua sendo texto, e é ali que a linha quebra — a seleção e a cópia dão a
+ * fala exata.
+ */
+.tq-cin-p {
+  display: inline-block;
+  max-width: 100%;
+  transition: opacity 0.45s var(--motion-flow);
+}
+
+.tq-cin-p.provisoria {
+  opacity: 0.66;
+}
+
+@keyframes tq-palavra-chegar {
+  from {
+    opacity: 0;
+    transform: translateY(0.42em) scale(0.98);
+  }
+  70% {
+    transform: translateY(-0.03em) scale(1);
+  }
+  to {
+    transform: none;
+  }
+}
+
+/* Correção do reconhecedor: só a palavra trocada, no lugar, sem deslocamento. */
+@keyframes tq-palavra-trocar {
+  from {
+    opacity: 0.2;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .tq-cin-p.nova {
+    animation: tq-palavra-chegar 260ms cubic-bezier(0.22, 0.8, 0.24, 1) backwards;
+    animation-delay: var(--tq-atraso, 0ms);
+  }
+
+  .tq-cin-p.troca {
+    animation: tq-palavra-trocar 220ms ease-out backwards;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tq-cin-p {
+    transition: none;
+  }
+}

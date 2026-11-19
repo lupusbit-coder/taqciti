@@ -10,6 +10,60 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
+describe('GoogleMeetProvider — controle de idioma não é botão de legendas', () => {
+  it('liga as legendas sem clicar no menu de idioma que aparece antes delas', () => {
+    render(`<button aria-label="Idioma das legendas" aria-haspopup="menu">Português</button>
+      <button aria-label="Ativar legendas">CC</button>`);
+    const idioma = vi.fn();
+    const ativar = vi.fn();
+    document.querySelectorAll('button')[0]!.addEventListener('click', idioma);
+    document.querySelectorAll('button')[1]!.addEventListener('click', ativar);
+    expect(new GoogleMeetProvider().requestEnableCaptions()).toBe(true);
+    expect(ativar).toHaveBeenCalledTimes(1);
+    expect(idioma).not.toHaveBeenCalled();
+  });
+
+  it.each(['Desativar legendas', 'Turn off captions'])('não desliga legendas no silêncio: %s', (label) => {
+    render(`<button aria-label="${label}">CC</button><div role="region" aria-label="Legendas"></div>`);
+    const clique = vi.fn();
+    document.querySelector('button')!.addEventListener('click', clique);
+    const provider = new GoogleMeetProvider();
+    expect(provider.areCaptionsEnabled()).toBe(true);
+    provider.requestEnableCaptions();
+    provider.requestEnableCaptions();
+    expect(clique).not.toHaveBeenCalled();
+  });
+
+  it('não usa o nome do idioma como evidência de legendas ligadas', () => {
+    render(`<button aria-label="Ativar legendas">CC</button>
+      <div role="region" aria-label="Legendas"><button>Português</button></div>`);
+    expect(new GoogleMeetProvider().areCaptionsEnabled()).toBe(false);
+  });
+
+  it('só o menu de idioma presente não autoriza nenhum clique', () => {
+    render('<button aria-label="Caption language" aria-haspopup="menu">English</button>');
+    const clique = vi.fn();
+    document.querySelector('button')!.addEventListener('click', clique);
+    const provider = new GoogleMeetProvider();
+    expect(provider.areCaptionsAvailable()).toBe(false);
+    expect(provider.requestEnableCaptions()).toBe(false);
+    expect(clique).not.toHaveBeenCalled();
+  });
+
+  it('ignora o botão escondido do layout anterior', () => {
+    render(`<button aria-label="Ativar legendas"></button><button aria-label="Ativar legendas"></button>`);
+    const botoes = document.querySelectorAll('button');
+    botoes[0]!.checkVisibility = () => false;
+    const escondido = vi.fn();
+    const visivel = vi.fn();
+    botoes[0]!.addEventListener('click', escondido);
+    botoes[1]!.addEventListener('click', visivel);
+    new GoogleMeetProvider().requestEnableCaptions();
+    expect(escondido).not.toHaveBeenCalled();
+    expect(visivel).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('GoogleMeetProvider — presença confiável e reconciliada', () => {
   it('não promove avatar/falante da legenda a participante', () => {
     render(`
@@ -105,5 +159,69 @@ describe('GoogleMeetProvider — captura degradada explícita', () => {
       text: 'fala preservada sem inventar um participante',
     });
     expect(health).toContainEqual([false, 'parser']);
+  });
+});
+
+describe('GoogleMeetProvider — o fim da chamada', () => {
+  const EM_CHAMADA = '<button aria-label="Sair da chamada">call_end</button>';
+
+  function naSala(): void {
+    window.history.replaceState(null, '', '/abc-defg-hij');
+  }
+
+  it('reconhece a reunião com o botão de sair na tela', () => {
+    naSala();
+    render(EM_CHAMADA);
+    expect(new GoogleMeetProvider().detectMeeting()?.meetingCode).toBe('abc-defg-hij');
+  });
+
+  it('a tela pós-chamada encerra, mesmo com o botão de sair ainda no documento', () => {
+    naSala();
+    render(`${EM_CHAMADA}<button>Participar novamente</button>`);
+    expect(new GoogleMeetProvider().detectMeeting()).toBeNull();
+  });
+
+  it('um botão de sair que não é desenhado não conta como reunião', () => {
+    naSala();
+    render(EM_CHAMADA);
+    const botao = document.querySelector('button')!;
+    botao.checkVisibility = () => false;
+    expect(new GoogleMeetProvider().detectMeeting()).toBeNull();
+  });
+
+  it('sair da chamada dispara o fim depois da confirmação dupla', () => {
+    vi.useFakeTimers();
+    naSala();
+    render(EM_CHAMADA);
+    const provider = new GoogleMeetProvider();
+    const fim = vi.fn();
+    provider.onMeetingEnd(fim);
+    provider.start();
+
+    render('<button>Voltar à tela inicial</button>');
+    vi.advanceTimersByTime(10_000);
+    provider.stop();
+
+    expect(fim).toHaveBeenCalledTimes(1);
+    expect(fim.mock.calls[0]?.[0]).toMatchObject({ meetingCode: 'abc-defg-hij' });
+  });
+});
+
+describe('GoogleMeetProvider — outra sala na mesma aba', () => {
+  it('encerra a sala antiga e abre a nova, sem recarregar a página', () => {
+    vi.useFakeTimers();
+    window.history.replaceState(null, '', '/abc-defg-hij');
+    render('<button aria-label="Sair da chamada">call_end</button>');
+    const provider = new GoogleMeetProvider();
+    const eventos: string[] = [];
+    provider.onMeetingStart((s) => eventos.push(`inicio ${s.meetingCode}`));
+    provider.onMeetingEnd((s) => eventos.push(`fim ${s.meetingCode}`));
+    provider.start();
+
+    window.history.replaceState(null, '', '/xyz-wxyz-xyz');
+    vi.advanceTimersByTime(3_000);
+    provider.stop();
+
+    expect(eventos).toEqual(['inicio abc-defg-hij', 'fim abc-defg-hij', 'inicio xyz-wxyz-xyz']);
   });
 });

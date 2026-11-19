@@ -122,6 +122,48 @@ describe('as quatro saídas', () => {
   });
 });
 
+describe('o cursor responde ao que está embaixo dele', () => {
+  function moverSobre(el: Element) {
+    el.dispatchEvent(
+      new PointerEvent('pointermove', { clientX: 10, clientY: 10, pointerType: 'mouse', bubbles: true }),
+    );
+  }
+
+  /* No campo o I-beam do sistema volta (home.css): o ponto desenhado sai para
+     não haver dois cursores, e o anel fica. */
+  it('sobre um campo de texto o ponto sai e o anel fica menor', async () => {
+    await montar();
+    const campo = document.createElement('textarea');
+    document.body.append(campo);
+    await act(async () => moverSobre(campo));
+    expect(host.querySelector('.tq-dot')!.classList.contains('sobre-campo')).toBe(true);
+    expect(host.querySelector('.tq-halo')!.classList.contains('sobre-campo')).toBe(true);
+    campo.remove();
+  });
+
+  /* A reação de IA é contextual: só sobre o que é do Taq, e um quarto de volta
+     ao entrar — não um giro contínuo. */
+  it('sobre a resposta do Taq o anel se abre, e gira uma vez só', async () => {
+    await montar();
+    const resposta = document.createElement('div');
+    resposta.className = 'tq-turno-agente';
+    const p = document.createElement('p');
+    resposta.append(p);
+    document.body.append(resposta);
+    const anel = host.querySelector<HTMLElement>('.tq-halo')!;
+    const rotor = host.querySelector<HTMLElement>('.tq-rotor')!;
+
+    await act(async () => moverSobre(p));
+    expect(anel.classList.contains('sobre-taq')).toBe(true);
+    const depoisDeEntrar = rotor.style.transform;
+    expect(depoisDeEntrar).toBe('rotate(90deg)');
+
+    await act(async () => moverSobre(resposta));
+    expect(rotor.style.transform).toBe(depoisDeEntrar);
+    resposta.remove();
+  });
+});
+
 describe('o ponto não tem atraso; o anel tem', () => {
   it('o ponto vai para a posição exata do mouse', async () => {
     await montar();

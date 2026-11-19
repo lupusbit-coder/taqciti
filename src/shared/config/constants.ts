@@ -8,8 +8,6 @@ export const STORAGE_KEYS = {
   state: 'taq:state',
   /** chrome.storage.local — histórico de reuniões (fonte da verdade das transcrições). */
   history: 'taq:history',
-  /** chrome.storage.local — mantido só por compatibilidade de migração; nada escreve aqui nesta versão. */
-  outbox: 'taq:outbox',
   /** chrome.storage.local — métricas locais de observabilidade. */
   metrics: 'taq:metrics',
   /** chrome.storage.local — preferências do painel (borda, posição, legendas). */
@@ -67,6 +65,137 @@ export const STORAGE_KEYS = {
   shots: 'taq:shots',
   /** chrome.storage.local — aviso no chat do Meet já enviado, por reunião. */
   chatNotice: 'taq:chatNotice',
+
+  /**
+   * chrome.storage.local — os DOCUMENTOS guardados.
+   *
+   * Coleção própria, e não um campo dentro do registro da reunião, pelo mesmo
+   * motivo das anotações acima: a captura reescreve o registro da reunião a
+   * cada trecho, e um documento guardado lá dentro seria atropelado por uma
+   * escrita da transcrição. Aqui ele tem dono e ritmo próprios, e o vínculo
+   * com a reunião (ou com a conversa) é um id, não um aninhamento.
+   *
+   * Só entra aqui documento cujo CONTEÚDO a extensão tem. Um arquivo que foi
+   * apenas baixado num passado sem esta coleção não vira registro: listá-lo
+   * seria oferecer "abrir" e "editar" para algo que não existe mais aqui.
+   */
+  documents: 'taq:documents',
+
+  /**
+   * chrome.storage.local — as VERSÕES dos documentos personalizados.
+   *
+   * Uma coleção ao lado de `documents`, e não dentro dele: o registro do
+   * documento é o que a seção "Documentos" lista e edita como texto, e a
+   * árvore de blocos com o histórico de revisões tem outro ritmo e outro
+   * tamanho. O vínculo é o id do documento. Só a árvore é guardada — o PDF é
+   * derivado dela pelo servidor, sob demanda.
+   */
+  documentVersions: 'taq:documentVersions',
+
+  /**
+   * chrome.storage.local — o estado da sincronização com o servidor.
+   *
+   * `local` e não `session`: é uma decisão que vale até ser desfeita, não uma
+   * autorização por vez como `participation`. A diferença é proposital — dizer
+   * "sim, sincronize" uma vez por reunião seria atrito diário para uma
+   * pergunta que só faz sentido uma vez.
+   *
+   * O que mora aqui é o SIM, não a credencial. O token do Google é do Chrome e
+   * fica no cache dele; guardar uma cópia nossa só criaria um segredo a mais
+   * para vazar, com validade pior que a do original.
+   */
+  sync: 'taq:sync',
+
+  /**
+   * A conta do CITi com que a pessoa entrou para usar a IA — só o e-mail, como
+   * `login_hint` do caminho silencioso. Separado de `sync` de propósito: entrar
+   * para usar a IA não pode ligar a sincronização do acervo.
+   */
+  contaDaIa: 'taq:contaDaIa',
+
+  /**
+   * chrome.storage.local — o que JÁ foi aceito pelo servidor.
+   *
+   * Um resumo curto por item (`tipo:id` → assinatura), e não um "sincronizei
+   * até tal data": as coisas mudam para trás. Renomear uma reunião de março,
+   * editar um documento antigo ou apagar uma nota são invisíveis para um
+   * marcador temporal, e visíveis para uma assinatura que deixou de bater.
+   *
+   * Separado de `sync` porque tem outro ciclo de vida: o "sim" é da pessoa e
+   * dura até ela desfazer; isto é cache de progresso, e apagá-lo só custa um
+   * reenvio.
+   */
+  syncEstado: 'taq:syncEstado',
+
+  /**
+   * chrome.storage.local — o registro das execuções do Taq (o assistente).
+   *
+   * Operação, não conteúdo: ids, estado, ferramentas usadas, duração, falhas e o
+   * consumo que o provedor informou. Nenhum trecho de reunião ou documento,
+   * nenhum raciocínio do modelo. Limitado às últimas 50 execuções. Ver
+   * `features/taq/execucoes.ts`.
+   */
+  taqExecucoes: 'taq:execucoes',
+
+  /**
+   * chrome.storage.local — a lixeira das exclusões feitas pelo Taq: um retrato de
+   * cada reunião apagada (registro, nota, marcações, prints, vínculos), por 30
+   * dias, para "Desfazer". Ver `features/taq/lixeira.ts`.
+   */
+  taqLixeira: 'taq:lixeira',
+
+  /**
+   * chrome.storage.local — os registros de TRABALHO: compromissos, decisões,
+   * achados e análises de reunião. Registros próprios, ligados às fontes por id
+   * e versão; apagar a reunião leva só as análises dela (derivado exclusivo).
+   * Ver `features/trabalho/store.ts`.
+   */
+  trabalho: 'taq:trabalho',
+
+  /**
+   * chrome.storage.local — a conexão da conta Google do CITi com as integrações
+   * (e-mail, diretório, agenda): e-mail, domínio e escopos concedidos. NUNCA o
+   * token: ele vive no cache do Chrome (`chrome.identity`). Ver
+   * `features/integracoes/estado.ts`.
+   */
+  integracoes: 'taq:integracoes',
+
+  /**
+   * chrome.storage.local — o registro das ações externas (e-mails e eventos): o
+   * rascunho que espera confirmação e o desfecho de cada envio, com a chave de
+   * idempotência. É o que impede reenviar às cegas. Ver
+   * `features/integracoes/registroDeAcoes.ts`.
+   */
+  integracoesAcoes: 'taq:acoes-externas',
+
+  /**
+   * chrome.storage.local — quem, pelo NOME, já foi reconhecido (ou descartado)
+   * como gente do CITi no diretório. O Meet entrega o nome do falante, não o
+   * e-mail; este cache evita buscar o mesmo nome a cada fala. Ver
+   * `features/integracoes/colegas.ts`.
+   */
+  colegasDoCiti: 'taq:colegas-citi',
+
+  /**
+   * chrome.storage.local — o perfil de condução (como a pessoa quer ser
+   * ajudada) e o briefing de cada reunião (o objetivo que ela quer alcançar).
+   * Apagar a reunião leva só o briefing dela. Ver `features/conducao/store.ts`.
+   */
+  conducao: 'taq:conducao',
+
+  /**
+   * chrome.storage.local — as sugestões de condução (privadas, para quem
+   * conduz) e o feedback sobre elas. Derivados da reunião: apagá-la leva as
+   * dela. Ver `features/apoio/store.ts`.
+   */
+  apoio: 'taq:apoio',
+
+  /**
+   * chrome.storage.local — o estado dos pontos de cada reunião (a esclarecer,
+   * discutido, a confirmar, decidido, adiado), com a fala que sustenta cada um.
+   * Derivado da reunião: apagá-la leva o dela. Ver `features/estado/store.ts`.
+   */
+  estado: 'taq:estado',
 } as const;
 
 /** Chaves da era "CITi Flow Companion" — migradas uma única vez no boot. */
@@ -121,15 +250,10 @@ export const LIVE_SAVE_THROTTLE_MS = 4000;
 export const ACTIVE_IDENTITY_NAMESPACE_KEY = 'taq:activeIdentityNamespace';
 /** Versão global das migrações locais; não pertence a um usuário. */
 export const LOCAL_STORAGE_SCHEMA_VERSION_KEY = 'taq:storageSchemaVersion';
-export const LOCAL_STORAGE_SCHEMA_VERSION = 2;
+export const LOCAL_STORAGE_SCHEMA_VERSION = 4;
 export const ANONYMOUS_IDENTITY_NAMESPACE = 'anonymous';
 
-export const MAX_HISTORY_RECORDS = 100;
-
 export const PROVIDER_GOOGLE_MEET = 'google-meet';
-
-/** Idioma que a extensão espera nas legendas. Fixo por ora — sem preferência de usuário nesta versão. */
-export const EXPECTED_CAPTION_LANGUAGE = 'pt' as const;
 
 /** Chunks aplicados entre cada nova checagem da heurística de idioma da legenda. */
 export const LANGUAGE_DETECTION_CHUNK_INTERVAL = 8;

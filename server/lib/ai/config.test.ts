@@ -9,12 +9,16 @@ import {
   matrixEntryForModel,
   matrixFor,
   parseOverride,
+  politicaDeDadosNaoDeclarada,
   productionCandidates,
+  recusaPorPoliticaDeDados,
   usesContentForTraining,
 } from './config';
-import { costForEntry } from './index';
-import { priceFor } from './pricing';
+import { PRICING, priceFor } from './pricing';
 import { AGENT_NAMES, PROVIDER_IDS } from './types';
+
+/** Os provedores que a matriz cobre — derivado dela, nunca escrito à mão. */
+const providersNaMatriz = () => [...new Set(COMPARISON_MATRIX.map((entry) => entry.provider))];
 
 describe('matriz de comparação', () => {
   it('cada provedor tem exatamente um piso de produção', () => {
@@ -22,7 +26,7 @@ describe('matriz de comparação', () => {
     // tornariam a escolha dependente da ordem do array. A regra vale entre
     // CANDIDATOS A PRODUÇÃO: entradas experimentais podem repetir tier,
     // porque respondem perguntas laterais em vez de disputar a decisão.
-    for (const provider of PROVIDER_IDS) {
+    for (const provider of providersNaMatriz()) {
       const baratos = productionCandidates().filter(
         (entry) => entry.provider === provider && entry.tier === 'barato',
       );
@@ -32,7 +36,7 @@ describe('matriz de comparação', () => {
   });
 
   it('cada provedor tem pelo menos um teto de produção', () => {
-    for (const provider of PROVIDER_IDS) {
+    for (const provider of providersNaMatriz()) {
       const caros = productionCandidates().filter(
         (entry) => entry.provider === provider && entry.tier === 'caro',
       );
@@ -43,9 +47,31 @@ describe('matriz de comparação', () => {
   it('o piso de produção nunca envia conteúdo para treinamento', () => {
     // Se um dia o piso de um fornecedor virar free tier sem querer, o
     // pipeline passaria a mandar transcrição para treinamento em silêncio.
-    for (const provider of PROVIDER_IDS) {
+    for (const provider of providersNaMatriz()) {
       expect(usesContentForTraining(cheapestProductionEntry(provider)), provider).toBe(false);
     }
+  });
+
+  /*
+   * As invariantes acima varrem `providersNaMatriz()`, e não `PROVIDER_IDS` —
+   * senão implementar um adaptador novo quebraria testes de matriz antes de
+   * existir decisão nenhuma sobre modelos e preços. O preço de derivar a lista
+   * é que uma ausência deixa de fazer barulho; este teste é o barulho, escrito
+   * à mão, e ele muda quando a decisão for tomada.
+   */
+  it('quem está de fora da matriz está de fora por um motivo escrito', () => {
+    const naMatriz = providersNaMatriz();
+    expect(naMatriz).toContain('anthropic');
+    expect(naMatriz).toContain('google');
+    expect(naMatriz).toContain('xai');
+
+    // O mock não é fornecedor: ganharia toda métrica de custo devolvendo texto
+    // inventado de graça.
+    expect(naMatriz).not.toContain('mock');
+    // A OpenAI entra quando houver modelo escolhido e preço conferido na
+    // documentação oficial. Sem preço, o relatório sairia com custo undefined.
+    expect(naMatriz).not.toContain('openai');
+    expect(PRICING.openai).toEqual({});
   });
 
   it('matrixFor devolve também as entradas experimentais', () => {
@@ -128,6 +154,24 @@ describe('política de dados', () => {
     }
   });
 
+  it('em produção a política precisa estar declarada, e "sintetica" do cliente não fura a trava', () => {
+    const prod = { VERCEL_ENV: 'production' } as unknown as NodeJS.ProcessEnv;
+    expect(politicaDeDadosNaoDeclarada(prod)).toContain('DOCCITI_DATA_POLICY');
+    expect(recusaPorPoliticaDeDados(false, null, prod)?.status).toBe(503);
+
+    const prodPaga = { ...prod, DOCCITI_DATA_POLICY: 'private' } as NodeJS.ProcessEnv;
+    expect(recusaPorPoliticaDeDados(false, null, prodPaga)).toBeNull();
+
+    const prodTreino = { ...prod, DOCCITI_DATA_POLICY: 'training' } as NodeJS.ProcessEnv;
+    expect(recusaPorPoliticaDeDados(true, 'aviso', prodTreino)?.status).toBe(400);
+
+    // Fora de produção, nada muda: sem variável passa, e `sintetica` vale.
+    const dev = {} as unknown as NodeJS.ProcessEnv;
+    expect(politicaDeDadosNaoDeclarada(dev)).toBeNull();
+    expect(recusaPorPoliticaDeDados(true, 'aviso', dev)).toBeNull();
+    expect(recusaPorPoliticaDeDados(false, 'aviso', dev)?.status).toBe(400);
+  });
+
   it('matrixEntryForModel encontra a entrada do modelo ativo do Auditor', () => {
     const { provider, model } = DEFAULT_AGENT_CONFIG.auditor;
     expect(matrixEntryForModel(provider, model)?.id).toBe('google-barato');
@@ -141,20 +185,7 @@ describe('política de dados', () => {
   });
 });
 
-describe('custo por entrada da matriz', () => {
-  it('free tier custa zero mesmo com o modelo tendo preço pago', () => {
-    const entry = COMPARISON_MATRIX.find((candidate) => candidate.id === 'google-dev-free')!;
-    // O modelo TEM preço na tabela — é o preço pago dele, e continua certo.
-    expect(priceFor(entry.provider, entry.model)).toBeDefined();
-    expect(costForEntry(entry, { inputTokens: 1_000_000, outputTokens: 500_000 })!.totalUsd).toBe(0);
-  });
-
-  it('configuração paga usa a tabela normalmente', () => {
-    const entry = cheapestProductionEntry('anthropic');
-    const cost = costForEntry(entry, { inputTokens: 1_000_000, outputTokens: 0 })!;
-    expect(cost.totalUsd).toBeGreaterThan(0);
-  });
-
+describe('configuração por entrada da matriz', () => {
   it('agentConfigFor expande a entrada para todos os agentes', () => {
     const entry = COMPARISON_MATRIX[0]!;
     const config = agentConfigFor(entry);
@@ -188,8 +219,8 @@ describe('defaults de produção', () => {
       DEFAULT_AGENT_CONFIG.auditor.model,
     )!;
     const pensante = priceFor(
-      DEFAULT_AGENT_CONFIG.pensante.provider,
-      DEFAULT_AGENT_CONFIG.pensante.model,
+      DEFAULT_AGENT_CONFIG.leitor.provider,
+      DEFAULT_AGENT_CONFIG.leitor.model,
     )!;
     expect(auditor.inputPerMTok).toBeLessThanOrEqual(pensante.inputPerMTok);
     expect(auditor.outputPerMTok).toBeLessThanOrEqual(pensante.outputPerMTok);
@@ -215,7 +246,9 @@ describe('parseOverride', () => {
   });
 
   it('recusa provedor desconhecido', () => {
-    expect(() => parseOverride('openai:gpt-5', 'DOCCITI_ANALISTA')).toThrow(/desconhecido/);
+    // Era `openai` aqui. Deixou de servir de exemplo no dia em que a OpenAI
+    // virou provedor de verdade — ver providers/openai.ts.
+    expect(() => parseOverride('llama:3.1-70b', 'DOCCITI_ANALISTA')).toThrow(/desconhecido/);
   });
 
   it('recusa modelo vazio', () => {

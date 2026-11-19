@@ -24,5 +24,13 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['lib/**/*.test.ts'],
+    // A tranca que impede qualquer teste de chamar provedor de verdade. Roda
+    // antes de qualquer importação — ver o cabeçalho do arquivo.
+    setupFiles: ['./vitest.setup.ts'],
+    // Cada suíte que usa PGlite sobe um Postgres em WASM no eforeAll. Em
+    // paralelo, com várias suítes de banco, o boot passa dos 10s padrão só por
+    // disputa de CPU — e o timeout derruba suítes que não têm nada de errado.
+    hookTimeout: 60_000,
+    testTimeout: 30_000,
   },
 });

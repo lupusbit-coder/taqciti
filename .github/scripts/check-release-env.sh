@@ -4,7 +4,7 @@
 #
 # O endereco do servidor e o segredo compartilhado sao fixados NO BUNDLE, na
 # hora da build. Sem eles a extensao cai no padrao de desenvolvimento
-# (http://localhost:3000) — e o instalador publicado so funciona para quem
+# (http://localhost:3000) — e a extensao publicada so funciona para quem
 # estiver rodando o servidor na propria maquina. Aconteceu na v2.0.0.
 #
 # Falhar aqui custa uma release; publicar errado custa a confianca de quem
@@ -33,7 +33,7 @@ exigir "VITE_DOCCITI_SHARED_KEY" "${VITE_DOCCITI_SHARED_KEY:-}" \
 
 url="${VITE_DOCCITI_SERVER_URL:-}"
 
-# localhost num instalador distribuido nunca e o que se quis dizer.
+# localhost numa extensao distribuida nunca e o que se quis dizer.
 case "${url}" in
   *localhost*|*127.0.0.1*)
     echo "ERRO   VITE_DOCCITI_SERVER_URL aponta para a maquina local: ${url}"

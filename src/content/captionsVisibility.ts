@@ -21,7 +21,7 @@
  *
  * `clip-path` remata o 1px residual sem afetar medida alguma.
  */
-import { CAPTION_REGION_SELECTORS } from './providers/googleMeet/selectors';
+import { CAPTION_LINE_SHAPES, CAPTION_REGION_SELECTORS } from './providers/googleMeet/selectors';
 
 const STYLE_ID = 'taqciti-captions-visibility';
 
@@ -61,27 +61,54 @@ const REGRAS_OCULTAR = [
  * continua alto não devolve pixel nenhum.
  *
  * A condição para marcar é estreita de propósito: o pai só é colapsado quando
- * a região de legenda é o ÚNICO filho-elemento dele. Um pai com mais filhos
+ * a região de legenda é o ÚNICO filho-elemento dele e não abriga controles.
+ * A marca é retirada se o Meet reaproveitar a região. Um pai com mais filhos
  * pode estar segurando controle, aviso ou barra do Meet, e encolhê-lo seria
  * quebrar a chamada para consertar um vão.
  */
 const WRAPPER_ATTR = 'data-taqciti-caption-wrapper';
+const REGION_ATTR = 'data-taqciti-caption-hidden';
+const CONTROLES = 'button, [role="button"], select, input, [role="listbox"], [role="menu"], [role="dialog"], video';
+const REGIOES = CAPTION_REGION_SELECTORS.join(',');
+const LINHAS = CAPTION_LINE_SHAPES.map(({ line }) => line).join(',');
 
 function marcarInvolucros(): void {
-  for (const selector of CAPTION_REGION_SELECTORS) {
-    for (const region of document.querySelectorAll(selector)) {
-      const parent = region.parentElement;
-      if (parent && parent.childElementCount === 1) {
-        parent.setAttribute(WRAPPER_ATTR, '');
+  const ocultos = new Set<Element>();
+  const involucros = new Set<Element>();
+  for (const region of document.querySelectorAll(REGIOES)) {
+    // Alguns layouts abrigam idioma e falas na mesma região. Nesse caso só
+    // as linhas conhecidas saem de vista; controles continuam no fluxo.
+    if (region.querySelector(CONTROLES)) {
+      for (const line of region.querySelectorAll(LINHAS)) {
+        if (!line.querySelector(CONTROLES)) ocultos.add(line);
       }
+      continue;
     }
+    ocultos.add(region);
+    const parent = region.parentElement;
+    if (parent && parent.childElementCount === 1 &&
+        !parent.matches('body, html, main, [role="main"], [role="dialog"], [role="toolbar"]')) {
+      involucros.add(parent);
+    }
+  }
+  // O Meet reaproveita contêineres: uma marca antiga não pode encolher uma
+  // barra de idioma que foi acrescentada depois. Reconciliar também REMOVE.
+  reconciliar(REGION_ATTR, ocultos);
+  reconciliar(WRAPPER_ATTR, involucros);
+}
+
+function reconciliar(atributo: string, atuais: Set<Element>): void {
+  for (const node of document.querySelectorAll(`[${atributo}]`)) {
+    if (!atuais.has(node)) node.removeAttribute(atributo);
+  }
+  for (const node of atuais) {
+    if (!node.hasAttribute(atributo)) node.setAttribute(atributo, '');
   }
 }
 
 function limparInvolucros(): void {
-  for (const node of document.querySelectorAll(`[${WRAPPER_ATTR}]`)) {
-    node.removeAttribute(WRAPPER_ATTR);
-  }
+  reconciliar(WRAPPER_ATTR, new Set());
+  reconciliar(REGION_ATTR, new Set());
 }
 
 /**
@@ -90,6 +117,7 @@ function limparInvolucros(): void {
  * enquanto o modo oculto estiver ativo.
  */
 let observer: MutationObserver | null = null;
+let quadro: number | null = null;
 
 export function setNativeCaptionsHidden(hidden: boolean): void {
   const existing = document.getElementById(STYLE_ID);
@@ -98,6 +126,8 @@ export function setNativeCaptionsHidden(hidden: boolean): void {
     existing?.remove();
     observer?.disconnect();
     observer = null;
+    if (quadro !== null) cancelAnimationFrame(quadro);
+    quadro = null;
     limparInvolucros();
     return;
   }
@@ -106,8 +136,9 @@ export function setNativeCaptionsHidden(hidden: boolean): void {
     const style = document.createElement('style');
     style.id = STYLE_ID;
     style.textContent = [
-      ...CAPTION_REGION_SELECTORS.map((selector) => `${selector} { ${REGRAS_OCULTAR}; }`),
-      `[${WRAPPER_ATTR}] { height: 0 !important; min-height: 0 !important; padding: 0 !important; margin: 0 !important; }`,
+      // :has protege os controles imediatamente, antes do próximo quadro.
+      `[${REGION_ATTR}]:not(:has(${CONTROLES})) { ${REGRAS_OCULTAR}; }`,
+      `[${WRAPPER_ATTR}]:not(:has(${CONTROLES})) { height: 0 !important; min-height: 0 !important; padding: 0 !important; margin: 0 !important; }`,
     ].join('\n');
     document.head.appendChild(style);
   }
@@ -119,14 +150,15 @@ export function setNativeCaptionsHidden(hidden: boolean): void {
   // linha de legenda, cada tile de vídeo). Reagir a cada mutação faria uma
   // varredura de seletores a cada quadro e apareceria como travada na
   // chamada; um quadro de folga junta a rajada inteira num trabalho só.
-  let agendado = false;
   observer = new MutationObserver(() => {
-    if (agendado) return;
-    agendado = true;
-    requestAnimationFrame(() => {
-      agendado = false;
+    if (quadro !== null) return;
+    quadro = requestAnimationFrame(() => {
+      quadro = null;
       marcarInvolucros();
     });
   });
-  observer.observe(document.body, { childList: true, subtree: true });
+  observer.observe(document.body, {
+    childList: true, subtree: true, attributes: true,
+    attributeFilter: ['role', 'aria-label', 'class'],
+  });
 }

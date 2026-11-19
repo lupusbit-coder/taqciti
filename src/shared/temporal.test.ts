@@ -7,22 +7,14 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
-  addDays,
   buildTemporalContext,
-  civilFromIso,
   civilToInstant,
-  civilToIso,
-  daysBetween,
   formatOffset,
   instantToRfc3339,
-  isRealDate,
   isValidTimezone,
   localDayOf,
   localTimeOf,
   offsetMinutesAt,
-  timeFromIso,
-  toRfc3339,
-  weekdayOf,
 } from './temporal.js';
 
 describe('localDayOf — o dia local, não o dia do processo', () => {
@@ -104,24 +96,6 @@ describe('civilToInstant — horário de verão', () => {
   });
 });
 
-describe('toRfc3339', () => {
-  it('emite offset explícito, nunca Z', () => {
-    const iso = toRfc3339({ year: 2026, month: 9, day: 18 }, { hour: 14, minute: 0 }, 'America/Recife');
-    expect(iso).toBe('2026-09-18T14:00:00-03:00');
-    expect(iso).not.toContain('Z');
-  });
-
-  it('emite o offset de verão quando a data cai no verão', () => {
-    const iso = toRfc3339({ year: 2026, month: 7, day: 15 }, { hour: 9, minute: 30 }, 'America/New_York');
-    expect(iso).toBe('2026-07-15T09:30:00-04:00');
-  });
-
-  it('é aceito pelo Date nativo e volta ao mesmo instante', () => {
-    const iso = toRfc3339({ year: 2026, month: 9, day: 18 }, { hour: 14, minute: 0 }, 'America/Recife');
-    expect(localTimeOf(Date.parse(iso), 'America/Recife')).toBe('14:00');
-  });
-});
-
 describe('instantToRfc3339', () => {
   it('formata no fuso pedido, com offset', () => {
     expect(instantToRfc3339(Date.UTC(2026, 8, 18, 17, 0, 0), 'America/Recife')).toBe(
@@ -137,54 +111,6 @@ describe('formatOffset', () => {
     expect(formatOffset(0)).toBe('+00:00');
     // Índia: meia hora de offset.
     expect(formatOffset(330)).toBe('+05:30');
-  });
-});
-
-describe('aritmética de data civil', () => {
-  it('vira o mês', () => {
-    expect(civilToIso(addDays({ year: 2026, month: 9, day: 30 }, 1))).toBe('2026-10-01');
-  });
-
-  it('vira o ano', () => {
-    expect(civilToIso(addDays({ year: 2026, month: 12, day: 31 }, 1))).toBe('2027-01-01');
-  });
-
-  it('respeita ano bissexto', () => {
-    expect(civilToIso(addDays({ year: 2028, month: 2, day: 28 }, 1))).toBe('2028-02-29');
-    expect(civilToIso(addDays({ year: 2026, month: 2, day: 28 }, 1))).toBe('2026-03-01');
-  });
-
-  it('anda para trás', () => {
-    expect(civilToIso(addDays({ year: 2026, month: 1, day: 1 }, -1))).toBe('2025-12-31');
-  });
-
-  it('sabe o dia da semana', () => {
-    // 18/09/2026 é uma sexta-feira.
-    expect(weekdayOf({ year: 2026, month: 9, day: 18 })).toBe(5);
-  });
-
-  it('conta dias entre datas', () => {
-    expect(daysBetween({ year: 2026, month: 9, day: 18 }, { year: 2026, month: 9, day: 25 })).toBe(7);
-    expect(daysBetween({ year: 2026, month: 12, day: 31 }, { year: 2027, month: 1, day: 1 })).toBe(1);
-  });
-
-  it('rejeita 31 de fevereiro em vez de rolar para março', () => {
-    expect(isRealDate({ year: 2026, month: 2, day: 31 })).toBe(false);
-    expect(isRealDate({ year: 2026, month: 2, day: 28 })).toBe(true);
-    expect(isRealDate({ year: 2026, month: 13, day: 1 })).toBe(false);
-  });
-});
-
-describe('serialização', () => {
-  it('lê e escreve data', () => {
-    expect(civilFromIso('2026-09-18')).toEqual({ year: 2026, month: 9, day: 18 });
-    expect(civilFromIso('2026-02-31')).toBeNull();
-    expect(civilFromIso('18/09/2026')).toBeNull();
-  });
-
-  it('lê hora', () => {
-    expect(timeFromIso('14:30')).toEqual({ hour: 14, minute: 30 });
-    expect(timeFromIso('25:00')).toBeNull();
   });
 });
 

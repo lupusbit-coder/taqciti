@@ -149,6 +149,16 @@ export interface MeetingSessionState {
   reconnectCount: number;
   /** Entradas no modo degradado (parser sem estrutura ou lacuna observada). */
   captureDegradedCount?: number;
+  /**
+   * `false` = há legenda na tela que a captura NÃO está conseguindo ler.
+   *
+   * O contador acima diz quantas vezes isso já aconteceu; este diz se está
+   * acontecendo AGORA, que é a pergunta que a interface precisa responder. Sem
+   * ele, a única superfície que sabia da interrupção era a cápsula, dentro da
+   * aba do Meet — a sidebar continuava dizendo "transcrevendo" enquanto nada
+   * entrava. Opcional para não rejeitar estado gravado por versão anterior.
+   */
+  captureHealthy?: boolean;
   /** Último trecho recebido, sem expor seu conteúdo em diagnóstico/log. */
   lastChunkAt?: number | null;
   wasDiscardedAndRestarted: boolean;
@@ -176,7 +186,16 @@ export const IDLE_STATE: MeetingState = { phase: 'idle', session: null };
 export type HistoryStatus = 'recording' | 'ready';
 
 export interface MeetingRecord {
+  importacao?: { nome: string; formato: 'txt' | 'vtt' | 'srt' | 'midia'; hash: string; importadaEm: number };
+  /** Resultado opcional da IA. `segments` permanece a fonte original. */
+  revisao?: { segmentos: LiveSegment[]; revisadaEm: number };
   id: string; // = meetingId
+  /**
+   * O código da sala do Meet de onde a gravação veio (`abc-defg-hij`). É o que
+   * permite, ao voltar à mesma sala, oferecer continuar ESTA gravação.
+   * Ausente nas gravações anteriores a 03/10/2026.
+   */
+  meetingCode?: string;
   title: string;
   startedAt: number;
   endedAt: number;

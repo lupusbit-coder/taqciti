@@ -387,6 +387,52 @@ describe('presença, histórico de participação e falantes observados', () => 
     expect(degraded.session?.captureDegradedCount).toBe(1);
   });
 
+  /*
+   * ── A interrupção precisa ter VOLTA ──────────────────────────────────────
+   *
+   * O contador diz quantas vezes a captura já tropeçou; `captureHealthy` diz
+   * se ela está tropeçada AGORA. É este segundo fato que a sidebar mostra — e
+   * sem a volta ela ficaria avisando de uma interrupção já resolvida até o fim
+   * da reunião.
+   */
+  it('a sessão nasce com a captura saudável', () => {
+    expect(recordingState().session?.captureHealthy).toBe(true);
+  });
+
+  it('CAPTURE_DEGRADED marca a captura como não saudável', () => {
+    const degraded = transition(recordingState(), {
+      type: 'CAPTURE_DEGRADED',
+      at: T0 + 4_000,
+    });
+    expect(degraded.session?.captureHealthy).toBe(false);
+  });
+
+  it('CAPTURE_RECOVERED devolve a saúde sem esperar o próximo trecho', () => {
+    const degraded = transition(recordingState(), {
+      type: 'CAPTURE_DEGRADED',
+      at: T0 + 4_000,
+    });
+    const recovered = transition(degraded, { type: 'CAPTURE_RECOVERED' });
+    expect(recovered.session?.captureHealthy).toBe(true);
+    // Silêncio de verdade não é falha: a volta não inventa trecho nenhum.
+    expect(recovered.session?.segments).toHaveLength(0);
+  });
+
+  /* Um trecho aplicado é a prova de que a captura lê as legendas. */
+  it('um trecho novo também encerra a interrupção', () => {
+    const degraded = transition(recordingState(), {
+      type: 'CAPTURE_DEGRADED',
+      at: T0 + 4_000,
+    });
+    const comFala = transition(degraded, chunk('depois', 'voltou a chegar legenda'));
+    expect(comFala.session?.captureHealthy).toBe(true);
+  });
+
+  it('CAPTURE_RECOVERED numa captura saudável não produz estado novo', () => {
+    const rec = recordingState();
+    expect(transition(rec, { type: 'CAPTURE_RECOVERED' })).toBe(rec);
+  });
+
   // ---- aviso de idioma da legenda ----
 
   it('idioma da legenda só é reavaliado a cada LANGUAGE_DETECTION_CHUNK_INTERVAL chunks aplicados', () => {
@@ -422,5 +468,38 @@ describe('presença, histórico de participação e falantes observados', () => 
 
   it('LANGUAGE_WARNING_DISMISSED fora de uma sessão ativa não faz nada', () => {
     expect(transition(IDLE_STATE, { type: 'LANGUAGE_WARNING_DISMISSED' })).toBe(IDLE_STATE);
+  });
+});
+
+describe('continuar uma gravação guardada da mesma sala', () => {
+  const guardada = {
+    id: 'rec-ontem',
+    meetingCode: 'abc-defg-hij',
+    title: 'Daily do painel',
+    startedAt: T0 - 86_400_000,
+    endedAt: T0 - 86_400_000 + 600_000,
+    durationSeconds: 600,
+    participants: [{ name: 'Ana', isHost: true }],
+    segments: [{ captionId: 'old-1', speaker: 'Ana', text: 'Ficamos aqui ontem.', startOffsetMs: 0, endOffsetMs: 2_000 }],
+    status: 'ready' as const,
+    metadata: { capturedCaptions: true, droppedSegments: 1, reconnectCount: 0, wasDiscardedAndRestarted: false },
+  };
+
+  it('reabre a gravação: mesmo id, falas antigas preservadas, novas entram nela', () => {
+    let s = transition(IDLE_STATE, detected({ captionsEnabled: true, at: T0, continuar: guardada }));
+    expect(s.phase).toBe('recording');
+    expect(s.session).toMatchObject({ meetingId: 'rec-ontem', title: 'Daily do painel', startedAt: guardada.startedAt, endedAt: null });
+    expect(s.session!.segments).toHaveLength(1);
+    s = transition(s, chunk('new-1', 'Retomando de onde paramos.', T0 + 5_000));
+    expect(s.session!.segments.map((x) => x.text)).toEqual(['Ficamos aqui ontem.', 'Retomando de onde paramos.']);
+    // O instante da fala nova é contado desde o início da gravação original.
+    expect(s.session!.segments[1]!.startOffsetMs).toBeGreaterThan(86_000_000);
+    expect(s.session!.droppedSegments).toBe(1);
+  });
+
+  it('gravação de OUTRA sala nunca é continuada: vira gravação nova', () => {
+    const s = transition(IDLE_STATE, detected({ continuar: { ...guardada, meetingCode: 'zzz-zzzz-zzz' } }));
+    expect(s.session!.meetingId).toBe('m-1');
+    expect(s.session!.segments).toHaveLength(0);
   });
 });

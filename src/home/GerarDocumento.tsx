@@ -1,0 +1,630 @@
+/**
+ * Gerar um documento a partir de uma reunião — e GUARDÁ-LO.
+ *
+ * ── O que mudou, e por quê ───────────────────────────────────────────────
+ *
+ * O fluxo antigo gerava e entregava: o arquivo ia para o Google Docs ou caía na
+ * pasta de downloads, e acabava ali. Nada ficava na extensão. Quem fechasse a
+ * aba não tinha como voltar ao documento, e a seção "Documentos" listava
+ * REUNIÕES como substituto.
+ *
+ * Agora o destino primeiro é a coleção local (ver `features/documents/store.ts`).
+ * A entrega continua existindo — baixar, mandar para o Docs — mas como AÇÃO, e
+ * não como único destino possível.
+ *
+ * ── A ordem importa: salvar antes de dizer que salvou ────────────────────
+ *
+ * "Salvo" só aparece depois de a gravação ter resolvido. Se ela falhar, o
+ * conteúdo continua na tela, com "tentar de novo" e "baixar" à mão — o texto
+ * gerado não pode ser descartado por causa de uma cota de storage, e uma falha
+ * não pode se parecer com sucesso.
+ *
+ * ── O que NÃO mudou ──────────────────────────────────────────────────────
+ *
+ * A geração em si: mesmo `requestGeneration`, mesmo `/api/generate`.
+ *
+ * ── As perguntas não param o documento ───────────────────────────────────
+ *
+ * O documento é gerado e salvo DIRETO. O que a transcrição não trouxe sai
+ * como marcação `**[A preencher: …]**` no conteúdo. As perguntas da geração
+ * vão para uma conversa nova com o Taq (`abrirConversaDoTaq`): é ele quem
+ * pergunta, na interface de conversa, e quem atualiza o texto editável quando a
+ * pessoa responder. O HTML/PDF guardados continuam os da geração; o download
+ * do editor leva o texto atualizado.
+ */
+import { useEffect, useRef, useState } from 'react';
+import { protegerEdicao } from '@/shared/services/navigation';
+import type { MeetingRecord } from '@/shared/types/domain';
+import { Icon } from '@/shared/ui/Icon';
+import { MarcaDoTaq } from '@/shared/ui/MarcaDoTaq';
+import { guardarDocumento, type DocumentoGuardado } from '@/features/documents/store';
+import {
+  DOCUMENT_TYPE_LABELS,
+  entregarDocumento,
+  nomeDoDocumento,
+  requestGeneration,
+  type DocumentType,
+} from '@/document/generateDocument';
+import {
+  baixarComoHtml,
+  baixarComoPdf,
+  baixarComoTexto,
+} from '@/document/baixarDocumento';
+import { nomeDoArquivo, oauthConfigurado } from '@/document/googleDocs';
+import { transcriptToText } from '@/features/history/export';
+import { gerarPersonalizado } from '@/features/documents/personalizado/cliente';
+import { guardarGeracao } from '@/features/documents/personalizado/documento';
+import type { ResultadoDoServidor } from '@/features/documents/personalizado/tipos';
+import { abrirConversaDoTaq } from '@/home/conversations';
+import { CATALOGO_DE_DOCUMENTOS } from '@/features/documents/catalogo';
+import { formatElapsedClock } from '@/shared/ui/format';
+
+/** Segundos desde que `ativo` virou verdadeiro; zera quando desliga. */
+function useSegundosDesde(ativo: boolean): number {
+  const [segundos, setSegundos] = useState(0);
+  useEffect(() => {
+    setSegundos(0);
+    if (!ativo) return;
+    const inicio = Date.now();
+    const t = setInterval(() => setSegundos(Math.floor((Date.now() - inicio) / 1000)), 1000);
+    return () => clearInterval(t);
+  }, [ativo]);
+  return segundos;
+}
+
+/**
+ * Os tipos vêm do CATÁLOGO — o mesmo que o Taq oferece (ver
+ * `features/documents/catalogo.ts`). São os dois com pipeline de verdade no
+ * servidor, e um teste de lá confere que o catálogo e os templates batem.
+ */
+const TIPOS: ReadonlyArray<{ tipo: DocumentType; rotulo: string; finalidade: string }> =
+  CATALOGO_DE_DOCUMENTOS.map((t) => ({
+    tipo: t.id,
+    rotulo: t.nome,
+    finalidade: t.finalidade,
+  }));
+
+
+/** O que sobrou de uma geração que ainda não conseguiu ser guardada. */
+interface Pendente {
+  formato?: 'markdown' | 'texto';
+  tipo: DocumentType;
+  titulo: string;
+  conteudo: string;
+  html: string;
+  pdf?: string;
+}
+
+/** O documento personalizado já gerado pelo servidor. O PDF vem em base64. */
+interface Personalizado {
+  documento?: DocumentoGuardado;
+  titulo: string;
+  pdf: string;
+  /** Afirmações removidas por falta de sustentação, e o que ainda falta saber. */
+  removidas: number;
+  lacunas: string[];
+  avisos: string[];
+}
+
+type Estado =
+  | { fase: 'parado' }
+  | { fase: 'gerandoPersonalizado' }
+  | { fase: 'salvoPersonalizado'; resultado: Personalizado & { documento: DocumentoGuardado } }
+  | { fase: 'erroAoSalvarPersonalizado'; resultado: Personalizado; mensagem: string }
+  | { fase: 'gerando'; tipo: DocumentType }
+  | { fase: 'salvando'; tipo: DocumentType }
+  | { fase: 'salvo'; documento: DocumentoGuardado; pendente: Pendente }
+  | { fase: 'erroNaGeracao'; mensagem: string }
+  | { fase: 'erroAoSalvar'; pendente: Pendente; mensagem: string };
+
+interface Props {
+  registro: MeetingRecord;
+  /** Abrir o documento recém-salvo, na seção Documentos. */
+  onAbrirDocumento: (id: string) => void;
+  /** O pedido em texto livre: vai para a conversa, com a reunião como contexto. */
+  onPedirLivre?: (texto: string) => void;
+}
+
+export function GerarDocumento({ registro, onAbrirDocumento, onPedirLivre }: Props) {
+  const [aberto, setAberto] = useState(false);
+  const [livre, setLivre] = useState('');
+  const [estado, setEstado] = useState<Estado>({ fase: 'parado' });
+  /** Quantas perguntas foram para a conversa com o Taq, na última geração. */
+  const [perguntasNoTaq, setPerguntasNoTaq] = useState(0);
+  /** O envio ao Google Docs: em curso, ou o motivo de não ter dado certo. */
+  const [envioAoDocs, setEnvioAoDocs] = useState<{ enviando: true } | { erro: string } | null>(null);
+  const caixaRef = useRef<HTMLDivElement>(null);
+  /** O "Cancelar" da geração em curso. */
+  const controleRef = useRef<AbortController | null>(null);
+  useEffect(() => () => controleRef.current?.abort(), []);
+
+  const ocupado =
+    estado.fase === 'gerando' || estado.fase === 'salvando' || estado.fase === 'gerandoPersonalizado';
+  const gerandoAgora = estado.fase === 'gerando' || estado.fase === 'gerandoPersonalizado';
+  const decorrido = useSegundosDesde(gerandoAgora);
+
+  const novoControle = () => {
+    controleRef.current?.abort();
+    controleRef.current = new AbortController();
+    return controleRef.current.signal;
+  };
+  const cancelar = () => controleRef.current?.abort();
+
+  useEffect(
+    () =>
+      protegerEdicao(
+        async () =>
+          !ocupado && estado.fase !== 'erroAoSalvar' && estado.fase !== 'erroAoSalvarPersonalizado',
+      ),
+    [ocupado, estado.fase],
+  );
+  useEffect(() => {
+    const antesDeFechar = (e: BeforeUnloadEvent) => {
+      if (ocupado || estado.fase === 'erroAoSalvar' || estado.fase === 'erroAoSalvarPersonalizado') {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', antesDeFechar);
+    return () => window.removeEventListener('beforeunload', antesDeFechar);
+  }, [ocupado, estado.fase]);
+
+  // Clicar fora fecha — menos durante uma geração, para não abandonar um
+  // pedido que o servidor já está processando (e já cobrou).
+  useEffect(() => {
+    if (!aberto) return;
+    const aoApontar = (e: PointerEvent) => {
+      if (ocupado) return;
+      if (caixaRef.current && e.composedPath().includes(caixaRef.current)) return;
+      setAberto(false);
+    };
+    document.addEventListener('pointerdown', aoApontar, { capture: true });
+    return () =>
+      document.removeEventListener('pointerdown', aoApontar, { capture: true });
+  }, [aberto, ocupado]);
+
+  /** Guarda o documento. É AQUI que "salvo" passa a ser verdade. */
+  const salvar = async (pendente: Pendente): Promise<DocumentoGuardado | null> => {
+    setEstado({ fase: 'salvando', tipo: pendente.tipo });
+    try {
+      const documento = await guardarDocumento({
+        title: pendente.titulo,
+        content: pendente.conteudo,
+        formato: pendente.formato ?? 'markdown',
+        meetingId: registro.id,
+        tipo: DOCUMENT_TYPE_LABELS[pendente.tipo],
+        html: pendente.html,
+        origem: 'gerado',
+      });
+      setAberto(false);
+      setEstado({ fase: 'salvo', documento, pendente });
+      return documento;
+    } catch {
+      // O texto gerado NÃO se perde por causa de uma falha de gravação.
+      setEstado({
+        fase: 'erroAoSalvar',
+        pendente,
+        mensagem:
+          'O documento foi gerado, mas não foi possível salvá-lo neste computador. ' +
+          'Ele continua aqui: tente salvar de novo ou baixe o arquivo.',
+      });
+      return null;
+    }
+  };
+
+  /*
+   * Gerar é gerar e SALVAR, sem parar para perguntar.
+   *
+   * O que a transcrição não trouxe sai no documento como "A preencher" (é o que
+   * a geração já produz quando não há resposta). As perguntas que a geração
+   * fez não viram formulário na frente do documento: vão para uma conversa
+   * nova com o Taq, que atualiza o documento quando a pessoa responder lá.
+   */
+  const gerar = (tipo: DocumentType) => {
+    if (ocupado) return;
+    setPerguntasNoTaq(0);
+    setEnvioAoDocs(null);
+    setEstado({ fase: 'gerando', tipo });
+
+    void requestGeneration(registro, tipo, novoControle()).then(async (geracao) => {
+      if (geracao.status === 'canceled') {
+        setEstado({ fase: 'parado' });
+        return;
+      }
+      if (geracao.status !== 'success') {
+        setEstado({ fase: 'erroNaGeracao', mensagem: geracao.message });
+        return;
+      }
+      const documento = await salvar({
+        tipo,
+        titulo: geracao.title,
+        conteudo: geracao.content,
+        html: geracao.html,
+        pdf: geracao.pdf,
+      });
+      if (!documento || geracao.questions.length === 0) return;
+      try {
+        await abrirConversaDoTaq({
+          titulo: `Pendências de ${documento.title}`,
+          meetingId: registro.id,
+          documento: { id: documento.id, titulo: documento.title },
+          texto:
+            `Gerei “${documento.title}” e já salvei em Documentos. O que a reunião não ` +
+            `deixou claro ficou marcado para preencher. Se souber, me responda aqui que eu ` +
+            `atualizo o documento:\n\n` +
+            geracao.questions.map((q) => `- ${q.question}`).join('\n'),
+        });
+        setPerguntasNoTaq(geracao.questions.length);
+      } catch {
+        /* sem a conversa, o documento continua salvo com as marcações */
+      }
+    });
+  };
+  /*
+   * O pedido em linguagem natural vira um documento PERSONALIZADO: o servidor
+   * escolhe a estrutura, escreve só o que a reunião sustenta e monta o PDF no
+   * padrão visual. A reunião aberta é a única fonte — nenhuma outra entra.
+   * Cliente e autor da capa não são inventados: só a data, que é o dia de hoje.
+   */
+  const gerarPersonalizadoDoPedido = async (pedido: string) => {
+    if (ocupado) return;
+    setPerguntasNoTaq(0);
+    setEstado({ fase: 'gerandoPersonalizado' });
+
+    const pedidoDeGeracao = {
+      pedido,
+      fontes: [{ id: registro.id, titulo: registro.title, texto: transcriptToText(registro.segments) }],
+      capa: { data: new Date().toLocaleDateString('pt-BR') },
+      variante: 'editorial',
+    };
+    const resposta = await gerarPersonalizado(pedidoDeGeracao, novoControle());
+    if (resposta.status !== 'ok' && resposta.codigo === 'cancelado') {
+      setEstado({ fase: 'parado' });
+      return;
+    }
+    if (resposta.status !== 'ok') {
+      setEstado({ fase: 'erroNaGeracao', mensagem: resposta.message });
+      return;
+    }
+    const r: ResultadoDoServidor = resposta.dados;
+    const resultado: Personalizado = {
+      titulo: r.arvore.titulo,
+      pdf: r.pdf,
+      removidas: r.relatorio.problemas.filter((p) => p.tipo === 'sustentacao').length,
+      lacunas: r.lacunas.map((l) => l.pergunta),
+      // Os achados MEDIDOS do layout (página quase vazia, título no pé…) vão junto
+      // dos avisos de montagem: a pessoa vê o que o arquivo tem de estranho antes
+      // de abri-lo.
+      avisos: [...r.avisos, ...r.relatorio.problemas.filter((p) => p.tipo === 'visual').map((p) => p.descricao)],
+    };
+    try {
+      const { documento } = await guardarGeracao(r, pedidoDeGeracao, { meetingId: registro.id });
+      setAberto(false);
+      setEstado({ fase: 'salvoPersonalizado', resultado: { ...resultado, documento } });
+    } catch {
+      // O PDF gerado NÃO se perde por causa de uma falha de gravação.
+      setEstado({
+        fase: 'erroAoSalvarPersonalizado',
+        resultado,
+        mensagem:
+          'O documento foi gerado, mas não foi possível salvá-lo neste computador. ' +
+          'Baixe o PDF antes de sair.',
+      });
+    }
+  };
+  const baixarPersonalizado = (r: Personalizado) =>
+    baixarComoPdf(r.pdf, nomeDoArquivo('Documento', r.titulo, registro.title, new Date()));
+
+  const baixar = (pendente: Pendente) => {
+    const nome = nomeDoDocumento(registro, pendente.tipo, undefined);
+    if (pendente.pdf) baixarComoPdf(pendente.pdf, nome);
+    else if (pendente.html) baixarComoHtml(pendente.html, nome);
+    else
+      baixarComoTexto(
+        pendente.conteudo,
+        nome,
+        pendente.formato === 'texto' ? 'txt' : 'md',
+      );
+  };
+
+  /*
+   * A falha tem que aparecer: antes só o sucesso era tratado, o clique sem
+   * resposta convidava a clicar de novo — e cada clique que dava certo criava
+   * mais um arquivo no Drive.
+   */
+  const enviarAoDocs = async (pendente: Pendente) => {
+    if (envioAoDocs && 'enviando' in envioAoDocs) return;
+    setEnvioAoDocs({ enviando: true });
+    const nome = nomeDoDocumento(registro, pendente.tipo, undefined);
+    const entrega = await entregarDocumento(pendente.html, nome, pendente.tipo, pendente.pdf);
+    if (entrega.via === 'docs') void chrome.tabs.create({ url: entrega.url });
+    setEnvioAoDocs(entrega.via === 'falhou' ? { erro: entrega.message } : null);
+  };
+
+  const emCurso =
+    estado.fase === 'gerandoPersonalizado'
+      ? 'o documento personalizado'
+      : estado.fase === 'gerando' || estado.fase === 'salvando'
+        ? (TIPOS.find((t) => t.tipo === estado.tipo)?.rotulo ?? 'o documento')
+        : null;
+
+  return (
+    <div className="tq-gerar" ref={caixaRef}>
+      <button
+        type="button"
+        className="tq-acao tq-pilula"
+        aria-haspopup="true"
+        aria-expanded={aberto}
+        title="Criar um documento a partir desta reunião"
+        onClick={() => setAberto((v) => (ocupado ? true : !v))}
+      >
+        <Icon name="doc" size={15} />
+        Criar documento
+      </button>
+
+      {/*
+       * A CAIXINHA DA IA: a marca viva pergunta qual documento, e as respostas
+       * que existem de verdade (o catálogo) já estão ali para um clique. O
+       * campo livre leva o pedido para a conversa — é lá que o assistente
+       * decide o que dá para fazer com ele, em vez de esta caixa adivinhar.
+       */}
+      {aberto && (
+        <div className={`tq-caixa-ia${ocupado ? ' trabalhando' : ''}`}>
+          <MarcaDoTaq
+            estado={estado.fase === 'gerando' ? 'preparando' : estado.fase === 'salvando' ? 'escrevendo' : 'repouso'}
+            tamanho={28}
+          />
+          <div className="tq-caixa-ia-corpo">
+            {emCurso ? (
+              <>
+                <p className="tq-caixa-ia-pergunta" role="status">
+                  {estado.fase === 'salvando' ? 'Salvando…' : `Gerando ${emCurso}…`}
+                  {gerandoAgora && <span className="tq-fino"> {formatElapsedClock(decorrido * 1000)}</span>}
+                </p>
+                {/* Sem previsão de verdade, o que dá para dizer é o normal — e
+                    que a espera é escolha de quem pediu, não prisão. */}
+                {gerandoAgora && (
+                  <>
+                    {decorrido >= 45 && (
+                      <p className="tq-fino">
+                        Reuniões longas podem levar alguns minutos. Não feche esta página enquanto
+                        isso; se demorar mais de 5 minutos, a geração é interrompida.
+                      </p>
+                    )}
+                    <div className="tq-acoes">
+                      <button type="button" className="tq-acao" onClick={cancelar}>
+                        Cancelar
+                      </button>
+                    </div>
+                  </>
+                )}
+              </>
+            ) : (
+              <>
+                <p className="tq-caixa-ia-pergunta">Qual documento você quer criar?</p>
+                <div className="tq-caixa-ia-opcoes tq-gerar-menu" role="menu">
+                  {TIPOS.map(({ tipo, rotulo, finalidade }) => (
+                    <button
+                      key={tipo}
+                      type="button"
+                      role="menuitem"
+                      title={finalidade}
+                      onClick={() => gerar(tipo)}
+                    >
+                      {rotulo}
+                    </button>
+                  ))}
+                </div>
+                {onPedirLivre && (
+                  <form
+                    className="tq-caixa-ia-campo"
+                    data-tq-escrita
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      const limpo = livre.trim();
+                      if (!limpo) return;
+                      setAberto(false);
+                      setLivre('');
+                      onPedirLivre(limpo);
+                    }}
+                  >
+                    <input
+                      type="text"
+                      value={livre}
+                      placeholder="Ou descreva o que precisa…"
+                      aria-label="Descreva o documento"
+                      onChange={(e) => setLivre(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      className="tq-acao"
+                      disabled={!livre.trim()}
+                      title="Monta um documento novo com a estrutura que o pedido pede, só com o que esta reunião sustenta, no padrão visual do CITi"
+                      onClick={() => {
+                        const pedido = livre.trim();
+                        if (!pedido) return;
+                        setLivre('');
+                        void gerarPersonalizadoDoPedido(pedido);
+                      }}
+                    >
+                      Gerar com o padrão CITi
+                    </button>
+                  </form>
+                )}
+                {estado.fase === 'erroNaGeracao' && (
+                  <p className="tq-gerar-erro">{estado.mensagem}</p>
+                )}
+              </>
+            )}
+          </div>
+          {!ocupado && (
+            <button
+              type="button"
+              className="tq-caixa-ia-fechar"
+              aria-label="Fechar"
+              onClick={() => setAberto(false)}
+            >
+              <Icon name="close" size={14} />
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Só depois de a gravação ter resolvido. */}
+      {estado.fase === 'salvo' && (
+        <div className="tq-gerar-resultado" role="status">
+          <p>
+            <Icon name="check" size={13} />
+            <strong>Salvo em Documentos</strong> · {estado.documento.title}
+          </p>
+          {perguntasNoTaq > 0 && (
+            <p>
+              {perguntasNoTaq === 1 ? 'Uma pergunta ficou' : `${perguntasNoTaq} perguntas ficaram`}{' '}
+              na conversa com o Taq, na seção Assistente — responda lá que ele atualiza o documento.
+            </p>
+          )}
+          <div className="tq-acoes">
+            <button
+              type="button"
+              className="tq-acao"
+              onClick={() => onAbrirDocumento(estado.documento.id)}
+            >
+              Abrir documento
+            </button>
+            <button
+              type="button"
+              className="tq-acao"
+              onClick={() => baixar(estado.pendente)}
+            >
+              <Icon name="arrowDown" size={13} />
+              Baixar
+            </button>
+            {estado.pendente.html && oauthConfigurado() && (
+              <button
+                type="button"
+                className="tq-acao"
+                disabled={envioAoDocs !== null && 'enviando' in envioAoDocs}
+                onClick={() => void enviarAoDocs(estado.pendente)}
+              >
+                {envioAoDocs && 'enviando' in envioAoDocs ? 'Enviando ao Google Docs…' : 'Enviar ao Google Docs'}
+              </button>
+            )}
+            <button
+              type="button"
+              className="tq-acao"
+              onClick={() => {
+                setEnvioAoDocs(null);
+                setEstado({ fase: 'parado' });
+              }}
+            >
+              Fechar
+            </button>
+          </div>
+          {envioAoDocs && 'erro' in envioAoDocs && (
+            <p className="tq-gerar-erro" role="alert">
+              {envioAoDocs.erro}
+            </p>
+          )}
+        </div>
+      )}
+
+      {estado.fase === 'salvoPersonalizado' && (
+        <div className="tq-gerar-resultado" role="status">
+          <p>
+            <Icon name="check" size={13} />
+            <strong>Salvo em Documentos</strong> · {estado.resultado.documento.title}
+          </p>
+          {estado.resultado.removidas > 0 && (
+            <p>
+              {estado.resultado.removidas === 1
+                ? 'Uma afirmação foi removida'
+                : `${estado.resultado.removidas} afirmações foram removidas`}{' '}
+              por não estarem sustentadas na reunião.
+            </p>
+          )}
+          {estado.resultado.lacunas.length > 0 && (
+            <p>Falta saber: {estado.resultado.lacunas.join(' ')}</p>
+          )}
+          {estado.resultado.avisos.map((aviso) => (
+            <p key={aviso}>{aviso}</p>
+          ))}
+          <div className="tq-acoes">
+            <button
+              type="button"
+              className="tq-acao"
+              onClick={() => onAbrirDocumento(estado.resultado.documento.id)}
+            >
+              Abrir documento
+            </button>
+            <button type="button" className="tq-acao" onClick={() => baixarPersonalizado(estado.resultado)}>
+              <Icon name="arrowDown" size={13} />
+              Baixar PDF
+            </button>
+            <button type="button" className="tq-acao" onClick={() => setEstado({ fase: 'parado' })}>
+              Fechar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {estado.fase === 'erroAoSalvarPersonalizado' && (
+        <div className="tq-gerar-resultado falhou" role="alert">
+          <p>{estado.mensagem}</p>
+          <div className="tq-acoes">
+            <button type="button" className="tq-acao" onClick={() => baixarPersonalizado(estado.resultado)}>
+              <Icon name="arrowDown" size={13} />
+              Baixar PDF
+            </button>
+            <button
+              type="button"
+              className="tq-acao"
+              onClick={() => {
+                if (window.confirm('Descartar este resultado que ainda não foi salvo? Baixe o PDF antes de sair.'))
+                  setEstado({ fase: 'parado' });
+              }}
+            >
+              Descartar resultado
+            </button>
+          </div>
+        </div>
+      )}
+
+      {estado.fase === 'erroAoSalvar' && (
+        <div className="tq-gerar-resultado falhou" role="alert">
+          <p>{estado.mensagem}</p>
+          <div className="tq-acoes">
+            <button
+              type="button"
+              className="tq-acao"
+              onClick={() => void salvar(estado.pendente)}
+            >
+              Tentar salvar de novo
+            </button>
+            <button
+              type="button"
+              className="tq-acao"
+              onClick={() => baixar(estado.pendente)}
+            >
+              <Icon name="arrowDown" size={13} />
+              Baixar
+            </button>
+            <button
+              type="button"
+              className="tq-acao"
+              onClick={() => {
+                if (
+                  window.confirm(
+                    'Descartar este resultado que ainda não foi salvo? Baixe uma cópia antes de sair.',
+                  )
+                )
+                  setEstado({ fase: 'parado' });
+              }}
+            >
+              Descartar resultado
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

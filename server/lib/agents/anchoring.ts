@@ -149,14 +149,3 @@ function findNormalized(
 
   return { start, end, exact: false };
 }
-
-/** O trecho que a âncora realmente aponta — o que o Auditor vai ler. */
-export function excerptFor(
-  transcript: string,
-  anchor: { start: number; end: number },
-  padding = 0,
-): string {
-  const start = Math.max(0, anchor.start - padding);
-  const end = Math.min(transcript.length, anchor.end + padding);
-  return transcript.slice(start, end);
-}

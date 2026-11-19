@@ -10,8 +10,9 @@ sessão autenticada.
 Este roteiro é a outra metade. Nenhum item aqui pode ser dado como aprovado sem
 alguém executá-lo.
 
-**Antes de começar:** `npm run build`, e em `chrome://extensions` carregar
-`dist/` sem empacotar (ou recarregar, se já estiver carregada). Confira que o
+**Antes de começar:** `npm run build:dev` (o `npm run build` de produção exige a URL
+`https://` e a chave do servidor; ver `CLAUDE.md`), e em `chrome://extensions` carregar
+`dist-dev/` sem empacotar (ou recarregar, se já estiver carregada). Confira que o
 ícone do TaqCiti está fixado na barra.
 
 ---
@@ -21,7 +22,7 @@ alguém executá-lo.
 | Passo | Resultado esperado |
 | --- | --- |
 | Feche o painel lateral. Entre numa reunião do Meet. | A cápsula aparece na página com o rótulo `registrar?` e um ponto âmbar pulsando. |
-| Olhe a página, sem abrir nada. | Ao lado da cápsula: **"Deseja registrar esta reunião?"**, o nome da sala, e os botões **Iniciar captura** / **Agora não**. |
+| Olhe a página, sem abrir nada. | Ao lado da cápsula: **"Deseja registrar esta reunião?"**, o nome da sala, a frase de que o TaqCiti lê as legendas e não grava áudio nem vídeo, e os botões **Registrar** / **Agora não**. Se a sala já tem uma gravação, aparecem também **Continuar de onde parou** e **Nova gravação** (no lugar de **Registrar**). |
 | Confira a transcrição. | Nada foi capturado ainda. Em `chrome://extensions` → service worker → console, nenhuma `meet/detected` foi enviada. |
 
 > Se a pergunta não aparecer, o provider não detectou a sala. O sinal é a
@@ -33,7 +34,7 @@ alguém executá-lo.
 | --- | --- |
 | Clique em **Agora não**. | A pergunta some. A cápsula passa a `sem registro`. |
 | Fale alguma coisa na reunião por ~30s. | Nenhuma fala é capturada. |
-| Abra a sidebar (ícone da extensão **ou** clique na cápsula). | Aba **Reunião** mostra "Captura desligada" e o botão **Começar a registrar**. Nenhuma pergunta duplicada. |
+| Abra a sidebar (ícone da extensão **ou** clique na cápsula). | A lista de **Reuniões** mostra "Captura desligada nesta reunião. As anteriores continuam aqui." e o botão **Registrar esta reunião**. Nenhuma pergunta duplicada. A cápsula também ganha o botão discreto **Registrar esta reunião**. |
 
 ## 3. A cápsula abre o painel
 
@@ -50,15 +51,15 @@ alguém executá-lo.
 
 | Passo | Resultado esperado |
 | --- | --- |
-| Na sidebar, clique em **Começar a registrar**. | A cápsula vai para `preparando…` e depois para o cronômetro. O selo do cabeçalho vira **Transcrevendo** (verde). |
+| Na sidebar (ou na cápsula), clique em **Registrar esta reunião**. | A cápsula vai para `preparando…` e depois para `Transcrevendo` com o cronômetro. A aba **Reunião** mostra **Transcrevendo** e o relógio. |
 | Fale, e peça para outra pessoa falar. | As falas aparecem na aba **Reunião**, com nome e horário. As legendas nativas do Meet ficam escondidas. |
 
 ## 5. Pausa e retomada
 
 | Passo | Resultado esperado |
 | --- | --- |
-| **Pausar transcrição**, e fale por ~20s. | Selo vira **Pausado**. Aviso "Captura pausada…". O que já tinha sido transcrito continua na tela. |
-| **Retomar**, e fale de novo. | Volta a **Transcrevendo**. As falas novas entram. **Nada do período pausado aparece.** |
+| **Pausar** (fileira de ações da reunião), e fale por ~20s. | O selo vira **Pausada** e aparece "Captura pausada.". O que já tinha sido transcrito continua na tela. |
+| **Retomar**, e fale de novo. | O botão volta a **Pausar** e o selo a **Transcrevendo**. As falas novas entram. **Nada do período pausado aparece.** |
 
 ## 6. Aviso no chat — janela de um minuto
 
@@ -79,16 +80,16 @@ alguém executá-lo.
 
 | Passo | Resultado esperado |
 | --- | --- |
-| Aba **Notas**, escreva duas linhas. | Depois de ~1s aparece `salvo` ao lado do título. |
+| Dentro de **Reunião**, abra a aba **Notas** (as abas são Transcrição, Notas e Prints) e escreva duas linhas. | Depois de ~1s aparece `salvo`. |
 | Vá para **Conversa** e volte para **Notas**. | O texto continua lá. |
-| Volte para **Reunião**. | O cabeçalho mostra "· com nota". A transcrição **não** contém uma palavra da nota. |
+| Volte para a aba da transcrição. | A aba Notas mostra o ponto de "já tem nota". A transcrição **não** contém uma palavra da nota. |
 | Feche o painel, reabra. | A nota continua. |
 
 ## 8. Marcação preservada quando o trecho é atualizado
 
 | Passo | Resultado esperado |
 | --- | --- |
-| Clique numa fala **que ainda esteja sendo dita**. | Realce discreto e a fileira de ícones (★ ? ✓ →) + "Perguntar à IA". |
+| Clique numa fala **que ainda esteja sendo dita**. | Realce discreto e a fileira de ações: marcas **Destaque** (★), **Dúvida** (?) e **Decisão** (✓), **Perguntar sobre o trecho** e **Copiar o trecho**. |
 | Marque com **Decisão** (✓). | O ícone aparece à direita do nome de quem falou. |
 | Espere a mesma fala ser completada pelo Meet. | O texto cresce; **a marca continua na mesma fala**. |
 | Clique no ✓ de novo. | A marca sai. |
@@ -98,28 +99,28 @@ alguém executá-lo.
 
 | Passo | Resultado esperado |
 | --- | --- |
-| Com a aba do Meet à vista, clique em **Tirar print**. | Prévia da tela da reunião, com **Salvar** / **Descartar**. |
-| **Salvar**. | A miniatura entra na tira abaixo. |
-| Vá para outra aba do navegador e clique em **Tirar print**. | Recusa com "Vá até a aba da reunião e tente de novo…". **Nenhuma imagem de outra aba é salva.** |
-| **Descartar** numa prévia. | Nada é guardado. |
+| Com a aba do Meet à vista, clique em **Print** (fileira de ações). | O print é guardado na hora, com o aviso "Print guardado com a reunião." e o botão **Desfazer**. A miniatura aparece na aba **Prints**. |
+| **Desfazer** logo depois. | O print some e nada fica guardado. |
+| Vá para outra aba do navegador e clique em **Print**. | Recusa com "Vá até a aba da reunião e tente de novo…". **Nenhuma imagem de outra aba é salva.** |
+| Na aba **Prints**, abra uma miniatura e apague. | O print sai da lista. |
 
 ## 10. Perguntar à IA com contexto
 
 | Passo | Resultado esperado |
 | --- | --- |
-| Selecione uma fala e clique em **Perguntar à IA**. | Vai para a aba Conversa. O trecho aparece acima do campo, com o nome da reunião, e pode ser removido no ×. |
-| Antes de escrever. | O aviso "Sem assistente conectado…" está visível. |
-| Envie a pergunta. | A pergunta fica salva, com o contexto. A resposta é o estado honesto — **sem** indicador de processamento infinito. |
+| Selecione uma fala e clique em **Perguntar sobre o trecho**. | Vai para a aba Conversa. O trecho aparece acima do campo, com o nome da reunião, e pode ser removido no ×. |
+| Sem o assistente conectado, antes de escrever. | O aviso "Sem assistente conectado…" está visível. |
+| Envie a pergunta. | A pergunta fica salva, com o contexto. Sem assistente, a resposta é o estado honesto ("A pergunta ficou guardada na conversa") — **sem** indicador de processamento infinito. |
+| Na aba **Reunião**, abra a **Pergunta rápida** ("O que você quer saber desta reunião?"). | Com o assistente conectado, a resposta vem ali mesmo, sem trocar de aba. |
 
 ## 11. Saída, histórico e exportação
 
 | Passo | Resultado esperado |
 | --- | --- |
-| **Finalizar** (ou saia da reunião). | Tela "Transcrição salva", com **Abrir no TaqCiti** e **Baixar .txt**. |
-| **Baixar .txt**. | Arquivo com título, data e as falas na ordem. Sem notas, sem marcas. |
-| Sidebar → **Histórico** → **Reuniões**. | A reunião está lá, com "· com nota". |
-| Abra-a. | Nota editável, download e **Abrir na HOME**. |
-| **Abrir na HOME**. | A aba da HOME abre (ou é focada) na reunião. Nota e marcações aparecem lá também. |
+| **Finalizar** (ou saia da reunião). | A sidebar abre a reunião recém-salva e a cápsula fica em `salva` (sem nenhuma fala, não há transcrição salva). |
+| Sidebar → ícone **Reuniões** (topo). | A reunião está lá. |
+| Abra-a. | Nota editável e transcrição. |
+| Ícone **Abrir HOME** (topo da sidebar). | A aba da HOME abre (ou é focada). Em **Reuniões**, a reunião tem nota e marcações; **Baixar .txt** gera o arquivo com título, data e as falas na ordem, sem notas nem marcas. |
 
 ## 12. Nova participação no mesmo link
 
@@ -133,6 +134,31 @@ cobrir. **Não pule.**
 | Saia, espere **mais de 10 minutos**, e entre no mesmo link. | **Pergunta de novo.** A captura fica desligada até você responder. |
 | Feche o Chrome por completo, reabra e entre no mesmo link. | **Pergunta de novo**, mesmo que a última resposta tenha sido "sim". |
 | Confira o histórico. | As reuniões anteriores continuam todas lá — o que expira é a permissão, não o registro. |
+
+## 13. Apagar o que foi guardado
+
+Na HOME. Cada remoção pergunta antes, e o texto da pergunta faz parte do teste:
+uma confirmação que não diz o que vai junto é o defeito.
+
+| Passo | Resultado esperado |
+| --- | --- |
+| **Reuniões** → abra a reunião → lixeira no topo da coluna **Notas da reunião**. | Pergunta "Apagar as notas desta reunião?", dizendo que **a transcrição não é afetada**. |
+| **Cancelar**. | A nota continua inteira no campo. |
+| Escreva uma linha nova na nota e, **sem esperar**, clique na lixeira → **Apagar**. | Campo vazio, e ele **continua vazio** depois de uns segundos. A última tecla digitada não pode ressuscitar a nota. |
+| Volte para a lista de Reuniões. | A reunião **não** mostra mais indício de nota. A transcrição está lá, inteira. |
+| Com a nota vazia, olhe o topo da coluna. | **Não** há lixeira: sem nota, não há o que apagar. |
+| **Documentos** → passe o mouse sobre um item. | A lixeira do item acende no fim da linha. |
+| Clique nela. | O item vira a pergunta, no lugar dele. Os outros itens continuam itens. A pergunta diz que **a reunião de origem não é afetada**. |
+| **Apagar**. | O documento sai da lista. A reunião de origem continua no histórico. |
+| Abra um documento e use o menu secundário do rodapé → **Apagar documento**. | Mesma pergunta, e ao apagar a tela volta para a lista. |
+| Menu de **conversas** (canto superior direito) → lixeira de uma linha. | A linha vira a pergunta, com o título da conversa. As outras continuam clicáveis. |
+| **Esc**. | Desfaz a pergunta, **sem** fechar o menu. Um segundo **Esc** fecha o menu. |
+| Apague a conversa que está **aberta na tela**. | A tela passa a mostrar a conversa mais recente que sobrou — nunca as mensagens da que acabou de sumir. |
+| Apague a última conversa que restava. | "Nenhuma conversa guardada ainda…" e a tela de abertura. |
+
+> Com a sincronização **ligada** (Conexões), cada remoção destas deve virar uma
+> remoção no servidor na passada seguinte — ver `src/features/sync/`. Um item
+> que continue no acervo depois de apagado aqui é defeito grave; registre.
 
 ---
 

@@ -38,10 +38,6 @@
  * `civilToInstant` faz DUAS passadas: estima o instante com o offset da
  * primeira leitura, relê o offset naquele instante e corrige se mudou. É o
  * algoritmo padrão para esta conversão, e é o que acerta a virada.
- *
- * A aritmética de dias (`addDays`, `weekdayOf`) usa `Date.UTC` de propósito:
- * UTC não tem horário de verão, então somar um dia nunca soma 23 ou 25 horas.
- * Isso é correto justamente porque data civil não é instante.
  */
 
 /** Ano/mês/dia sem instante e sem fuso. `month` é 1–12, como as pessoas falam. */
@@ -217,20 +213,6 @@ export function formatOffset(minutes: number): string {
 }
 
 /**
- * Data e hora locais → RFC 3339 com offset explícito.
- *
- * `2026-09-18T14:00:00-03:00`, nunca `...Z` e nunca sem offset: um horário sem
- * fuso é uma ambiguidade que alguém vai resolver errado mais tarde.
- */
-export function toRfc3339(date: CivilDate, time: CivilTime, timeZone: string): string {
-  const instante = civilToInstant(date, time, timeZone);
-  const offset = offsetMinutesAt(instante, timeZone);
-  const d = `${pad4(date.year)}-${pad2(date.month)}-${pad2(date.day)}`;
-  const t = `${pad2(time.hour)}:${pad2(time.minute)}:00`;
-  return `${d}T${t}${formatOffset(offset)}`;
-}
-
-/**
  * O DIA LOCAL de um instante, no fuso dado. Substitui `toISOString().slice(0,10)`.
  *
  * Esta é a função cuja ausência causava o deslocamento de dia. Toda vez que o
@@ -255,69 +237,6 @@ export function instantToRfc3339(instantMs: number, timeZone: string): string {
     `${pad4(p.year)}-${pad2(p.month)}-${pad2(p.day)}` +
     `T${pad2(p.hour)}:${pad2(p.minute)}:${pad2(p.second)}${formatOffset(offset)}`
   );
-}
-
-// ─── Aritmética de data civil ──────────────────────────────────────────────
-
-/**
- * Soma dias a uma data civil. Vira mês, ano e bissexto corretamente.
- *
- * Usa `Date.UTC` de propósito: UTC não tem horário de verão, então "mais um dia"
- * é sempre exatamente 24 horas. Aplicar isto a um instante em fuso local é que
- * seria errado — e é por isso que a função recebe e devolve DATA CIVIL, não
- * instante.
- */
-export function addDays(date: CivilDate, days: number): CivilDate {
-  const base = Date.UTC(date.year, date.month - 1, date.day);
-  const d = new Date(base + days * 86_400_000);
-  return { year: d.getUTCFullYear(), month: d.getUTCMonth() + 1, day: d.getUTCDate() };
-}
-
-/** 0 = domingo, como `Date.getDay()`. */
-export function weekdayOf(date: CivilDate): number {
-  return new Date(Date.UTC(date.year, date.month - 1, date.day)).getUTCDay();
-}
-
-/** A data existe? Rejeita "31 de fevereiro", que o `Date` rolaria para março. */
-export function isRealDate(date: CivilDate): boolean {
-  if (date.month < 1 || date.month > 12 || date.day < 1 || date.day > 31) return false;
-  const d = new Date(Date.UTC(date.year, date.month - 1, date.day));
-  return d.getUTCMonth() === date.month - 1 && d.getUTCDate() === date.day;
-}
-
-/** Diferença em dias inteiros entre duas datas civis (b − a). */
-export function daysBetween(a: CivilDate, b: CivilDate): number {
-  const ma = Date.UTC(a.year, a.month - 1, a.day);
-  const mb = Date.UTC(b.year, b.month - 1, b.day);
-  return Math.round((mb - ma) / 86_400_000);
-}
-
-// ─── Serialização ──────────────────────────────────────────────────────────
-
-/** "2026-09-18" → data civil. `null` quando o formato não bate. */
-export function civilFromIso(text: string): CivilDate | null {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
-  if (!m) return null;
-  const date = { year: Number(m[1]), month: Number(m[2]), day: Number(m[3]) };
-  return isRealDate(date) ? date : null;
-}
-
-/** Data civil → "2026-09-18". */
-export function civilToIso(date: CivilDate): string {
-  return `${pad4(date.year)}-${pad2(date.month)}-${pad2(date.day)}`;
-}
-
-/** "14:30" → hora civil. `null` quando o formato não bate. */
-export function timeFromIso(text: string): CivilTime | null {
-  const m = /^(\d{1,2}):(\d{2})$/.exec(text);
-  if (!m) return null;
-  const time = { hour: Number(m[1]), minute: Number(m[2]) };
-  return time.hour <= 23 && time.minute <= 59 ? time : null;
-}
-
-/** Hora civil → "14:30". */
-export function timeToIso(time: CivilTime): string {
-  return `${pad2(time.hour)}:${pad2(time.minute)}`;
 }
 
 // ─── Contexto temporal ─────────────────────────────────────────────────────

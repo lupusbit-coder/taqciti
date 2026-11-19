@@ -9,6 +9,7 @@
  */
 import { PROVIDER_GOOGLE_MEET } from '@/shared/config/constants';
 import { onMessage } from '@/shared/services/messaging';
+import { salaDaUrl } from '@/features/meeting/sala';
 import { logger } from '@/shared/services/log';
 import {
   dispatch,
@@ -16,15 +17,28 @@ import {
   hydrate,
   recoverInterruptedMeetings,
 } from './sessionController';
-import { deleteRecord, patchRecord } from './history';
+import { listHistory, patchRecord, upsertRecord, importarRegistro } from './history';
+import { registroImportado } from '@/features/importacao/transcricao';
+import { enfileirarAutomacao, ligarAutomacoes } from '@/features/automacoes/automacoes';
+import type { MeetingRecord } from '@/shared/types/domain';
 import { bumpMetrics } from './metrics';
 import { migrateLocalStorage } from './storageMigrations';
-import { backfillOpenTabs } from './injectPanel';
+import { backfillOpenTabs, ensurePanelInTab } from './injectPanel';
 import { openHome } from './homeTab';
 import { abrirPainel, abrirPainelNaJanela, ligarAberturaPeloIcone } from './sidePanel';
 import { capturarAbaDaReuniao } from './captura';
+import { remetentePermitido } from './remetente';
 import { forgetPanelTab, rememberPanelTab } from './panelTabs';
+import { liberarSessionParaContentScripts } from './sessionAccess';
+import { limparVinculosDaReuniao } from '@/features/annotations/vinculos';
+import { fixarPerfilDaReuniao } from '@/features/conducao/store';
 import { ensurePanelPrefs } from '@/features/panel/prefsStore';
+import { ligarSincronizacaoAutomatica } from '@/features/sync/sincronizacao';
+import {
+  esquecerReuniao,
+  fecharParticipacao,
+  lerReuniaoDetectada,
+} from '@/features/meeting/consent';
 
 /**
  * A inicialização, e o que ela garante ANTES de a primeira mensagem chegar.
@@ -39,8 +53,17 @@ import { ensurePanelPrefs } from '@/features/panel/prefsStore';
  * que nunca respondem. O erro fica visível no log, e o estado padrão — que
  * `ensurePanelPrefs` e `getState` garantem — continua de pé.
  */
-const ready: Promise<void> = migrateLocalStorage()
+const ready: Promise<void> = liberarSessionParaContentScripts()
+  /*
+   * PRIMEIRO de tudo, e antes de qualquer leitura de estado.
+   *
+   * Sem esta liberação o content script não consegue tocar o
+   * `chrome.storage.session`, e o portão da captura — a pergunta "deseja
+   * registrar esta reunião?" — não chega a existir. Ver `sessionAccess.ts`.
+   */
+  .then(() => migrateLocalStorage())
   .then(() => hydrate())
+  .then(() => encerrarSeAAbaSumiu())
   .then(() => recoverInterruptedMeetings())
   .then(() => ensurePanelPrefs())
   .then(() => undefined)
@@ -77,6 +100,21 @@ chrome.runtime.onInstalled.addListener(() => {
 });
 
 /*
+ * O espelho do acervo no servidor, quando a pessoa ligou isso em Conexões.
+ *
+ * Registrado no escopo do módulo — e não dentro de um `onInstalled` — porque
+ * é registro de LISTENER: o service worker do MV3 morre por ociosidade e
+ * renasce a cada evento, e um listener registrado dentro de um callback
+ * assíncrono pode não existir quando o evento que deveria acordá-lo chega.
+ *
+ * Nada acontece enquanto a sincronização estiver desligada: a primeira coisa
+ * que `sincronizar()` faz é conferir o "sim" guardado. Ver
+ * `features/sync/sincronizacao.ts`.
+ */
+ligarSincronizacaoAutomatica();
+ligarAutomacoes(ready);
+
+/*
  * Rede de segurança do clique no ícone.
  *
  * Com `openPanelOnActionClick` ligado, o Chrome abre o painel sozinho e ESTE
@@ -95,20 +133,134 @@ chrome.action.onClicked.addListener((tab) => {
   });
 });
 
+/**
+ * O fim da reunião NÃO pode depender só do content script.
+ *
+ * Quem percebe "saí da chamada" é o provider, pelo DOM — mas fechar a aba,
+ * navegar para outro endereço ou recarregar a extensão mata o content script
+ * antes do próximo poll, e o `meet/ended` nunca sai. A sessão ficava presa em
+ * `recording` para sempre, e a sidebar seguia dizendo que transcrevia. O
+ * background vê a aba morrer e a URL mudar; é ele que fecha a conta nesses
+ * casos. `MEETING_FINISHED` é idempotente: se o content já avisou, não faz nada.
+ */
+const FASES_ATIVAS: ReadonlySet<string> = new Set(['recording', 'paused', 'captionsRequired']);
+
+async function encerrarReuniaoDaAba(tabId: number, voltarAoInicio: boolean): Promise<void> {
+  await ready;
+  const current = getState();
+  if (current.session?.tabId !== tabId) return;
+  if (FASES_ATIVAS.has(current.phase)) {
+    logger.info('aba da reunião saiu da chamada; encerrando a captura', { tabId });
+    await dispatch({ type: 'MEETING_FINISHED', at: Date.now() });
+    // O content script morreu sem fechar a participação: sem isto, voltar ao
+    // mesmo link horas depois reusava o "sim" de hoje e gravava sem perguntar.
+    const sala = current.session.meetingCode;
+    await fecharParticipacao(Date.now(), sala);
+    await esquecerReuniao(sala);
+  }
+  // A aba fechou: o registro já está salvo no histórico, então o estado global
+  // volta ao idle sozinho — sem tela presa para a próxima reunião.
+  if (voltarAoInicio && getState().phase === 'ended') await dispatch({ type: 'RESET' });
+}
+
 chrome.tabs.onRemoved.addListener((tabId) => {
   // A aba levou o painel injetado junto — não adianta mais endereçar broadcast
   // pra ela. Fora do `ready` de propósito: podar a lista não depende do estado.
   void forgetPanelTab(tabId);
+  void encerrarReuniaoDaAba(tabId, true);
+  void esquecerPerguntaSemAba();
+});
 
-  // A aba da reunião fechou depois do fim: o resumo já está salvo no histórico,
-  // então o estado global volta ao idle sozinho — sem tela presa para a próxima.
+/**
+ * A pergunta "registrar esta reunião?" de uma aba que fechou sem resposta
+ * ficava de pé na sidebar para sempre — e um "sim" ali não ligava nada. Se
+ * nenhuma aba aberta está na sala anunciada, a pergunta sai.
+ */
+async function esquecerPerguntaSemAba(): Promise<void> {
+  const anunciada = await lerReuniaoDetectada();
+  if (!anunciada) return;
+  const abas = await chrome.tabs.query({ url: 'https://meet.google.com/*' });
+  const alguemNaSala = abas.some(
+    (aba) => aba.url !== undefined && salaDoMeet(aba.url) === anunciada.meetingCode.toLowerCase(),
+  );
+  if (alguemNaSala) return;
+  await fecharParticipacao(Date.now(), anunciada.meetingCode);
+  await esquecerReuniao(anunciada.meetingCode);
+}
+
+/** O código da sala num endereço do Meet, ou `null` se não é uma sala. */
+function salaDoMeet(url: string): string | null {
+  return salaDaUrl(url);
+}
+
+/**
+ * "Gravar esta reunião", vindo da sidebar. Escolhe a aba do Meet (a ativa, se
+ * for uma sala; senão a sala usada há menos tempo), garante que ela tem o
+ * content script e manda gravar. A resposta diz o motivo quando não deu —
+ * falha não vira confirmação.
+ */
+async function gravarAgoraNoMeet(): Promise<{ ok: boolean; motivo?: 'sem_meet' | 'sem_painel' }> {
+  const abas = (await chrome.tabs.query({ url: 'https://meet.google.com/*' })).filter(
+    (a) => a.id !== undefined && a.url !== undefined && salaDoMeet(a.url) !== null,
+  );
+  if (abas.length === 0) return { ok: false, motivo: 'sem_meet' };
+  const recente = (a: chrome.tabs.Tab) => (a as { lastAccessed?: number }).lastAccessed ?? 0;
+  const aba =
+    abas.find((a) => a.active) ?? [...abas].sort((x, y) => recente(y) - recente(x))[0]!;
+
+  const mandar = async (): Promise<boolean> => {
+    const r = (await chrome.tabs.sendMessage(aba.id!, { type: 'meet/gravarAgora' })) as
+      | { ok?: boolean }
+      | undefined;
+    return r?.ok === true;
+  };
+  try {
+    return (await mandar()) ? { ok: true } : { ok: false, motivo: 'sem_meet' };
+  } catch {
+    // A aba abriu antes da extensão ser (re)carregada: sem content script.
+    // Injeta e tenta de novo, uma vez.
+    try {
+      await ensurePanelInTab(aba);
+      await new Promise((r) => setTimeout(r, 400));
+      return (await mandar()) ? { ok: true } : { ok: false, motivo: 'sem_painel' };
+    } catch {
+      return { ok: false, motivo: 'sem_painel' };
+    }
+  }
+}
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+  if (!changeInfo.url) return;
+  const url = changeInfo.url;
   void ready.then(() => {
-    const current = getState();
-    if (current.phase === 'ended' && current.session?.tabId === tabId) {
-      void dispatch({ type: 'RESET' });
+    const sessao = getState().session;
+    if (sessao?.tabId !== tabId) return;
+    // Saiu da sala (outra página, outra sala, a tela inicial do Meet). Sem
+    // RESET: a aba continua aberta, e a sidebar mostra a reunião encerrada.
+    if (salaDoMeet(url) !== sessao.meetingCode.toLowerCase()) {
+      return encerrarReuniaoDaAba(tabId, false);
     }
   });
 });
+
+/**
+ * O worker que renasce depois de a aba já ter fechado (Chrome reiniciado,
+ * extensão recarregada no meio da chamada) não recebe o `onRemoved`: confere
+ * na hidratação se a aba da reunião ainda existe.
+ */
+async function encerrarSeAAbaSumiu(): Promise<void> {
+  const current = getState();
+  const tabId = current.session?.tabId;
+  if (tabId == null || !FASES_ATIVAS.has(current.phase)) return;
+  const existe = await chrome.tabs.get(tabId).then(
+    (tab) => tab.url === undefined || salaDoMeet(tab.url) === current.session!.meetingCode.toLowerCase(),
+    () => false,
+  );
+  if (!existe) {
+    logger.info('a aba da reunião não existe mais; encerrando a captura', { tabId });
+    await dispatch({ type: 'MEETING_FINISHED', at: Date.now() });
+  }
+}
 
 function defaultTitle(now: Date): string {
   const date = now.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
@@ -117,6 +269,12 @@ function defaultTitle(now: Date): string {
 }
 
 onMessage((message, sender) => {
+  // Quem mandou importa tanto quanto o que mandou. Ver `remetente.ts`.
+  if (!remetentePermitido(message, sender, chrome.runtime.id, chrome.runtime.getURL(''))) {
+    logger.warn('mensagem de remetente não permitido descartada', { type: message.type });
+    return undefined;
+  }
+
   /*
    * ANTES do `await ready`, e isso é o ponto inteiro deste bloco.
    *
@@ -140,12 +298,33 @@ onMessage((message, sender) => {
     await ready;
     const now = Date.now();
 
+    /*
+     * Só a aba DA reunião fala pela reunião. Toda aba do Meet tem content
+     * script, e sem esta barreira a legenda de uma sala noutra aba (sem
+     * ninguém ter dito "sim" a ela) entrava na transcrição da reunião ao vivo,
+     * e a tela pós-chamada de ontem saindo agora encerrava a de hoje.
+     * `meet/detected` fica de fora: é como uma aba REIVINDICA a reunião.
+     */
+    if (message.type.startsWith('meet/') && message.type !== 'meet/detected') {
+      const daReuniao = getState().session?.tabId;
+      const quem = sender.tab?.id;
+      if (daReuniao != null && quem !== undefined && quem !== daReuniao) return getState();
+    }
+
     switch (message.type) {
       // ---- Content script ----
       case 'meet/detected': {
         const givenTitle = message.title.trim();
+        // "Continuar de onde parou": só uma gravação DESTA sala. Um id de outra
+        // sala (ou que não existe mais) vira gravação nova, nunca mistura.
+        const continuar = message.continuarId
+          ? (await listHistory()).find(
+              (r) => r.id === message.continuarId && r.meetingCode === message.meetingCode,
+            )
+          : undefined;
         await dispatch({
           type: 'MEETING_DETECTED',
+          ...(continuar ? { continuar } : {}),
           meetingId: crypto.randomUUID(),
           meetingCode: message.meetingCode,
           provider: PROVIDER_GOOGLE_MEET,
@@ -155,6 +334,15 @@ onMessage((message, sender) => {
           captionsEnabled: message.captionsEnabled,
           at: now,
         });
+        // A reunião começa com a versão do assistente em uso e fica com ela até
+        // o fim: mexer no Preparar durante a reunião vale a partir da próxima.
+        // Falhar aqui não pode impedir a captura.
+        const reuniaoId = getState().session?.meetingId;
+        if (reuniaoId) {
+          await fixarPerfilDaReuniao(reuniaoId).catch((e) =>
+            logger.warn('não foi possível guardar o perfil em uso na reunião', e),
+          );
+        }
         return getState();
       }
       case 'meet/ended':
@@ -162,7 +350,15 @@ onMessage((message, sender) => {
       case 'meet/captions':
         return dispatch({ type: 'CAPTIONS_STATE', enabled: message.enabled });
       case 'meet/chunk':
-        return dispatch({ type: 'CAPTION_CHUNK', chunk: message.chunk });
+        /*
+         * Responde só "ok", nunca o estado. A legenda chega várias vezes por
+         * segundo, e devolver o estado INTEIRO (a transcrição toda) a cada uma
+         * desfazia o agrupamento de `STATE_FLUSH_INTERVAL_MS`: o custo de copiar
+         * a resposta crescia com a reunião e deixava a aba do Meet lenta. A
+         * cápsula ignora a resposta; o estado chega pelo `state/updated`.
+         */
+        await dispatch({ type: 'CAPTION_CHUNK', chunk: message.chunk });
+        return { ok: true as const };
       case 'meet/participants':
         return dispatch({
           type: 'PARTICIPANTS_UPDATED',
@@ -189,13 +385,19 @@ onMessage((message, sender) => {
           ...(message.reason === 'parser' ? { parserFailuresTotal: 1 } : {}),
         });
         return dispatch({ type: 'CAPTURE_DEGRADED', at: now });
+      case 'meet/captureRecovered':
+        return dispatch({ type: 'CAPTURE_RECOVERED' });
       case 'ui/print': {
         const sessao = getState().session;
         const captura = await capturarAbaDaReuniao(sessao?.tabId);
         // A imagem sobe para quem pediu; quem GRAVA é o painel, que conhece o
         // `meetingId` e trata a cota. O background não guarda print.
         return captura.ok
-          ? { ok: true as const, dataUrl: captura.dataUrl, meetingId: sessao?.meetingId ?? null }
+          ? {
+              ok: true as const,
+              dataUrl: captura.dataUrl,
+              meetingId: sessao?.meetingId ?? null,
+            }
           : { ok: false as const, motivo: captura.motivo };
       }
 
@@ -217,6 +419,9 @@ onMessage((message, sender) => {
         }
       }
 
+      case 'ui/gravarAgora':
+        return gravarAgoraNoMeet();
+
       case 'ui/openHome':
         // A página principal em aba própria — e SEMPRE a mesma aba, se ela já
         // existir. A abertura mora em `homeTab.ts`, e não aqui, porque o pedido
@@ -227,6 +432,7 @@ onMessage((message, sender) => {
           ok: await openHome(sender.tab, {
             ...(message.secao ? { secao: message.secao } : {}),
             recordId: message.recordId ?? null,
+            documentId: message.documentId ?? null,
           }),
         };
       // ---- UIs (HOME / sidebar de reunião) ----
@@ -255,18 +461,49 @@ onMessage((message, sender) => {
         return dispatch({ type: 'LANGUAGE_WARNING_DISMISSED' });
 
       // ---- Histórico ----
+      case 'ui/history/import': {
+        const registro = registroImportado(message.dados);
+        const resultado = await importarRegistro(registro);
+        if (!resultado.existente) await enfileirarAutomacao(registro).catch(() => {});
+        return { ok: true, ...resultado };
+      }
       case 'ui/history/delete': {
         const current = getState();
+        if (
+          current.session?.meetingId === message.id &&
+          current.phase !== 'ended' &&
+          current.phase !== 'idle'
+        )
+          return { ok: false, error: 'meeting-active' };
+        /*
+         * O que estava preso à reunião sai com ela — nota, marcações e prints —
+         * e os documentos ficam, sem o vínculo. Antes nada disso era tocado: os
+         * anexos continuavam no storage indexados por um `meetingId` que não
+         * existia mais, invisíveis para toda a interface. Ver
+         * `features/annotations/vinculos.ts`.
+         */
+        const limpeza = await limparVinculosDaReuniao(message.id);
         if (current.session?.meetingId === message.id && current.phase === 'ended') {
           await dispatch({ type: 'RESET' });
         }
-        await deleteRecord(message.id);
-        return { ok: true };
+        return { ok: true, limpeza };
       }
       case 'ui/history/rename': {
         await patchRecord(message.id, { title: message.title });
         if (getState().session?.meetingId === message.id) {
           await dispatch({ type: 'RENAME', title: message.title });
+        }
+        return { ok: true };
+      }
+      case 'ui/history/restore': {
+        // Restaurar nunca sobrescreve: se a reunião já existe (outra aba já
+        // restaurou), a resposta é ok e nada muda.
+        const existente = (await listHistory()).some((r) => r.id === message.record.id);
+        if (!existente) {
+          await upsertRecord({
+            ...(message.record as unknown as MeetingRecord),
+            status: 'ready',
+          });
         }
         return { ok: true };
       }

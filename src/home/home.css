@@ -50,6 +50,12 @@ body {
   background: rgb(17 18 19);
 }
 
+/* Sem barra nativa: na conversa quem rola e mostra onde se está é o mapa da
+   `TrilhaDaConversa`, e uma barra ao lado dele fazia o mesmo por cima. */
+html {
+  scrollbar-width: none;
+}
+
 .tq-home {
   position: relative;
   isolation: isolate;
@@ -58,8 +64,8 @@ body {
   flex-direction: column;
   background: transparent;
   color: rgb(237 238 239);
-  font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  font-size: 14px;
+  font-family: var(--font-texto);
+  font-size: var(--fs-corpo);
   line-height: 1.6;
   overflow-x: clip;
 
@@ -88,7 +94,16 @@ body {
   box-sizing: border-box;
 }
 
-.tq-home button {
+/*
+ * O reset do botão com especificidade ZERO na raiz (`:where`). Como
+ * `.tq-home button` (0,1,1), ele vencia toda classe de botão (0,1,0): o
+ * `.tq-acao` perdia a moldura e a cor, o `.tq-acao-principal` perdia o verde
+ * cheio, o `.tq-acao-perigo` perdia o vermelho — e "Reproduzir", "Pedir
+ * alteração", "Baixar PDF", "Aplicar ao meu assistente" saíam como texto solto
+ * (varredura de 11/11/2026). Agora o reset só vale onde nenhuma classe disse
+ * outra coisa.
+ */
+:where(.tq-home) button {
   background: none;
   border: 0;
   color: inherit;
@@ -116,7 +131,7 @@ body {
  * aparece no estado focado.
  *
  * O foco continua anunciado, por três sinais que não são moldura: o caret
- * aparece, o "+"/enviar e a dica de teclas saem da transparência
+ * aparece, o enviar e a dica de teclas saem da transparência
  * (`:focus-within`, abaixo) e a onda sobe. Para um campo de texto, o caret
  * visível é o indicador de foco que o próprio sistema usa.
  */
@@ -141,25 +156,26 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 24px 40px 10px;
+  padding: 16px 32px 8px;
 }
 
+/* A marca conserva a Barlow; texto e títulos usam a família de leitura. */
 .tq-brand {
   display: inline-flex;
   align-items: center;
-  gap: 9px;
-  font-size: 23px;
+  gap: 10px;
+  font-family: var(--font-marca);
+  font-size: 22px;
   font-weight: 700;
-  letter-spacing: -1.1px;
-  line-height: 1.2;
+  letter-spacing: -0.4px;
+  line-height: 1;
   white-space: nowrap;
   color: rgb(245 246 247);
 }
 
-.tq-brand img {
-  height: 25px;
-  width: auto;
+.tq-brand svg {
   display: block;
+  flex: 0 0 auto;
 }
 
 .tq-brand em {
@@ -181,25 +197,6 @@ body {
   align-items: center;
   gap: 7px;
   margin-right: 6px;
-}
-
-.tq-captando::before {
-  content: '';
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: rgb(var(--c-primary));
-  animation: tq-pulsar 1.8s ease-in-out infinite;
-}
-
-@keyframes tq-pulsar {
-  0%,
-  100% {
-    opacity: 0.35;
-  }
-  50% {
-    opacity: 1;
-  }
 }
 
 .tq-motion,
@@ -224,6 +221,12 @@ body {
 }
 
 .tq-motion:disabled {
+  opacity: 0.4;
+}
+
+/* O botão das brasas desligadas: mesma linguagem do `:disabled` acima, mas
+   sem ESTAR desabilitado — continua clicável para religar. */
+.tq-motion.desligado {
   opacity: 0.4;
 }
 
@@ -314,6 +317,119 @@ body {
   color: rgb(149 152 155);
 }
 
+/*
+ * A linha com o item e o botão de apagar.
+ *
+ * O `li` vira flex e o item de escolher cresce; o apagar é um quadrado fixo no
+ * fim. Ele NÃO é sobreposto ao item (posicionado por cima): sobreposição aqui
+ * comeria o fim do título, que é justamente onde as conversas se distinguem.
+ */
+.tq-conversas-linha {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+}
+
+.tq-conversas-linha > button:first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+/*
+ * Presente, mas apagado: 0.4 de opacidade pede o olho só quando procurado, e
+ * sobe no hover da linha inteira. Escondê-lo até o hover o tornaria invisível
+ * em toque, onde não existe hover nenhum.
+ *
+ * O seletor carrega `.tq-conversas-lista li` de propósito: a regra dos itens,
+ * logo acima, é `display: block; width: 100%` — mais específica que uma classe
+ * sozinha. Sem isto a lixeira nasce com 296px e transborda o menu pela direita,
+ * empurrando o título para fora. Foi o que a verificação no navegador pegou; o
+ * jsdom não mede largura nenhuma e passava.
+ */
+.tq-conversas-lista li button.tq-conversas-apagar {
+  flex: 0 0 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  padding: 0;
+  border-radius: 9px;
+  color: rgb(168 171 175);
+  opacity: 0.4;
+  cursor: pointer;
+  transition:
+    opacity 0.2s,
+    background 0.2s,
+    color 0.2s;
+}
+
+.tq-conversas-linha:hover .tq-conversas-apagar,
+.tq-conversas-lista li button.tq-conversas-apagar:focus-visible {
+  opacity: 1;
+}
+
+.tq-conversas-lista li button.tq-conversas-apagar:hover {
+  background: rgb(224 110 105 / 0.14);
+  color: rgb(240 178 172);
+  opacity: 1;
+}
+
+/* A pergunta toma o lugar do item, dentro da mesma lista. */
+.tq-conversas-confirma {
+  padding: 10px 11px;
+  border-radius: 9px;
+  border: 1px solid rgb(224 110 105 / 0.28);
+  background: rgb(224 110 105 / 0.08);
+}
+
+.tq-conversas-confirma p {
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: rgb(222 224 226);
+  margin: 0 0 9px;
+}
+
+.tq-conversas-confirma-acoes {
+  display: flex;
+  gap: 6px;
+}
+
+/* Mesma armadilha da lixeira: `.tq-conversas-lista li button` dá `width: 100%`
+   e `text-align: left` a qualquer botão da lista, e os dois lado a lado
+   viravam dois blocos ocupando a largura inteira. */
+.tq-conversas-lista li .tq-conversas-confirma-acoes button {
+  width: auto;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid rgb(255 255 255 / 0.12);
+  text-align: center;
+  font-size: 11.5px;
+  color: rgb(206 209 212);
+  cursor: pointer;
+}
+
+.tq-conversas-lista li .tq-conversas-confirma-acoes button:hover {
+  background: rgb(255 255 255 / 0.08);
+  color: rgb(243 245 247);
+}
+
+.tq-conversas-lista li .tq-conversas-confirma-acoes button.perigo {
+  color: rgb(224 150 145);
+  border-color: rgb(224 110 105 / 0.32);
+}
+
+.tq-conversas-lista li .tq-conversas-confirma-acoes button.perigo:hover {
+  background: rgb(224 110 105 / 0.16);
+  color: rgb(240 178 172);
+}
+
+.tq-conversas-erro {
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: rgb(240 178 172);
+  margin: 8px 10px 4px;
+}
+
 .tq-conversas-vazio {
   font-size: 11.5px;
   line-height: 1.6;
@@ -369,7 +485,7 @@ body {
   width: 268px;
   max-width: 85%;
   z-index: 11;
-  padding: 92px 26px 30px 42px;
+  padding: 80px 22px 28px 38px;
   /* Transparência gradual: opaco o bastante para o texto se ler, e terminando
      em zero para o fundo continuar visível através da borda. */
   background: linear-gradient(
@@ -421,7 +537,7 @@ body {
   border: 1px solid transparent;
   text-align: left;
   color: rgb(191 194 197);
-  min-height: 44px;
+  min-height: 38px;
   cursor: pointer;
   transition:
     background 0.25s,
@@ -456,6 +572,16 @@ body {
 /* O ícone assume o verde claro; o rótulo fica branco, que é o que se lê. */
 .tq-navlinks button[aria-current='page'] svg {
   color: rgb(var(--c-glow));
+}
+
+/* A seção pede atenção (ex.: a sincronização parou): um ponto, na ponta. */
+.tq-nav-atencao {
+  margin-left: auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--e-atencao);
+  flex: none;
 }
 
 @keyframes tq-selecao {
@@ -498,9 +624,9 @@ body {
   position: relative;
   z-index: 2;
   flex: 1;
-  width: min(820px, calc(100% - 128px));
+  width: min(780px, calc(100% - 96px));
   margin: 0 auto;
-  padding: 8px 0 40px;
+  padding: 4px 0 32px;
 }
 
 /* ---------------------------------------------------------------- o fundo */
@@ -556,13 +682,14 @@ body {
 
 .tq-abertura {
   text-align: center;
-  margin: 13vh 0 40px;
+  margin: 12vh 0 32px;
 }
 
 .tq-abertura h1 {
-  font-size: 30px;
-  font-weight: 400;
-  letter-spacing: -1.1px;
+  font-family: var(--font-titulo);
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
   color: rgb(226 228 230);
   margin: 0;
 }
@@ -578,15 +705,15 @@ body {
   margin: 0;
   /* Coluna de leitura confortável: o texto não se espalha até as bordas da
      tela numa janela larga. */
-  padding: 24px 0 0;
-  max-width: 720px;
+  padding: 16px 0 0;
+  max-width: 700px;
   margin-inline: auto;
 }
 
 .tq-turno {
   display: flex;
   flex-direction: column;
-  margin-bottom: 38px;
+  margin-bottom: 24px;
 }
 
 /* Quem escreve fica à DIREITA. Sem balão e sem caixa: o que diferencia os
@@ -596,8 +723,8 @@ body {
   max-width: 76%;
   margin: 0;
   text-align: left;
-  font-size: 13.5px;
-  line-height: 1.75;
+  font-size: var(--fs-leitura);
+  line-height: 1.65;
   color: rgb(197 200 203);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -615,25 +742,29 @@ body {
 .tq-turno-agente {
   display: flex;
   align-items: flex-start;
-  gap: 14px;
+  gap: 12px;
   max-width: 88%;
-  margin: 24px auto 0 0;
+  margin: 14px auto 0 0;
 }
 
 .tq-resposta-texto {
   min-width: 0;
 }
 
+/* O nome do Taq sobre a resposta — uma regra só (havia uma base de 10px em
+   cinza e uma segunda, de 12px em violeta, que sempre a vencia). */
 .tq-agente-nome {
-  font-size: 10px;
-  letter-spacing: 0.05em;
-  color: rgb(152 155 158);
-  margin-bottom: 5px;
+  font-family: var(--font-taq);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: var(--lh-rotulo);
+  color: var(--ideia);
+  margin-bottom: 8px;
 }
 
 .tq-indisponivel {
-  font-size: 13.5px;
-  line-height: 1.9;
+  font-size: var(--fs-leitura);
+  line-height: 1.7;
   color: rgb(207 210 213);
   margin: 0;
   overflow-wrap: anywhere;
@@ -643,59 +774,12 @@ body {
   color: rgb(240 205 160);
 }
 
-.tq-indisponivel-dica {
-  font-size: 12px;
-  line-height: 1.8;
-  color: rgb(149 152 155);
-  margin: 10px 0 0;
-}
-
-/* Destaque por peso e branco, não por verde: são só nomes de seções. */
-.tq-indisponivel-dica strong {
-  color: rgb(235 237 239);
-  font-weight: 500;
-}
-
 /* --------------------------------------------- a marca da resposta da IA */
 
-/*
- * As duas camadas empilhadas: a animação por baixo, o ícone oficial por cima.
- * Trocar de elemento faria a marca sumir por um quadro; com as duas montadas,
- * a conclusão é uma transição de opacidade — e o ícone estático é o que diz
- * "esta resposta terminou".
- */
-.tq-marca {
-  position: relative;
-  flex: 0 0 auto;
-  width: 32px;
-  height: 32px;
+/* A marca da resposta (`MarcaDoTaq`) é um desenho só: ela mesma se refaz no
+ * ícone ao concluir, sem camada de imagem por cima. */
+.tq-turno-agente > .tq-marca {
   margin-top: 2px;
-}
-
-.tq-marca canvas,
-.tq-marca img {
-  position: absolute;
-  inset: 0;
-  width: 32px;
-  height: 32px;
-  transition: opacity 0.45s ease;
-}
-
-.tq-marca canvas {
-  opacity: 0;
-}
-
-.tq-marca img {
-  opacity: 0.92;
-  object-fit: contain;
-}
-
-.tq-marca.processando canvas {
-  opacity: 1;
-}
-
-.tq-marca.processando img {
-  opacity: 0;
 }
 
 /* ------------------------------------------------------- campo de escrita */
@@ -708,12 +792,12 @@ body {
 .tq-escrita {
   position: relative;
   z-index: 1;
-  margin: 26px auto 0;
+  margin: 20px auto 0;
   width: 100%;
-  max-width: 720px;
+  max-width: 700px;
   /* O respiro que põe a escrita sobre a onda e ainda a mantém longe da borda
      de baixo. */
-  padding-bottom: 104px;
+  padding-bottom: 88px;
 }
 
 .tq-campo {
@@ -736,10 +820,9 @@ body {
   overflow-y: auto;
   padding: 4px 0;
   font: inherit;
-  font-size: 15px;
-  line-height: 1.7;
+  font-size: var(--fs-leitura);
+  line-height: 1.6;
   color: rgb(240 242 244);
-  scrollbar-width: thin;
   /* Um dos poucos verdes que sobraram, e o mais justificado: é o ponto exato
      onde a sua voz entra na tela. */
   caret-color: rgb(var(--c-glow));
@@ -765,7 +848,6 @@ body {
   opacity: 1;
 }
 
-.tq-mais,
 .tq-enviar {
   display: grid;
   place-items: center;
@@ -781,21 +863,11 @@ body {
     opacity 0.3s;
 }
 
-.tq-mais:hover,
-.tq-mais[aria-expanded='true'] {
-  background: rgb(255 255 255 / 0.08);
-  color: rgb(240 242 244);
-}
-
 /* Enviar é a ação principal desta tela — o hover dela é um dos estados
    pontuais que ficaram com verde. */
 .tq-enviar:not(:disabled):hover {
   background: rgb(var(--c-primary) / 0.14);
   color: rgb(var(--c-glow));
-}
-
-.tq-mais[aria-expanded='true'] {
-  transform: rotate(45deg);
 }
 
 .tq-enviar:disabled {
@@ -831,16 +903,6 @@ body {
   color: rgb(196 176 152);
 }
 
-.tq-anexos {
-  font-size: 11px;
-  color: rgb(174 177 181);
-  margin: 10px 0 0;
-  display: flex;
-  gap: 10px;
-  align-items: baseline;
-  flex-wrap: wrap;
-}
-
 .tq-linkish {
   font-size: 11.5px;
   color: rgb(137 140 144);
@@ -852,41 +914,12 @@ body {
   color: rgb(235 237 239);
 }
 
-.tq-anexo-menu {
-  position: absolute;
-  right: 0;
-  bottom: 74px;
-  z-index: 6;
-  background: rgb(33 34 36 / 0.96);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  border: 1px solid rgb(255 255 255 / 0.08);
-  border-radius: 14px;
-  padding: 7px;
-  min-width: 230px;
-  box-shadow: 0 10px 35px rgb(0 0 0 / 0.33);
+.tq-linkish-perigo {
+  color: rgb(224 150 145);
 }
 
-.tq-anexo-menu button {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  padding: 11px;
-  text-align: left;
-  border-radius: 8px;
-  cursor: pointer;
-}
-
-.tq-anexo-menu button:hover {
-  background: rgb(255 255 255 / 0.07);
-}
-
-.tq-anexo-menu p {
-  font-size: 10.5px;
-  color: rgb(157 160 164);
-  margin: 6px 9px 4px;
-  line-height: 1.55;
+.tq-linkish-perigo:hover {
+  color: rgb(240 178 172);
 }
 
 /* ------------------------------------------------------------- páginas */
@@ -898,25 +931,26 @@ body {
 }
 
 .tq-pagina h1 {
-  font-size: 27px;
-  font-weight: 500;
-  letter-spacing: -0.8px;
-  margin: 8px 0 0;
+  font-family: var(--font-titulo);
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+  margin: 4px 0 0;
 }
 
 .tq-pagina-topo {
-  margin-bottom: 26px;
+  margin-bottom: 16px;
 }
 
 .tq-pagina-topo p {
-  font-size: 13px;
+  font-size: var(--fs-ui);
   color: rgb(166 169 173);
-  margin: 6px 0 0;
+  margin: 4px 0 0;
 }
 
 .tq-lista {
   display: grid;
-  gap: 10px;
+  gap: 6px;
 }
 
 .tq-item {
@@ -926,13 +960,16 @@ body {
   gap: 16px;
   width: 100%;
   text-align: left;
-  padding: 18px 21px;
+  padding: 12px 16px;
   border: 1px solid rgb(255 255 255 / 0.05);
-  border-radius: 14px;
-  /* Translúcido: a onda continua visível atrás da lista. */
-  background: rgb(33 34 36 / 0.72);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  border-radius: 12px;
+  /*
+   * Translúcido, mas SEM `backdrop-filter`: isto é item de lista — numa lista
+   * que rola, um blur por item derruba o scroll. Com N itens na tela, eram N regiões desfocando o
+   * fundo animado a cada quadro; a transparência sozinha já deixa o fundo
+   * atravessar, só que nítido em vez de fosco.
+   */
+  background: rgb(33 34 36 / 0.82);
   cursor: pointer;
   transition:
     background 0.3s,
@@ -961,6 +998,57 @@ body {
 
 .tq-lista-densa .tq-item {
   padding: 13px 16px;
+}
+
+/*
+ * Item com ação de apagar ao lado.
+ *
+ * O apagar é IRMÃO do item, não filho: `.tq-item` é um `<button>`, e um botão
+ * dentro de outro é HTML inválido — o navegador desfaz o aninhamento e o
+ * clique passa a acertar o alvo errado.
+ */
+.tq-item-linha {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.tq-item-linha .tq-item {
+  flex: 1;
+  min-width: 0;
+}
+
+.tq-item-apagar {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  border: 1px solid rgb(255 255 255 / 0.05);
+  border-radius: 14px;
+  background: rgb(33 34 36 / 0.82);
+  color: rgb(159 162 166);
+  opacity: 0.55;
+  cursor: pointer;
+  transition:
+    opacity 0.25s,
+    background 0.25s,
+    border-color 0.25s,
+    color 0.25s;
+}
+
+/* Some quase por completo até a linha ser procurada — mas nunca a ponto de
+   deixar de existir em toque, onde não há hover. */
+.tq-item-linha:hover .tq-item-apagar,
+.tq-item-apagar:focus-visible {
+  opacity: 1;
+}
+
+.tq-item-apagar:hover {
+  background: rgb(224 110 105 / 0.14);
+  border-color: rgb(224 110 105 / 0.32);
+  color: rgb(240 178 172);
+  opacity: 1;
 }
 
 .tq-vazio {
@@ -995,12 +1083,11 @@ body {
 }
 
 .tq-guia details {
-  background: rgb(33 34 36 / 0.72);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  /* Mesmo motivo de `.tq-item` acima: item de lista não desfoca. */
+  background: rgb(33 34 36 / 0.82);
   border: 1px solid rgb(255 255 255 / 0.06);
-  border-radius: 14px;
-  padding: 16px 20px;
+  border-radius: 12px;
+  padding: 12px 16px;
 }
 
 .tq-guia details[open] {
@@ -1018,6 +1105,50 @@ body {
   color: rgb(174 177 181);
   line-height: 1.85;
   margin: 10px 0 0 16px;
+}
+
+/* Passos numerados de um guia.
+   Contador próprio em vez do marcador do navegador porque o número precisa
+   ficar FORA do texto e alinhado com ele — com `list-style` nativo, uma linha
+   que quebra volta por baixo do número e a lista perde a coluna. */
+.tq-passos {
+  list-style: none;
+  counter-reset: passo;
+  margin: 12px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+
+.tq-passos li {
+  counter-increment: passo;
+  position: relative;
+  padding-left: 34px;
+  font-size: 12.5px;
+  color: rgb(186 189 193);
+  line-height: 1.8;
+}
+
+.tq-passos li::before {
+  content: counter(passo);
+  position: absolute;
+  left: 0;
+  top: 1px;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: rgb(214 217 220);
+  background: rgb(255 255 255 / 0.07);
+  border: 1px solid rgb(255 255 255 / 0.1);
+}
+
+.tq-passos strong {
+  color: rgb(228 230 233);
+  font-weight: 550;
 }
 
 /* ------------------------------------------------- detalhe de uma reunião */
@@ -1050,12 +1181,20 @@ body {
   margin-left: -6px;
   border-radius: 8px;
   font: inherit;
-  font-size: 25px;
-  font-weight: 500;
-  letter-spacing: -0.7px;
+  font-family: var(--font-titulo);
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
   color: rgb(237 238 239);
   cursor: text;
   transition: background 0.25s;
+}
+
+/* O título editável é um `<input>`: não quebra linha. Título maior que a tela
+   era cortado no meio da palavra, sem sinal de que continuava. As reticências
+   somem ao editar (o campo rola com o cursor). */
+input.tq-titulo-editavel {
+  text-overflow: ellipsis;
 }
 
 .tq-titulo-editavel:hover,
@@ -1065,9 +1204,9 @@ body {
 }
 
 .tq-meta {
-  font-size: 11.5px;
+  font-size: var(--fs-meta);
   color: rgb(157 160 164);
-  margin: 6px 0 16px;
+  margin: 2px 0 12px;
   line-height: 1.7;
 }
 
@@ -1080,11 +1219,12 @@ body {
 .tq-acao {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  padding: 8px 15px;
+  gap: 6px;
+  min-height: var(--alt-controle);
+  padding: 0 13px;
   border-radius: 999px;
   border: 1px solid rgb(255 255 255 / 0.09);
-  font-size: 12.5px;
+  font-size: var(--fs-ui);
   color: rgb(206 209 212);
   cursor: pointer;
   transition:
@@ -1118,9 +1258,9 @@ body {
 }
 
 .tq-confirma {
-  margin-top: 14px;
-  padding: 14px 17px;
-  border-radius: 13px;
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
   border: 1px solid rgb(224 110 105 / 0.28);
   background: rgb(224 110 105 / 0.07);
 }
@@ -1132,8 +1272,577 @@ body {
   margin: 0 0 12px;
 }
 
+/* ------------------------------------------- a reunião em duas colunas */
+
+/*
+ * Transcrição e notas lado a lado, separadas por ESPAÇO.
+ *
+ * Nenhuma das duas mora numa caixa: a norma visual da HOME é grafite neutro
+ * com branco e cinza, e duas molduras aqui dentro — sobre uma página que já
+ * tem a onda ao fundo — seriam duas bordas disputando a atenção do texto que
+ * elas deveriam servir. O que separa as colunas é o vão entre elas e o filete
+ * de uma linha só.
+ *
+ * As duas têm rolagem PRÓPRIA e topo alinhado. Isso é o que mantém as notas
+ * sempre à vista enquanto a transcrição corre — e, em largura estreita, o que
+ * preserva a posição de leitura ao alternar, porque o `scrollTop` é da coluna
+ * e não da página.
+ */
+.tq-reuniao-corpo {
+  display: grid;
+  gap: 24px;
+  margin-top: 16px;
+  height: min(62vh, 620px);
+}
+
+@media (min-width: 900px) {
+  .tq-main.tq-main-reuniao {
+    width: min(1060px, calc(100% - 96px));
+  }
+}
+
+.tq-reuniao-corpo.lado-a-lado {
+  /* Dois terços para a transcrição, o resto para as notas. */
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+}
+
+.tq-coluna {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
+
+.tq-coluna + .tq-coluna {
+  padding-left: 8px;
+}
+
+/*
+ * Estreito: as duas ficam EMPILHADAS no mesmo lugar e se alternam.
+ *
+ * `visibility`, e não `display: none`: `display: none` destrói a caixa e leva
+ * junto o `scrollTop` — a posição de leitura que o requisito pede para
+ * preservar. Quem tira a coluna escondida do caminho do teclado é o `inert`
+ * (ver `Paginas.tsx`), porque isso não é decisão de estilo.
+ */
+.tq-coluna.empilhada {
+  grid-area: 1 / 1;
+  visibility: hidden;
+  border-left: 0;
+  padding-left: 0;
+}
+
+.tq-coluna.empilhada.ativa {
+  visibility: visible;
+}
+
+.tq-coluna-topo {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+/* O estado da gravação e o apagar dividem o canto direito do topo da coluna.
+   `baseline` no pai alinharia o ícone pelo texto do irmão; aqui o alinhamento
+   é pelo centro dos dois. */
+.tq-coluna-topo-acoes {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tq-icone-apagar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  color: rgb(150 153 157);
+  opacity: 0.65;
+  cursor: pointer;
+  transition:
+    opacity 0.2s,
+    background 0.2s,
+    color 0.2s;
+}
+
+.tq-icone-apagar:hover,
+.tq-icone-apagar:focus-visible {
+  opacity: 1;
+}
+
+.tq-icone-apagar:hover {
+  background: rgb(224 110 105 / 0.14);
+  color: rgb(240 178 172);
+}
+
+/* Dentro de uma coluna a confirmação não pode empurrar o campo para fora da
+   tela: ela é mais compacta que a do rodapé de página. */
+.tq-confirma-estreita {
+  flex: 0 0 auto;
+  margin: 0 0 12px;
+  padding: 11px 13px;
+}
+
+.tq-confirma-estreita p {
+  font-size: 12px;
+  margin-bottom: 10px;
+}
+
+.tq-notas-erro {
+  flex: 0 0 auto;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: rgb(240 178 172);
+  margin: 0 0 10px;
+}
+
+.tq-coluna-topo h2 {
+  font-size: var(--fs-ui);
+  font-weight: 600;
+  color: rgb(170 174 179);
+  margin: 0;
+}
+
+.tq-coluna-corpo {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding-right: 6px;
+}
+
+.tq-coluna-rodape {
+  flex: 0 0 auto;
+  font-size: 11px;
+  line-height: 1.6;
+  color: rgb(142 145 150);
+  margin: 10px 0 0;
+}
+
+/* ------------------------------------------------- notas da reunião */
+
+.tq-notas-coluna {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+
+.tq-notas-estado {
+  font-size: 10.5px;
+  color: rgb(140 143 147);
+  transition: color 0.2s;
+}
+
+.tq-notas-estado.falhou {
+  color: rgb(240 198 160);
+}
+
+/*
+ * O campo é o único elemento desta composição com superfície própria — ele
+ * precisa parecer escrevível, e um `textarea` sem nenhuma indicação sobre a
+ * onda de fundo não parece. É `textarea` mesmo, e não um editor construído à
+ * mão: seleção, copiar, colar, desfazer e todo atalho do sistema vêm de graça
+ * e funcionam como a pessoa espera.
+ */
+.tq-notas-campo {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  resize: none;
+  padding: 14px 15px;
+  border-radius: 13px;
+  border: 1px solid rgb(255 255 255 / 0.07);
+  background: rgb(33 34 36 / 0.62);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: rgb(232 234 237);
+  font: inherit;
+  font-size: 13.5px;
+  line-height: 1.75;
+  caret-color: rgb(var(--c-glow));
+  /* Só o verde do cursor e da borda em foco: o resto é grafite. */
+  transition: border-color 0.25s;
+}
+
+.tq-notas-campo::placeholder {
+  color: rgb(130 133 138);
+}
+
+.tq-notas-campo:focus {
+  outline: none;
+  border-color: rgb(var(--c-primary) / 0.45);
+}
+
+/* -------------------------------------- alternância em largura estreita */
+
+.tq-alternar {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  margin-top: 18px;
+  border-radius: 14px;
+  background: rgb(255 255 255 / 0.035);
+  width: fit-content;
+}
+
+.tq-alternar button {
+  min-height: var(--alt-controle-principal);
+  padding: 0 16px;
+  border-radius: 11px;
+  border: 0;
+  font-size: 12.5px;
+  color: rgb(150 153 157);
+  cursor: pointer;
+  transition:
+    background 0.2s,
+    color 0.2s;
+}
+
+.tq-alternar button:hover {
+  color: rgb(224 226 229);
+}
+
+/* Seleção por luz neutra, como no resto do produto. */
+.tq-alternar button.atual {
+  color: rgb(246 248 250);
+  background: rgb(255 255 255 / 0.09);
+}
+
+/* ----------------------------------------------- vínculos e atalhos */
+
+/*
+ * O acesso aos documentos da reunião: uma linha de atalhos, e não mais um
+ * painel. O requisito é explícito — não criar outro painel permanentemente
+ * aberto disputando a largura com o que se veio ler.
+ */
+.tq-vinculados {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  margin: 0 0 14px;
+  color: rgb(150 153 157);
+}
+
+.tq-chip {
+  max-width: 34ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid rgb(255 255 255 / 0.09);
+  background: rgb(255 255 255 / 0.03);
+  font-size: 12px;
+  color: rgb(206 209 212);
+  cursor: pointer;
+  transition:
+    background 0.25s,
+    border-color 0.25s,
+    color 0.25s;
+}
+
+.tq-chip:hover {
+  background: rgb(255 255 255 / 0.08);
+  border-color: rgb(255 255 255 / 0.18);
+  color: rgb(243 245 247);
+}
+
+/* ------------------------------------------------- prints da reunião */
+
+/* Uma faixa de miniaturas, na mesma altura de leitura dos documentos: parte
+   do registro, não uma galeria disputando a página. */
+.tq-prints-reuniao {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 16px;
+  min-width: 0;
+}
+
+.tq-prints-reuniao-rotulo {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: rgb(150 153 157);
+}
+
+.tq-prints-reuniao ul {
+  list-style: none;
+  margin: 0;
+  padding: 2px;
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  min-width: 0;
+}
+
+.tq-prints-reuniao li button {
+  display: block;
+  padding: 0;
+  border: 1px solid rgb(255 255 255 / 0.09);
+  border-radius: 9px;
+  overflow: hidden;
+  cursor: zoom-in;
+  transition:
+    border-color 0.25s,
+    transform 0.25s cubic-bezier(0.3, 1.4, 0.6, 1);
+}
+
+.tq-prints-reuniao li button:hover,
+.tq-prints-reuniao li button:focus-visible {
+  border-color: rgb(255 255 255 / 0.28);
+  transform: translateY(-1px);
+}
+
+.tq-prints-reuniao img {
+  display: block;
+  width: 88px;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+}
+
+.tq-print-ampliado {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+  background: rgb(6 8 10 / 0.78);
+  backdrop-filter: blur(6px);
+  animation: tq-print-entrar 0.22s ease-out;
+}
+
+.tq-print-ampliado figure {
+  margin: 0;
+  display: grid;
+  gap: 10px;
+  width: min(1200px, 100%);
+}
+
+.tq-print-ampliado img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: calc(100vh - 120px);
+  object-fit: contain;
+  border-radius: 12px;
+  box-shadow: 0 18px 60px rgb(0 0 0 / 0.5);
+}
+
+.tq-print-ampliado figcaption {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: rgb(190 194 198);
+}
+
+.tq-print-ampliado figcaption span {
+  margin-right: auto;
+}
+
+@keyframes tq-print-entrar {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tq-print-ampliado {
+    animation: none;
+  }
+}
+
+/* ------------------------------------------------- ações do rodapé */
+
+/*
+ * Uma faixa discreta embaixo, depois do conteúdo — e não quatro botões soltos
+ * logo abaixo do título, onde competiam com o que se veio ler. O que é raro
+ * (apagar) fica no menu ao lado, atrás de um gesto a mais.
+ */
+.tq-rodape-acoes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid rgb(255 255 255 / 0.07);
+}
+
+.tq-acao-icone {
+  padding: 8px 10px;
+}
+
+.tq-menu-secundario {
+  position: relative;
+}
+
+.tq-menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 20;
+  min-width: 190px;
+  padding: 5px;
+  border-radius: 12px;
+  border: 1px solid rgb(255 255 255 / 0.1);
+  background: rgb(31 33 35 / 0.97);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 12px 28px rgb(0 0 0 / 0.38);
+}
+
+.tq-menu button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  border-radius: 9px;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 12.5px;
+  color: rgb(214 217 221);
+  cursor: pointer;
+}
+
+.tq-menu button:hover {
+  background: rgb(255 255 255 / 0.07);
+}
+
+.tq-menu button.perigo {
+  color: rgb(224 150 145);
+}
+
+.tq-menu button.perigo:hover {
+  background: rgb(224 110 105 / 0.12);
+  color: rgb(240 178 172);
+}
+
+/* -------------------------------------------------- gerar documento */
+
+.tq-gerar {
+  position: relative;
+}
+
+/* As opções do catálogo moram dentro da caixinha da IA (`.tq-caixa-ia-opcoes`,
+   no bloco do Espectro); a classe fica como gancho dos testes. */
+
+.tq-gerar-erro {
+  margin: 6px 0 2px;
+  padding: 0 12px;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: rgb(240 198 160);
+}
+
+.tq-gerar-perguntas {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 8px);
+  z-index: 21;
+  width: min(520px, 80vw);
+}
+
+/*
+ * O resultado. Verde só aqui, e só na confirmação de que a gravação
+ * aconteceu — que é exatamente "um detalhe num estado relevante".
+ */
+.tq-gerar-resultado {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 8px);
+  z-index: 20;
+  width: min(460px, 86vw);
+  padding: 14px 16px;
+  border-radius: 13px;
+  border: 1px solid rgb(var(--c-primary) / 0.32);
+  background: rgb(26 32 29 / 0.97);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 12px 28px rgb(0 0 0 / 0.38);
+}
+
+.tq-gerar-resultado.falhou {
+  border-color: rgb(230 192 158 / 0.4);
+  background: rgb(34 30 26 / 0.97);
+}
+
+.tq-gerar-resultado p {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 0 12px;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: rgb(222 225 228);
+}
+
+.tq-gerar-resultado strong {
+  font-weight: 500;
+  color: rgb(var(--c-glow));
+}
+
+.tq-gerar-resultado.falhou strong {
+  color: rgb(236 205 178);
+}
+
+/* --------------------------------------------------- editor de documento */
+
+.tq-documento-topo {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+}
+
+.tq-documento-topo .tq-titulo-editavel {
+  flex: 1;
+  min-width: 0;
+}
+
+/*
+ * O conteúdo primeiro: o campo é o maior elemento da tela, e o resto fica em
+ * volta. Mesma superfície do campo de notas — são o mesmo gesto.
+ */
+.tq-documento-campo {
+  display: block;
+  width: 100%;
+  height: min(64vh, 700px);
+  resize: vertical;
+  margin-top: 12px;
+  padding: 16px 18px;
+  border-radius: 14px;
+  border: 1px solid rgb(255 255 255 / 0.07);
+  background: rgb(33 34 36 / 0.62);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: rgb(232 234 237);
+  font: inherit;
+  font-size: 13.5px;
+  line-height: 1.8;
+  caret-color: rgb(var(--c-glow));
+  transition: border-color 0.25s;
+}
+
+.tq-documento-campo:focus {
+  outline: none;
+  border-color: rgb(var(--c-primary) / 0.45);
+}
+
 .tq-transcricao {
-  margin-top: 26px;
+  margin-top: 20px;
 }
 
 .tq-nota-movimento {
@@ -1157,6 +1866,7 @@ body {
   pointer-events: none;
   z-index: 60;
   opacity: 0;
+  /* nunca captura clique, nem atrás de overlays */
   transition: opacity 0.18s;
 }
 
@@ -1203,6 +1913,8 @@ body.tq-pointer-in .tq-halo {
   box-shadow: 0 0 0 1px rgb(0 0 0 / 0.22);
   transition:
     transform 0.4s,
+    scale 0.25s,
+    opacity 0.25s,
     border-color 0.25s,
     box-shadow 0.25s;
 }
@@ -1222,6 +1934,31 @@ body.tq-pointer-in .tq-halo {
   box-shadow:
     0 0 0 1px rgb(0 0 0 / 0.22),
     0 0 10px rgb(var(--c-primary) / 0.4);
+}
+
+/*
+ * Sobre o que é do Taq: o anel se abre em dois arcos, no violeta das ideias
+ * (o mesmo `--ideia` do nome "Taq" na conversa). O giro de entrada é o
+ * `transition: transform` do rotor; parado sobre a resposta, ele fica parado.
+ */
+.tq-halo.sobre-taq .tq-rotor {
+  border-color: rgb(155 130 245 / 0.85);
+  border-top-color: transparent;
+  border-bottom-color: transparent;
+}
+
+/*
+ * Sobre um campo, o cursor do sistema volta (regra abaixo): o ponto sai e o
+ * anel encolhe, para o I-beam ser o protagonista e não haver dois cursores.
+ * O `scale` do anel já vem do JS no `transform` do halo — aqui é o rotor.
+ */
+body.tq-pointer-in .tq-dot.sobre-campo {
+  opacity: 0;
+}
+
+.tq-halo.sobre-campo .tq-rotor {
+  scale: 0.72;
+  opacity: 0.7;
 }
 
 /*
@@ -1245,6 +1982,42 @@ body.tq-pointer-in .tq-halo {
   body.tq-pointer-in .tq-home * {
     cursor: none;
   }
+
+  /*
+   * Onde se digita o cursor é do SISTEMA: o I-beam diz onde o texto entra, e
+   * a alça de `resize: vertical` dos campos de nota precisa da seta dupla.
+   * `auto` deixa o navegador escolher cada um. O conjunto é o mesmo de
+   * `CAMPOS` em PointerLayer.tsx, que apaga o ponto desenhado nesses campos.
+   */
+  body.tq-pointer-in .tq-home
+    :is(
+      input:not(
+          [type='button'],
+          [type='submit'],
+          [type='reset'],
+          [type='checkbox'],
+          [type='radio'],
+          [type='range'],
+          [type='color'],
+          [type='file']
+        ),
+      textarea,
+      select,
+      [contenteditable]:not([contenteditable='false'])
+    ) {
+    cursor: auto;
+  }
+}
+
+/* Dentro de um diálogo o cursor nativo volta, com o cursor de clique nos
+   controles (inclusive o link de download). */
+body .tq-home [role='dialog'],
+body .tq-home [role='dialog'] * {
+  cursor: auto;
+}
+body .tq-home [role='dialog'] a,
+body .tq-home [role='dialog'] button {
+  cursor: pointer;
 }
 
 @media (pointer: coarse) {
@@ -1253,7 +2026,6 @@ body.tq-pointer-in .tq-halo {
     display: none;
   }
   .tq-enviar,
-  .tq-mais,
   .tq-motion,
   .tq-conversas-botao {
     min-width: 44px;
@@ -1268,7 +2040,7 @@ body.tq-pointer-in .tq-halo {
     width: calc(100% - 64px);
   }
   .tq-topo {
-    padding: 20px 22px 8px;
+    padding: 14px 18px 6px;
   }
   .tq-captando {
     display: none;
@@ -1295,6 +2067,12 @@ body.tq-pointer-in .tq-halo {
   .tq-conversas-lista {
     width: min(280px, calc(100vw - 32px));
   }
+  /* A trilha da conversa é fixa a 12px da borda e tem 20px de largura; com a
+     margem lateral de 22px, ela encostava na borda direita dos cartões. As
+     falas recuam o bastante para a trilha ficar no vão, como na sidebar. */
+  .tq-conversa:has(.tq-trilha) .tq-turnos {
+    padding-right: 14px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1305,3 +2083,2442 @@ body.tq-pointer-in .tq-halo {
     transition: none !important;
   }
 }
+
+/* ------------------------------------------------------------- Conexões */
+
+/* Título de seção dentro de uma página. Menor que o `h1` do topo, e com
+   respiro em cima: ele separa blocos, não abre a página. */
+.tq-secao-titulo {
+  margin: 24px 0 4px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: rgb(222 225 229);
+}
+
+/*
+ * A AÇÃO PRINCIPAL de uma página: verde cheio, e chamando.
+ *
+ * `.tq-acao` é deliberadamente discreto — é o botão de tudo que é secundário
+ * (baixar, copiar, revogar), e existem vários por tela. Ligar a sincronização
+ * não é isso: é a única coisa a fazer na página, e um botão que se parece com
+ * os outros não diz isso.
+ *
+ * Preenchido, e não só contornado, porque aqui a cor é o conteúdo — é o que
+ * distingue "a ação" de "as ações". O texto é o verde ESCURO do próprio
+ * sistema (`--c-primary-deep`) sobre o verde claro: contraste alto sem
+ * recorrer a branco puro, que destoaria do resto.
+ *
+ * O ritmo do halo é o mesmo de `tq-selecao` — 3,4s, lento, sem pico agudo.
+ * Reusar o compasso é o que impede a página de ter dois verdes piscando em
+ * tempos diferentes, que é como uma tela começa a parecer nervosa. Com
+ * movimento reduzido a animação some sozinha, pela regra geral no fim deste
+ * arquivo; o botão continua verde e continua legível.
+ */
+.tq-acao-principal {
+  background: rgb(var(--c-primary));
+  border-color: rgb(var(--c-primary));
+  color: rgb(var(--c-primary-deep));
+  font-weight: 600;
+  min-height: var(--alt-controle-principal);
+  padding: 0 16px;
+  animation: tq-chamando 3.4s ease-in-out infinite;
+}
+
+.tq-acao-principal:hover {
+  background: rgb(var(--c-glow));
+  border-color: rgb(var(--c-glow));
+  color: rgb(var(--c-primary-deep));
+}
+
+/* Desabilitado não chama: enquanto a janela do Google está aberta, insistir
+   com o olho da pessoa num botão que não responde é ruído. */
+.tq-acao-principal:disabled {
+  animation: none;
+  opacity: 0.55;
+  cursor: default;
+}
+
+@keyframes tq-chamando {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgb(var(--c-primary) / 0);
+  }
+  50% {
+    box-shadow: 0 0 18px -2px rgb(var(--c-primary) / 0.45);
+  }
+}
+
+/*
+ * O aviso de uma FALHA — cor âmbar, mesma da usada no resto do produto para
+ * "algo não deu certo" (ver `.tq-gerar-resultado.falhou`, `.tq-aviso-falha`
+ * na sidebar, e o AMBAR de `AgenteOnda.tsx`). `.tq-aviso` sozinho é neutro —
+ * serve tanto para "explicando como funciona" quanto para "algo falhou", e
+ * as duas coisas precisam ser visualmente diferentes: uma falha depois de um
+ * clique precisa SALTAR, não se misturar ao texto explicativo ao lado.
+ */
+.tq-aviso-falha {
+  border-color: rgb(230 192 158 / 0.35);
+  background: rgb(34 30 26 / 0.6);
+  color: rgb(236 214 190);
+}
+
+.tq-conector-novo {
+  display: grid;
+  gap: 10px;
+  margin: 14px 0 4px;
+}
+
+/* O endereço é um `input` de verdade, e não um `<code>`, por dois motivos:
+   `.tq-home input` é a única exceção ao `user-select: none` da página, então
+   ele continua selecionável se o botão Copiar falhar; e um campo focável
+   permite selecionar tudo com um clique. */
+.tq-conector-endereco {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.tq-conector-endereco input {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 13px;
+  border-radius: 11px;
+  border: 1px solid rgb(255 255 255 / 0.1);
+  background: rgb(20 21 23 / 0.75);
+  color: rgb(214 217 221);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+}
+
+.tq-conector-endereco input:focus {
+  outline: none;
+  border-color: rgb(92 203 133 / 0.45);
+}
+
+/* O nome opcional dado a um endereço novo — mesma casca do campo do
+   endereço em si, mas texto normal, não monoespaçado: aqui não é credencial. */
+.tq-rotulo-input {
+  flex: 1;
+  min-width: 200px;
+  max-width: 340px;
+  padding: 9px 13px;
+  border-radius: 11px;
+  border: 1px solid rgb(255 255 255 / 0.1);
+  background: rgb(20 21 23 / 0.75);
+  color: rgb(214 217 221);
+  font-size: 13px;
+}
+
+.tq-rotulo-input::placeholder {
+  color: rgb(140 143 147);
+}
+
+.tq-rotulo-input:focus {
+  outline: none;
+  border-color: rgb(92 203 133 / 0.45);
+}
+
+@media (max-width: 560px) {
+  .tq-conector-endereco {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+/* O Taq conectado: informação, não alerta — cinza, não âmbar nem verde. */
+.tq-com-ia {
+  margin: 12px 0 0;
+  font-size: 10.5px;
+  line-height: 1.6;
+  color: rgb(150 153 157);
+}
+
+.tq-selo-demo {
+  color: rgb(196 176 152);
+}
+
+/* Copiar a mensagem da pessoa: embaixo da bolha, do mesmo lado dela. */
+.tq-voce-acoes {
+  align-self: flex-end;
+  margin-top: -4px;
+}
+
+/* ===================================================================
+ * O ESPECTRO — a direção visual aprovada em 02/10/2026.
+ *
+ * Verde é quem fala na reunião (as pessoas); violeta são as ideias que voltam
+ * dela (o assistente). A regra que mais aparece na tela é a de QUEM FALA: você
+ * em verde, os outros em roxo — na transcrição e no chat. O papel (#f3f4f1)
+ * é o que vira documento: as miniaturas da estante.
+ *
+ * Tudo aqui é escopo da HOME (`.tq-home`); os tokens globais não mudam.
+ * =================================================================== */
+.tq-home {
+  --voz: #5ccb85;
+  --voz-clara: #90dfad;
+  --voz-funda: #0c3120;
+  --ideia: rgb(var(--c-taq-acento));
+  --ideia-clara: rgb(var(--c-taq-texto));
+  --papel: #f3f4f1;
+  --tinta-papel: #15171a;
+  --cinza-papel: #5c6269;
+  --traco-papel: rgba(21, 23, 26, 0.12);
+  --e-texto: #edeeef;
+  --e-texto-2: #c4c8cd;
+  --e-cinza: #969ba1;
+  --e-traco: rgba(255, 255, 255, 0.08);
+  --e-placa: rgba(255, 255, 255, 0.045);
+  --e-placa-forte: rgba(255, 255, 255, 0.085);
+  --e-atencao: #e8c4a0;
+}
+
+/* ------------------------------------------------------------ títulos */
+.tq-brand {
+  font-size: 25px;
+}
+
+.tq-pagina h1,
+.tq-pagina-topo h1 {
+  font-family: var(--font-titulo);
+  font-weight: var(--peso-enfase);
+  font-size: clamp(30px, 4vw, 42px);
+  line-height: 1.02;
+  letter-spacing: -0.6px;
+  color: var(--e-texto);
+}
+
+.tq-pagina-topo p {
+  color: var(--e-cinza);
+  max-width: 64ch;
+}
+
+.tq-reuniao .tq-titulo-editavel,
+.tq-documento-topo .tq-titulo-editavel {
+  font-family: var(--font-titulo);
+  font-weight: var(--peso-enfase);
+  font-size: clamp(28px, 3.6vw, 40px);
+  line-height: 1.05;
+  letter-spacing: -0.5px;
+}
+
+.tq-reuniao > .tq-meta,
+.tq-linha-reuniao .tq-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  color: var(--e-cinza);
+}
+
+.tq-relogio {
+  font-variant-numeric: tabular-nums;
+  color: var(--e-texto-2);
+  font-weight: 600;
+}
+
+/* ------------------------------------------- a reunião ao vivo, no topo */
+.tq-topo-direita .tq-captando {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-right: 8px;
+  padding: 6px 14px 6px 8px;
+  border-radius: 999px;
+  background: rgba(92, 203, 133, 0.07);
+  border: 1px solid rgba(92, 203, 133, 0.2);
+  color: var(--e-texto);
+  letter-spacing: 0;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.tq-topo-direita .tq-captando:hover {
+  background: rgba(92, 203, 133, 0.12);
+}
+
+.tq-captando-txt {
+  display: grid;
+  line-height: 1.25;
+}
+
+.tq-captando-txt b {
+  font-size: 12.5px;
+  font-weight: 600;
+  max-width: 28ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tq-captando-txt > span {
+  font-size: 11px;
+  color: var(--voz-clara);
+}
+
+@media (max-width: 820px) {
+  .tq-captando-txt {
+    display: none;
+  }
+  .tq-topo-direita .tq-captando {
+    padding: 6px;
+  }
+}
+
+/* ---------------------------------------------- o assistente: o slogan */
+.tq-abertura {
+  display: grid;
+  justify-items: start;
+  gap: 14px;
+  text-align: left;
+  margin: 22vh 0 32px;
+}
+
+.tq-slogan {
+  margin: 0;
+  font-family: var(--font-taq);
+  font-size: 17px;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+  color: var(--ideia-clara);
+}
+
+/* Primeiro uso (sem reunião guardada): discreto, abaixo do slogan, e some
+   assim que existir a primeira reunião. */
+.tq-primeiro-uso {
+  display: grid;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.tq-primeiro-uso p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: rgb(140 143 147);
+}
+
+.tq-sugestoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tq-sugestoes button {
+  font-size: 12px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid rgb(var(--c-taq-acento) / 0.22);
+  color: var(--ideia-clara);
+  background: rgb(var(--c-taq-acento) / 0.04);
+  cursor: pointer;
+  transition:
+    border-color 0.3s,
+    color 0.3s;
+}
+
+.tq-sugestoes button:hover,
+.tq-sugestoes button:focus-visible {
+  border-color: rgb(var(--c-taq-acento) / 0.6);
+  color: rgb(var(--c-taq-enfase));
+}
+
+/* Quem fala, no chat: a sua mensagem em branco, texto solto à direita — sem
+   placa, sem cor e sem borda; a resposta em lilás, também solta. */
+.tq-turno-voce .tq-bolha {
+  color: var(--e-texto);
+  font-size: 15px;
+  line-height: var(--lh-corpo);
+}
+
+/* Manrope e violeta luminoso distinguem a voz do Taq. O corpo conserva
+   contraste; títulos, links e marcadores carregam a maior saturação. */
+.tq-turno-agente .tq-resp-texto,
+.tq-turno-agente .tq-indisponivel {
+  font-family: var(--font-taq);
+  color: rgb(var(--c-taq-texto));
+  font-size: 16px;
+  font-weight: 450;
+  line-height: 1.8;
+  letter-spacing: 0.005em;
+}
+
+.tq-home .tq-turno-agente .tq-md {
+  --tq-md-enfase: rgb(var(--c-taq-enfase));
+  --tq-md-sub: rgb(var(--c-taq-texto));
+  --tq-md-marcador: rgb(var(--c-taq-acento));
+  --tq-md-traco: rgb(var(--c-taq-acento) / 0.35);
+}
+
+.tq-home .tq-turno-agente .tq-md :is(h3, h4) {
+  letter-spacing: -0.025em;
+  font-weight: 700;
+}
+
+.tq-home .tq-turno-agente .tq-falhou {
+  color: var(--e-atencao);
+}
+
+/* Perguntas, espera e ações continuam com a mesma voz da resposta. */
+.tq-home .tq-resposta-texto {
+  font-family: var(--font-taq);
+}
+
+.tq-home .tq-exec-etapa {
+  color: var(--ideia-clara);
+}
+
+.tq-home .tq-resp-opcoes button {
+  border-color: rgb(var(--c-taq-acento) / 0.3);
+  background: rgb(var(--c-taq-acento) / 0.06);
+  color: var(--ideia-clara);
+  padding: 12px 14px;
+  transition: background 180ms, border-color 180ms;
+}
+
+.tq-home .tq-resp-opcoes button:hover:not(:disabled) {
+  border-color: rgb(var(--c-taq-acento) / 0.6);
+  background: rgb(var(--c-taq-acento) / 0.12);
+}
+
+.tq-home .tq-resp-opcoes button:focus-visible {
+  outline-color: var(--ideia);
+}
+
+/*
+ * O compositor: o texto nasce direto na página, grande, na Manrope. Sem placa e
+ * sem botão de enviar à vista — Enter envia. O botão continua no DOM, só para
+ * leitor de tela e teclado. (O "+" de anexar saiu; anexar não existe nesta
+ * versão — ver a entrada `anexar_arquivo` da ajuda.)
+ */
+.tq-campo textarea {
+  font-family: var(--font-taq);
+  font-size: 24px;
+  line-height: 1.35;
+  min-height: 44px;
+  max-height: 200px;
+  caret-color: var(--ideia);
+}
+
+.tq-campo textarea::placeholder {
+  color: rgb(var(--c-taq-texto) / 0.6);
+}
+
+.tq-escrita .tq-enviar {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.tq-escrita-pe {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 16px;
+  margin-top: 10px;
+}
+
+.tq-escrita-pe .tq-dica-teclas {
+  margin: 0;
+  font-size: 11px;
+  color: var(--e-cinza);
+}
+
+/* A linha mora logo acima da crista da onda: sem um fundo próprio, os pontos
+   da onda passavam por trás das letras e o aviso ficava ilegível. O fundo é a
+   cor da página, meio transparente, com desfoque — a onda continua visível em
+   volta. */
+.tq-status-ia {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  padding: 2px 10px;
+  border-radius: 10px;
+  background: rgb(17 18 19 / 0.78);
+  backdrop-filter: blur(6px);
+  font-size: 11.5px;
+  color: var(--e-cinza);
+}
+
+.tq-status-ia::before {
+  content: '';
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--voz);
+  box-shadow: 0 0 0 3px rgba(92, 203, 133, 0.12);
+}
+
+.tq-status-ia.fora::before {
+  background: var(--e-atencao);
+  box-shadow: 0 0 0 3px rgba(232, 196, 160, 0.12);
+}
+
+.tq-status-ia.verificando::before {
+  background: var(--e-cinza);
+  box-shadow: none;
+  animation: tq-piscar 1.2s ease-in-out infinite;
+}
+
+.tq-status-ia .tq-linkish {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  font-size: 11.5px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+@keyframes tq-piscar {
+  50% {
+    opacity: 0.3;
+  }
+}
+
+/* ------------------------------------------------ reuniões: a lista */
+.tq-grupo + .tq-grupo {
+  margin-top: 26px;
+}
+
+.tq-grupo-titulo {
+  margin: 0 0 6px;
+  font-family: var(--font-texto);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--e-cinza);
+}
+
+.tq-item.tq-linha-reuniao {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 20px;
+  align-items: baseline;
+  padding: 16px 12px;
+}
+
+.tq-linha-reuniao strong {
+  font-family: var(--font-titulo);
+  font-weight: 600;
+  font-size: 19px;
+  letter-spacing: -0.1px;
+  min-width: 0;
+}
+
+.tq-linha-reuniao .tq-meta {
+  margin: 0;
+  justify-content: flex-end;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+/* Em tela estreita a meta desce para baixo do título. Lado a lado, a meta não
+   quebra (nowrap) e come a linha: um título longo ficava numa coluna de uma
+   palavra por linha. */
+@media (max-width: 560px) {
+  .tq-item.tq-linha-reuniao {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .tq-linha-reuniao .tq-meta {
+    justify-content: flex-start;
+    white-space: normal;
+  }
+}
+
+.tq-linha-reuniao small {
+  grid-column: 1 / -1;
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  color: var(--e-cinza);
+}
+
+.tq-linha-selo {
+  margin-left: 10px;
+  color: var(--voz-clara);
+  font-size: 12px;
+}
+
+.tq-ao-vivo-txt {
+  color: var(--voz-clara);
+}
+
+/* ---------------------------------------------- reunião: as pílulas */
+.tq-acoes-reuniao {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 16px 0 0;
+  padding: 14px 0;
+  border-block: 1px solid var(--e-traco);
+}
+
+.tq-home .tq-pilula {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 36px;
+  padding: 0 15px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--e-texto-2);
+  font-size: 13px;
+  font-weight: 400;
+  transition:
+    background 0.25s,
+    border-color 0.25s,
+    color 0.25s;
+}
+
+.tq-home .tq-pilula:hover:not(:disabled),
+.tq-home .tq-pilula[aria-expanded='true'] {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.18);
+  color: var(--e-texto);
+}
+
+.tq-home .tq-pilula.tq-acao-icone {
+  width: 36px;
+  padding: 0;
+  justify-content: center;
+}
+
+/* O que cada pílula abre nasce embaixo da fileira, na largura toda. */
+.tq-acoes-reuniao .tq-gerar {
+  display: contents;
+}
+
+.tq-acoes-reuniao .tq-caixa-ia,
+.tq-acoes-reuniao .tq-gerar-resultado {
+  flex: 1 0 100%;
+  order: 5;
+  margin-top: 8px;
+}
+
+/* Sem isto o `max-width: 640px` da caixinha limitava o próprio flex-basis: ela
+   cabia AO LADO dos botões em tela larga e empurrava a fileira para o meio
+   ("Gerando Ata de Reunião…", 11/11/2026). Aqui ela desce, como o resultado. */
+.tq-acoes-reuniao .tq-caixa-ia {
+  max-width: none;
+}
+
+/* `.tq-gerar` é `display: contents`: sem caixa própria, o `absolute` do
+   resultado ancorava no ancestral errado e o cartão saía da tela. */
+.tq-acoes-reuniao .tq-gerar-resultado {
+  position: static;
+  width: auto;
+  box-sizing: border-box;
+}
+
+.tq-acoes-reuniao .tq-aviso-curto {
+  margin: 0 0 0 6px;
+  color: var(--voz-clara);
+}
+
+/* ---------------------------------- a caixinha da IA: "qual documento?" */
+.tq-caixa-ia {
+  position: relative;
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 14px;
+  max-width: 640px;
+  padding: 16px 44px 16px 16px;
+  border-radius: 18px;
+  background: rgba(155, 130, 245, 0.06);
+  border: 1px solid rgba(155, 130, 245, 0.2);
+  animation: tq-chegar 0.32s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.tq-caixa-ia-corpo {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.tq-caixa-ia-pergunta {
+  margin: 4px 0 0;
+  font-size: 15px;
+  color: rgb(214 207 250);
+}
+
+.tq-caixa-ia-opcoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tq-caixa-ia-opcoes button {
+  padding: 7px 13px;
+  border-radius: 12px;
+  border: 1px solid rgba(155, 130, 245, 0.3);
+  font-size: 13px;
+  color: var(--e-texto-2);
+  cursor: pointer;
+  transition:
+    background 0.2s,
+    color 0.2s,
+    border-color 0.2s;
+}
+
+.tq-caixa-ia-opcoes button:hover {
+  background: rgba(155, 130, 245, 0.12);
+  border-color: rgba(155, 130, 245, 0.55);
+  color: var(--e-texto);
+}
+
+.tq-caixa-ia-campo input {
+  width: 100%;
+  min-height: 34px;
+  border: 0;
+  border-bottom: 1px solid rgba(155, 130, 245, 0.2);
+  background: none;
+  color: var(--e-texto);
+  font: inherit;
+  font-size: 14px;
+  caret-color: var(--ideia);
+}
+
+.tq-caixa-ia-campo input:focus {
+  outline: none;
+  border-bottom-color: rgba(155, 130, 245, 0.5);
+}
+
+.tq-caixa-ia-campo input::placeholder {
+  color: #7d8288;
+}
+
+.tq-caixa-ia-fechar {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  color: var(--e-cinza);
+  cursor: pointer;
+}
+
+.tq-caixa-ia-fechar:hover {
+  background: var(--e-placa);
+  color: var(--e-texto);
+}
+
+@keyframes tq-chegar {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* -------------------------------------------------- a transcrição */
+.tq-falas {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  max-width: 68ch;
+}
+
+.tq-fala {
+  position: relative;
+  padding: 9px 4px 9px 0;
+  margin-top: 8px;
+}
+
+.tq-fala.seguida {
+  margin-top: 0;
+  padding-top: 1px;
+}
+
+.tq-fala-quem {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  font-size: 13px;
+  color: var(--e-cinza);
+}
+
+/* Quem fala: você e o pessoal do CITi (e-mail @citi.org.br) em branco, como todos —
+   a cor não distingue ninguém; o "(Eu)" continua escrito ao lado do nome. */
+.tq-fala-quem b {
+  font-weight: 600;
+  color: var(--e-texto);
+}
+
+.tq-fala-quem span {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.75;
+}
+
+/* A duração, depois da hora: "01:12 · 8 s". */
+.tq-fala-quem span + span::before {
+  content: '·';
+  margin-right: 10px;
+}
+
+.tq-fala.seguida .tq-fala-quem {
+  display: none;
+}
+
+.tq-fala-texto {
+  margin: 3px 0 0;
+  font-size: var(--fs-leitura);
+  line-height: var(--lh-leitura);
+  color: var(--e-texto);
+  overflow-wrap: anywhere;
+  text-wrap: pretty;
+}
+
+/* ------------------------------------------------- documentos: a estante */
+.tq-lista.tq-estante {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 34px 26px;
+  margin-top: 26px;
+}
+
+.tq-documento-item {
+  position: relative;
+  display: block;
+  /* A lixeira se posiciona pela altura da miniatura (1,3 × a largura). */
+  container-type: inline-size;
+}
+
+.tq-documento-item .tq-item {
+  display: grid;
+  gap: 12px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  backdrop-filter: none;
+}
+
+.tq-documento-item .tq-item:hover {
+  background: none;
+}
+
+.tq-documento-item .tq-item > span:last-child {
+  display: grid;
+  gap: 4px;
+}
+
+.tq-documento-item strong {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.tq-miniatura {
+  position: relative;
+  display: block;
+  aspect-ratio: 1 / 1.3;
+  max-width: 100%;
+  padding: 16px 15px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--papel);
+  box-shadow: 0 18px 40px -18px rgba(0, 0, 0, 0.9);
+  transition:
+    transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 0.25s;
+}
+
+.tq-documento-item .tq-item:hover .tq-miniatura {
+  transform: translateY(-4px) rotate(-0.6deg);
+  box-shadow: 0 26px 50px -18px rgba(0, 0, 0, 0.95);
+}
+
+.tq-miniatura-titulo {
+  display: block;
+  padding: 0 26px 7px 0;
+  border-bottom: 1.5px solid var(--tinta-papel);
+  font-family: var(--font-titulo);
+  font-weight: 700;
+  font-size: 15px;
+  line-height: 1.05;
+  color: var(--tinta-papel);
+}
+
+/* A marca no papel é a PRETA, a mesma da ata. */
+.tq-miniatura-marca {
+  position: absolute;
+  top: 15px;
+  right: 13px;
+  filter: brightness(0);
+}
+
+.tq-miniatura i {
+  display: block;
+  height: 4px;
+  margin-top: 7px;
+  border-radius: 2px;
+  background: rgba(21, 23, 26, 0.16);
+}
+
+.tq-miniatura i.h {
+  width: 40%;
+  height: 5px;
+  margin-top: 12px;
+  background: rgba(21, 23, 26, 0.55);
+}
+
+/* No pé da página, longe da marca preta do canto de cima. Fora da linha flex,
+   o botão perde o `stretch` que lhe dava altura: sem altura própria, ficava com
+   os 16 px do ícone — um alvo fino demais para o clique. */
+.tq-documento-item .tq-item-apagar {
+  position: absolute;
+  top: calc(130cqw - 46px);
+  right: 8px;
+  width: 40px;
+  height: 36px;
+  border-radius: 10px;
+  background: rgba(21, 23, 26, 0.75);
+  color: rgb(236 238 240);
+}
+
+/* --------------------------------------------------- acompanhamento */
+.tq-acomp-abas {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--e-traco);
+}
+
+.tq-home .tq-acomp-abas button[role='tab'] {
+  position: relative;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 7px;
+  min-height: 42px;
+  padding: 0 10px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--e-cinza);
+  cursor: pointer;
+}
+
+.tq-home .tq-acomp-abas button[role='tab']:hover,
+.tq-home .tq-acomp-abas button[aria-selected='true'] {
+  color: var(--e-texto);
+}
+
+.tq-acomp-abas button[aria-selected='true']::after {
+  content: '';
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: -1px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--e-texto);
+}
+
+.tq-acomp-conta {
+  font-size: 12px;
+  color: var(--e-cinza);
+  font-variant-numeric: tabular-nums;
+}
+
+.tq-home .tq-acomp-novo {
+  margin: 0 0 4px auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 13px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--e-texto-2);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.tq-home .tq-acomp-novo:hover,
+.tq-home .tq-acomp-novo[aria-expanded='true'] {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--e-texto);
+}
+
+.tq-acomp-form {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
+  padding: 16px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  animation: tq-chegar 0.32s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.tq-acomp-form input {
+  min-height: 40px;
+  padding: 0 12px;
+  border-radius: 11px;
+  border: 1px solid var(--e-traco);
+  background: rgba(0, 0, 0, 0.2);
+  color: var(--e-texto);
+  font: inherit;
+  font-size: 14px;
+}
+
+.tq-acomp-form input.principal {
+  grid-column: 1 / -1;
+  font-size: 15px;
+}
+
+.tq-acomp-form input:focus {
+  outline: none;
+  border-color: rgba(255, 255, 255, 0.24);
+}
+
+.tq-acomp-form input::placeholder {
+  color: #6e7379;
+}
+
+.tq-acomp-form .tq-acoes {
+  grid-column: 1 / -1;
+}
+
+.tq-acomp-lista {
+  display: grid;
+}
+
+.tq-acomp-linha {
+  position: relative;
+}
+
+.tq-acomp-linha .tq-c-lista {
+  margin: 0;
+}
+
+.tq-acomp-lixo {
+  position: absolute;
+  top: 10px;
+  right: 4px;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  color: var(--e-cinza);
+  opacity: 0;
+  cursor: pointer;
+  transition:
+    opacity 0.2s,
+    background 0.2s,
+    color 0.2s;
+}
+
+.tq-acomp-linha:hover .tq-acomp-lixo,
+.tq-acomp-lixo:focus-visible {
+  opacity: 1;
+}
+
+.tq-acomp-lixo:hover {
+  background: rgba(224, 110, 105, 0.12);
+  color: rgb(240 178 172);
+}
+
+.tq-acomp-confirma {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin: 8px 0;
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(224, 110, 105, 0.28);
+  background: rgba(224, 110, 105, 0.07);
+}
+
+.tq-acomp-confirma p {
+  flex: 1 1 260px;
+  margin: 0;
+  font-size: 14px;
+  color: var(--e-texto-2);
+}
+
+@media (pointer: coarse) {
+  .tq-acomp-lixo {
+    opacity: 1;
+    width: 44px;
+    height: 44px;
+  }
+}
+
+@media (max-width: 600px) {
+  .tq-acomp-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* As três abas e o "+ Novo" não cabem numa linha de 390 px: sem quebra, o
+     botão saía cortado pela direita. Ele desce, ainda alinhado à direita. */
+  .tq-acomp-abas {
+    flex-wrap: wrap;
+  }
+}
+
+/* ---------------------------------------------------- conexões: o hub */
+.tq-hub-grupo {
+  margin-top: 26px;
+}
+
+.tq-hub-grupo h2 {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  margin: 0 0 12px;
+  font-family: var(--font-texto);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--e-cinza);
+}
+
+.tq-hub-conta {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.tq-hub {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+  gap: 10px;
+}
+
+.tq-hub-tile {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border-radius: 16px;
+  border: 1px solid var(--e-traco);
+  background: rgba(255, 255, 255, 0.025);
+  transition:
+    border-color 0.25s,
+    background 0.25s;
+}
+
+.tq-hub-tile:hover {
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+.tq-hub-tile.aberta {
+  grid-column: 1 / -1;
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.16);
+  animation: tq-chegar 0.28s ease both;
+}
+
+.tq-hub-tile-topo {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.tq-hub-tile-topo b {
+  display: block;
+  font-family: var(--font-titulo);
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.tq-hub-tile-topo p {
+  margin: 1px 0 0;
+  font-size: 12.5px;
+  color: var(--e-cinza);
+  text-wrap: pretty;
+}
+
+.tq-hub-icone {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: var(--e-placa-forte);
+  color: var(--e-texto-2);
+  font-family: var(--font-titulo);
+  font-weight: 700;
+  font-size: 17px;
+}
+
+.tq-hub-fluxo {
+  display: grid;
+  gap: 10px;
+  padding-left: 52px;
+}
+
+.tq-hub-nota {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--e-texto-2);
+  max-width: 62ch;
+  text-wrap: pretty;
+}
+
+.tq-hub-nota.tq-hub-falha,
+.tq-hub-lista small.tq-hub-falha {
+  color: var(--e-atencao);
+}
+
+.tq-hub-lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.tq-hub-lista li {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* As capacidades da Conta do CITi são uma lista DENTRO de um item da lista.
+   Sem regra própria, cada uma herdava a grade de cima (`40px 1fr auto`) e o
+   nome ("Colegas da organização") ficava espremido na coluna de 40px do
+   ícone, uma palavra por linha. Aqui: nome, situação, e o "Desligar" na ponta. */
+.tq-hub-lista .tq-hub-capacidades {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+}
+
+.tq-hub-lista .tq-hub-capacidades li {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 4px 12px;
+  padding: 6px 0;
+}
+
+.tq-hub-lista .tq-hub-capacidades li > span {
+  font-size: 13px;
+}
+
+/* "G" era a Conta Google e também o ChatGPT, lado a lado. A sigla de três
+   letras precisa de corpo menor para caber na placa. */
+.tq-hub-sigla {
+  font-size: 11px;
+  letter-spacing: 0.2px;
+}
+
+.tq-hub-lista .tq-hub-icone {
+  width: 34px;
+  height: 34px;
+  font-size: 15px;
+  border-radius: 10px;
+}
+
+.tq-hub-lista b {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.tq-hub-lista small {
+  display: block;
+  font-size: 12px;
+  color: var(--voz-clara);
+}
+
+/* O verde da lista diz "está ligado". Na linha da conta, quando NÃO está,
+   ele mentia: "o login não está configurado" saía na cor de sucesso. */
+.tq-hub-lista small.tq-hub-neutro {
+  color: var(--e-cinza);
+}
+
+.tq-hub-lista small.tq-hub-aviso {
+  color: var(--e-atencao);
+}
+
+.tq-hub-ok {
+  padding-right: 8px;
+  color: var(--voz-clara);
+}
+
+/* A ponta da linha "Conectado": "Sair" e o ✓ juntos, na mesma altura. */
+.tq-hub-fim {
+  align-items: center;
+}
+
+.tq-hub-muitos {
+  margin-top: 12px;
+  color: var(--e-atencao);
+}
+
+.tq-hub-outro {
+  margin-top: 14px;
+}
+
+.tq-hub-pe {
+  margin: 26px 0 14px;
+  max-width: 70ch;
+  font-size: 12.5px;
+  color: var(--e-cinza);
+}
+
+@media (max-width: 600px) {
+  .tq-hub-fluxo {
+    padding-left: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tq-caixa-ia,
+  .tq-acomp-form,
+  .tq-hub-tile.aberta,
+  .tq-status-ia.verificando::before {
+    animation: none;
+  }
+}
+
+/* -------------------------------------------------------------- preparar */
+
+.tq-prep {
+  max-width: 720px;
+}
+
+.tq-prep-bloco {
+  margin-bottom: 32px;
+}
+
+.tq-prep-bloco h2 {
+  font-family: var(--font-titulo);
+  font-size: 17px;
+  font-weight: 600;
+  margin: 0 0 8px;
+}
+
+.tq-prep-bloco h3 {
+  font-size: var(--fs-ui);
+  font-weight: 600;
+  margin: 20px 0 0;
+}
+
+.tq-prep-dica {
+  font-size: var(--fs-meta);
+  color: rgb(166 169 173);
+  margin: 4px 0 0;
+}
+
+.tq-prep-comentario {
+  font-size: var(--fs-ui);
+  color: rgb(214 218 222);
+  margin: 8px 0 0;
+}
+
+/* O select da HOME. O "Onde alterar" do documento personalizado era o select
+   cru do navegador (fundo claro numa tela escura); usa este mesmo. O
+   `color-scheme` deixa a lista aberta escura também. */
+.tq-prep .tq-c-campo select,
+.tq-personalizado-alterar select {
+  width: 100%;
+  min-height: var(--alt-controle);
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid rgb(255 255 255 / 0.14);
+  background: rgb(0 0 0 / 0.18);
+  color: rgb(232 235 238);
+  color-scheme: dark;
+  font: inherit;
+  font-size: var(--fs-corpo);
+}
+
+.tq-personalizado-alterar label {
+  display: grid;
+  gap: 6px;
+  max-width: 360px;
+  font-size: var(--fs-ui);
+  color: var(--e-cinza);
+}
+
+/* A grade estica os filhos; o botão fica do tamanho do texto, à esquerda. */
+.tq-personalizado-alterar .tq-acao {
+  justify-self: start;
+}
+
+.tq-prep .tq-c-acoes {
+  margin-top: 10px;
+  align-items: center;
+}
+
+/*
+ * "O que levar para as reuniões" (OQueLevar.tsx). Espectro: violeta é o
+ * assistente e o que vai junto com ele; verde é só a fala da reunião entrando;
+ * âmbar é o que espera a pessoa (mudança não salva, texto no limite). Todas as
+ * cores vêm de tokens.css (`--c-ideia`, `--c-atencao`, `--c-text`...).
+ */
+.tq-prep:has(.tq-levar) {
+  max-width: 1060px;
+}
+
+/* O mapa e o painel lado a lado pedem a coluna larga, como a reunião aberta. */
+@media (min-width: 900px) {
+  .tq-main:has(.tq-levar) {
+    width: min(1060px, calc(100% - 96px));
+  }
+}
+
+.tq-levar-cab {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 14px 32px;
+  margin-bottom: 18px;
+}
+
+.tq-levar .tq-levar-modos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  padding: 3px;
+  border-radius: var(--radius-sm);
+  background: rgb(var(--c-text) / 0.035);
+  box-shadow: inset 0 0 0 1px rgb(var(--c-text) / 0.03);
+}
+
+.tq-levar .tq-levar-modos button {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 11px;
+  color: rgb(var(--c-muted));
+  font-size: var(--fs-ui);
+  font-weight: 600;
+  transition:
+    background var(--dur-base),
+    color var(--dur-base);
+}
+
+.tq-levar .tq-levar-modos button:hover {
+  background: rgb(var(--c-text) / 0.045);
+  color: rgb(var(--c-text));
+}
+
+.tq-levar .tq-levar-modos button[aria-pressed='true'] {
+  background: rgb(var(--c-text) / 0.09);
+  color: rgb(var(--c-text));
+  box-shadow: var(--shadow-sm);
+}
+
+.tq-levar .tq-levar-modos small {
+  font-size: var(--fs-meta);
+  font-weight: 400;
+}
+
+.tq-levar .tq-levar-modos button[aria-pressed='true'] small.seu {
+  color: rgb(var(--c-ideia-clara));
+}
+
+.tq-levar-aviso {
+  max-width: none;
+  margin-bottom: 14px;
+}
+
+.tq-levar-aviso summary {
+  cursor: pointer;
+}
+
+.tq-levar-v1 {
+  margin: var(--sp-2) 0;
+  white-space: pre-line;
+  user-select: text;
+}
+
+.tq-levar-corpo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 18px;
+}
+
+/* ------------------------------------------------------------------ o mapa */
+
+.tq-mapa {
+  flex: 999 1 560px;
+  min-width: 0;
+  border: 1px solid rgb(var(--c-text) / 0.07);
+  border-radius: var(--radius-md);
+}
+
+.tq-mapa-cab {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-1) var(--sp-4);
+  padding: 18px 22px 0;
+}
+
+.tq-mapa-cab h3 {
+  margin: 0;
+  font: 600 var(--fs-titulo) / 1.3 var(--font-titulo);
+}
+
+.tq-mapa-cab p {
+  margin: 0;
+  font-size: var(--fs-meta);
+  color: rgb(var(--c-muted));
+  font-variant-numeric: tabular-nums;
+}
+
+/* Cada parte da contagem ("3 de 8 vagas") inteira numa linha: a quebra
+   acontece entre as partes, nunca deixando "vagas" sozinho. */
+.tq-mapa-cab .tq-sem-quebra {
+  white-space: nowrap;
+}
+
+.tq-levar .tq-mapa-caixa {
+  padding: var(--sp-2) var(--sp-2) 0;
+}
+
+.tq-mapa-medida {
+  position: relative;
+  margin: 0 auto;
+}
+
+.tq-mapa-palco {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 720px;
+  height: 600px;
+  transform-origin: 0 0;
+}
+
+.tq-mapa-brilho {
+  position: absolute;
+  left: 160px;
+  top: 100px;
+  width: 400px;
+  height: 400px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgb(var(--c-ideia) / 0.11), rgb(var(--c-ideia) / 0) 62%);
+  pointer-events: none;
+}
+
+.tq-mapa-anel {
+  position: absolute;
+  left: 266px;
+  top: 206px;
+  width: 188px;
+  height: 188px;
+  border-radius: 50%;
+  border: 1px solid rgb(var(--c-ideia) / 0.18);
+  pointer-events: none;
+}
+
+.tq-mapa-fios {
+  position: absolute;
+  inset: 0;
+  width: 720px;
+  height: 600px;
+  overflow: visible;
+  fill: none;
+  pointer-events: none;
+}
+
+.tq-mapa-fios line,
+.tq-mapa-fios ellipse {
+  stroke-width: 1.25;
+}
+
+.tq-fio-orbita {
+  stroke: rgb(var(--c-text) / 0.05);
+  stroke-dasharray: 2 6;
+}
+
+/* A fala entra pela linha verde tracejada, andando: é a única coisa viva aqui. */
+.tq-fio-fala {
+  stroke: rgb(var(--c-primary) / 0.65);
+  stroke-dasharray: 4 6;
+  animation: tq-fala-entra 1.6s linear infinite;
+}
+
+@keyframes tq-fala-entra {
+  to {
+    stroke-dashoffset: -20;
+  }
+}
+
+.tq-fio-saida {
+  stroke: rgb(var(--c-text) / 0.18);
+}
+
+.tq-fio,
+.tq-fio-busca {
+  stroke: rgb(var(--c-text) / 0.16);
+  stroke-dasharray: 3 5;
+}
+
+.tq-fio.ligado {
+  stroke: rgb(var(--c-ideia) / 0.45);
+  stroke-dasharray: none;
+}
+
+.tq-fio.ligado.sel {
+  stroke: rgb(var(--c-ideia) / 0.95);
+  stroke-width: 1.6;
+}
+
+.tq-fio-vaga {
+  stroke: rgb(var(--c-text) / 0.1);
+}
+
+.tq-fio-busca.ligado {
+  stroke: rgb(var(--c-text) / 0.4);
+  stroke-dasharray: none;
+  stroke-width: 1.5;
+}
+
+.tq-fio-busca.ligado.sel {
+  stroke: rgb(var(--c-text) / 0.75);
+}
+
+/* Os nós: ligado é placa com borda violeta e ponto cheio; guardado é tracejado e apagado. */
+.tq-levar .tq-mapa-no {
+  position: absolute;
+  width: 192px;
+  height: 52px;
+  margin: 0;
+  padding: 0 var(--sp-3);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgb(var(--c-elevated));
+  border: 1px solid rgb(var(--c-ideia) / 0.35);
+  border-radius: var(--sp-3);
+  color: rgb(var(--c-text));
+  text-align: left;
+  transition:
+    border-color var(--dur-base),
+    background var(--dur-base),
+    box-shadow var(--dur-base);
+}
+
+.tq-levar button.tq-mapa-no:hover {
+  border-color: rgb(var(--c-ideia) / 0.7);
+}
+
+.tq-levar .tq-mapa-no svg {
+  flex: none;
+  color: rgb(var(--c-ideia));
+}
+
+.tq-mapa-ponto {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 50%;
+  background: rgb(var(--c-ideia));
+}
+
+.tq-levar .tq-mapa-no-txt {
+  min-width: 0;
+  font-size: var(--fs-corpo);
+  line-height: 17px;
+}
+
+.tq-levar .tq-mapa-no b,
+.tq-levar .tq-mapa-no small {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 150px;
+}
+
+.tq-levar .tq-mapa-no b {
+  font-weight: 500;
+}
+
+.tq-levar .tq-mapa-no small {
+  font-size: var(--fs-meta);
+  color: rgb(var(--c-muted));
+}
+
+.tq-levar .tq-mapa-no.sel {
+  /* Opaco: o fio que chega ao nó não pode atravessar o texto. */
+  background: linear-gradient(rgb(var(--c-ideia) / 0.1), rgb(var(--c-ideia) / 0.1)), rgb(var(--c-elevated));
+  border: 1.5px solid rgb(var(--c-ideia));
+  box-shadow: 0 0 0 4px rgb(var(--c-ideia) / 0.1);
+}
+
+.tq-levar .tq-mapa-no.sel small {
+  color: rgb(var(--c-ideia-clara));
+}
+
+.tq-levar .tq-mapa-no.guardado {
+  background: rgb(var(--c-surface));
+  border: 1px dashed rgb(var(--c-text) / 0.22);
+  color: rgb(var(--c-muted));
+}
+
+.tq-levar .tq-mapa-no.guardado .tq-mapa-ponto {
+  background: transparent;
+  border: 1.5px solid rgb(var(--c-muted));
+}
+
+.tq-levar .tq-mapa-no.guardado.sel {
+  border: 1.5px dashed rgb(var(--c-ideia));
+}
+
+.tq-levar .tq-mapa-vaga {
+  justify-content: center;
+  background: transparent;
+  border: 1px dashed rgb(var(--c-text) / 0.18);
+  color: rgb(var(--c-muted));
+}
+
+.tq-levar .tq-mapa-vaga svg {
+  color: currentColor;
+}
+
+.tq-levar button.tq-mapa-vaga:hover {
+  border-color: rgb(var(--c-text) / 0.4);
+  color: rgb(var(--c-text));
+}
+
+.tq-levar .tq-mapa-vaga.nota {
+  font-size: var(--fs-meta);
+  line-height: 15px;
+  text-align: center;
+  border-color: rgb(var(--c-text) / 0.14);
+}
+
+.tq-mapa-entrada,
+.tq-mapa-saida {
+  position: absolute;
+  height: 44px;
+  padding: 0 var(--sp-4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  border-radius: 22px;
+  font-size: var(--fs-corpo);
+}
+
+.tq-mapa-entrada {
+  left: 260px;
+  top: 24px;
+  width: 200px;
+  background: rgb(var(--c-primary) / 0.06);
+  border: 1px solid rgb(var(--c-primary) / 0.45);
+}
+
+.tq-mapa-entrada small {
+  font-size: var(--fs-meta);
+  color: rgb(var(--c-glow));
+}
+
+.tq-mapa-vivo {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: rgb(var(--c-primary));
+}
+
+.tq-mapa-saida {
+  left: 250px;
+  top: 532px;
+  width: 220px;
+  background: rgb(var(--c-elevated));
+  border: 1px solid rgb(var(--c-text) / 0.1);
+  color: rgb(var(--c-muted));
+}
+
+.tq-levar .tq-mapa-centro {
+  position: absolute;
+  left: 280px;
+  top: 220px;
+  width: 160px;
+  height: 160px;
+  border-radius: 50%;
+  background: rgb(var(--c-ideia) / 0.08);
+  border: 1px solid rgb(var(--c-ideia) / 0.6);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  text-align: center;
+  color: rgb(var(--c-text));
+  transition:
+    box-shadow var(--dur-base),
+    border-color var(--dur-base);
+}
+
+.tq-levar .tq-mapa-centro:hover,
+.tq-levar .tq-mapa-centro.sel {
+  border-color: rgb(var(--c-ideia));
+  box-shadow: 0 0 0 5px rgb(var(--c-ideia) / 0.1);
+}
+
+.tq-levar .tq-mapa-centro b {
+  display: block;
+  font: 700 20px / 1.2 var(--font-titulo);
+}
+
+.tq-levar .tq-mapa-centro small {
+  font-size: var(--fs-meta);
+  color: rgb(var(--c-ideia-clara));
+}
+
+/* A busca é a única parte que sairia do computador: placa neutra, não violeta. */
+.tq-levar .tq-mapa-busca {
+  position: absolute;
+  left: 520px;
+  top: 254px;
+  width: 192px;
+  height: 92px;
+  padding: 11px var(--sp-3);
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: rgb(var(--c-elevated));
+  border: 1px solid rgb(var(--c-text) / 0.3);
+  border-radius: var(--radius-sm);
+  color: rgb(var(--c-text));
+  text-align: left;
+  transition:
+    border-color var(--dur-base),
+    box-shadow var(--dur-base),
+    opacity var(--dur-base);
+}
+
+.tq-levar .tq-mapa-busca:hover {
+  border-color: rgb(var(--c-text) / 0.55);
+}
+
+.tq-levar .tq-mapa-busca.sel {
+  border: 1.5px solid rgb(var(--c-text));
+  box-shadow: 0 0 0 4px rgb(var(--c-text) / 0.08);
+}
+
+.tq-levar .tq-mapa-busca.desligada {
+  border-style: dashed;
+  opacity: 0.7;
+}
+
+.tq-levar .tq-mapa-busca svg {
+  flex: none;
+  margin-top: 1px;
+}
+
+.tq-levar .tq-mapa-busca > span {
+  font-size: var(--fs-corpo);
+  line-height: 17px;
+}
+
+.tq-levar .tq-mapa-busca b {
+  font-weight: 500;
+}
+
+.tq-levar .tq-mapa-busca small {
+  display: block;
+  font-size: var(--fs-meta);
+  color: rgb(var(--c-muted));
+}
+
+.tq-levar .tq-mapa-busca small.tq-mapa-estado {
+  color: rgb(var(--c-text) / 0.75);
+}
+
+/*
+ * Estreito demais para o mapa (menos de 72% de 720 px): os mesmos botões em
+ * coluna, na ordem do caminho — a fala entra, o assistente, o que vai junto, a
+ * busca, a resposta sai.
+ */
+.tq-levar .tq-mapa-caixa.lista .tq-mapa-palco {
+  position: static;
+  width: auto;
+  height: auto;
+  display: grid;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3) 0;
+}
+
+.tq-levar .tq-mapa-caixa.lista .tq-mapa-no,
+.tq-levar .tq-mapa-caixa.lista .tq-mapa-entrada,
+.tq-levar .tq-mapa-caixa.lista .tq-mapa-saida,
+.tq-levar .tq-mapa-caixa.lista .tq-mapa-centro,
+.tq-levar .tq-mapa-caixa.lista .tq-mapa-busca {
+  position: static;
+  width: 100%;
+  height: auto;
+  min-height: 48px;
+}
+
+.tq-levar .tq-mapa-caixa.lista .tq-mapa-no b,
+.tq-levar .tq-mapa-caixa.lista .tq-mapa-no small {
+  max-width: none;
+}
+
+.tq-levar .tq-mapa-caixa.lista .tq-mapa-centro {
+  flex-direction: row;
+  justify-content: flex-start;
+  gap: var(--sp-3);
+  padding: 10px var(--sp-3);
+  border-radius: var(--radius-sm);
+  text-align: left;
+}
+
+.tq-levar .tq-mapa-caixa.lista .tq-mapa-centro b {
+  font-size: var(--fs-titulo);
+}
+
+.tq-levar .tq-mapa-caixa.lista .tq-mapa-entrada,
+.tq-levar .tq-mapa-caixa.lista .tq-mapa-saida {
+  justify-content: flex-start;
+  border-radius: var(--radius-sm);
+}
+
+.tq-levar .tq-mapa-caixa.lista .tq-mapa-no {
+  padding-block: var(--sp-2);
+}
+
+/* --------------------------------------------------------------- o painel */
+
+.tq-ed {
+  flex: 1 1 300px;
+  max-width: 380px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 520px;
+  border: 1px solid rgb(var(--c-text) / 0.08);
+  border-radius: var(--radius-md);
+  background: rgb(var(--c-text) / 0.03);
+  scroll-margin: var(--sp-4);
+}
+
+.tq-ed-cab {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-3);
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid rgb(var(--c-text) / 0.06);
+}
+
+.tq-ed-cab > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.tq-ed-cab h3 {
+  margin: 2px 0 0;
+  font: 600 var(--fs-titulo) / 1.3 var(--font-titulo);
+  overflow-wrap: anywhere;
+}
+
+.tq-ed-olho {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: var(--fs-meta);
+  letter-spacing: 0.03em;
+  color: rgb(var(--c-muted));
+}
+
+.tq-ed-olho.violeta {
+  color: rgb(var(--c-ideia-clara));
+}
+
+.tq-ed-sub {
+  margin: 6px 0 0;
+  font-size: var(--fs-ui);
+  line-height: 1.6;
+  color: rgb(var(--c-muted));
+}
+
+.tq-levar .tq-ed-fechar {
+  width: 36px;
+  height: 36px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  margin: -4px -8px 0 0;
+  border-radius: 50%;
+  color: rgb(var(--c-muted));
+}
+
+.tq-levar .tq-ed-fechar:hover {
+  background: rgb(var(--c-text) / 0.045);
+  color: rgb(var(--c-text));
+}
+
+.tq-ed-corpo {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 18px 20px;
+}
+
+.tq-ed-rodape {
+  display: grid;
+  gap: var(--sp-2);
+  margin-top: auto;
+  padding: 14px 20px 18px;
+  border-top: 1px solid rgb(var(--c-text) / 0.06);
+}
+
+.tq-ed-vazio {
+  margin: 0;
+  padding: 24px 20px;
+  font-size: var(--fs-corpo);
+  color: rgb(var(--c-muted));
+}
+
+.tq-ed-regras {
+  display: grid;
+  gap: var(--sp-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tq-ed-regras li {
+  display: grid;
+  gap: 2px;
+  padding: 10px var(--sp-3);
+  border: 1px solid rgb(var(--c-text) / 0.05);
+  border-radius: var(--sp-3);
+  background: rgb(var(--c-surface));
+}
+
+.tq-ed-regras b {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-corpo);
+  font-weight: 500;
+}
+
+.tq-ed-regras b svg {
+  color: rgb(var(--c-muted));
+}
+
+.tq-ed-regras span {
+  font-size: var(--fs-meta);
+  line-height: 1.5;
+  color: rgb(var(--c-muted));
+}
+
+.tq-ed-citacao {
+  margin: 0;
+  padding: var(--sp-3) 14px;
+  border-radius: var(--sp-3);
+  background: rgb(var(--c-text) / 0.045);
+  font-size: var(--fs-corpo);
+  line-height: 1.6;
+  color: rgb(var(--c-text) / 0.85);
+}
+
+.tq-ed-aviso {
+  margin: 0;
+  padding: var(--sp-3) 14px;
+  border: 1px solid rgb(var(--c-text) / 0.08);
+  border-radius: 13px;
+  background: rgb(var(--c-text) / 0.035);
+  font-size: var(--fs-ui);
+  line-height: 1.7;
+  color: rgb(var(--c-muted));
+}
+
+.tq-ed-modos {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+  font-size: var(--fs-corpo);
+}
+
+.tq-ed-modos legend {
+  padding: 0;
+  margin-bottom: var(--sp-2);
+  font-size: var(--fs-ui);
+  color: rgb(var(--c-text) / 0.8);
+}
+
+.tq-ed-modos label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 30px;
+  cursor: pointer;
+}
+
+.tq-ed-modos input {
+  margin: 0;
+  accent-color: rgb(var(--c-ideia));
+}
+
+.tq-ed-modos:disabled label {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.tq-ed-modos small {
+  font-size: var(--fs-meta);
+  color: rgb(var(--c-muted));
+}
+
+/* O interruptor: o checkbox de verdade fica por cima do trilho, invisível. */
+.tq-interruptor {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  cursor: pointer;
+}
+
+.tq-interruptor b {
+  display: block;
+  font-size: var(--fs-corpo);
+  font-weight: 500;
+}
+
+.tq-interruptor small {
+  display: block;
+  font-size: var(--fs-meta);
+  color: rgb(var(--c-muted));
+}
+
+.tq-interruptor input {
+  position: absolute;
+  right: 0;
+  width: 38px;
+  height: 22px;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.tq-interruptor-trilho {
+  pointer-events: none;
+  position: relative;
+  width: 38px;
+  height: 22px;
+  flex: none;
+  border-radius: 11px;
+  background: rgb(var(--c-text) / 0.14);
+  transition: background var(--dur-fast);
+}
+
+.tq-interruptor-trilho::after {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: rgb(var(--c-text));
+  transition: transform var(--dur-fast);
+}
+
+.tq-interruptor input:checked + .tq-interruptor-trilho {
+  background: rgb(var(--c-ideia));
+}
+
+.tq-interruptor input:checked + .tq-interruptor-trilho::after {
+  transform: translateX(16px);
+}
+
+.tq-interruptor input:focus-visible + .tq-interruptor-trilho {
+  outline: 2px solid rgb(var(--c-primary));
+  outline-offset: 3px;
+}
+
+.tq-ed-campo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  font-size: var(--fs-ui);
+  color: rgb(var(--c-text) / 0.8);
+}
+
+.tq-ed-campo-linha {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+
+.tq-ed-campo small {
+  font-size: var(--fs-meta);
+  color: rgb(var(--c-muted));
+}
+
+.tq-ed-campo input,
+.tq-ed-campo textarea {
+  min-height: 38px;
+  min-width: 0;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid rgb(var(--c-text) / 0.1);
+  border-radius: var(--radius-xs);
+  background: rgb(var(--c-surface));
+  color: rgb(var(--c-text));
+  font: inherit;
+  font-size: var(--fs-corpo);
+  line-height: 1.55;
+  user-select: text;
+}
+
+.tq-ed-campo textarea {
+  min-height: 116px;
+  resize: vertical;
+  border-color: rgb(var(--c-ideia) / 0.4);
+}
+
+.tq-ed-campo input:focus,
+.tq-ed-campo textarea:focus {
+  outline: none;
+  border-color: rgb(var(--c-ideia));
+}
+
+.tq-ed-conta {
+  font-size: var(--fs-meta);
+  color: rgb(var(--c-muted));
+  font-variant-numeric: tabular-nums;
+}
+
+.tq-ed-conta.cheio {
+  color: rgb(var(--c-atencao));
+}
+
+.tq-levar .tq-ed-remover {
+  justify-self: start;
+  min-height: 36px;
+  padding: 0 var(--sp-1);
+  font-size: var(--fs-ui);
+  color: rgb(var(--c-danger) / 0.85);
+}
+
+.tq-levar .tq-ed-remover:hover {
+  color: rgb(var(--c-danger));
+}
+
+.tq-ed-confirma {
+  display: grid;
+  gap: 10px;
+}
+
+.tq-ed-confirma p {
+  margin: 0;
+  font-size: var(--fs-ui);
+  line-height: 1.6;
+  color: rgb(var(--c-text) / 0.8);
+}
+
+.tq-ed-confirma div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+
+/* "Usar este assistente": claro, não verde — verde é a fala da reunião. */
+.tq-levar .tq-prep-usar {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: var(--sp-2);
+  min-height: 40px;
+  padding: 0 var(--sp-4);
+  border-radius: 11px;
+  background: rgb(var(--c-text));
+  color: rgb(var(--c-background));
+  font-size: var(--fs-corpo);
+  font-weight: 600;
+  white-space: nowrap;
+  transition: opacity var(--dur-fast);
+}
+
+.tq-levar .tq-prep-usar:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.tq-levar-rodape {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-4);
+  padding: 18px 0 var(--sp-2);
+}
+
+.tq-levar-status {
+  font-size: var(--fs-ui);
+  color: rgb(var(--c-muted));
+}
+
+.tq-levar-status.pendente {
+  color: rgb(var(--c-atencao));
+}
+
+/* Em coluna o painel vem embaixo do mapa: vazio, não reserva altura. */
+@media (max-width: 760px) {
+  .tq-ed {
+    min-height: 0;
+  }
+}
+
+.tq-levar .tq-mapa-caixa.lista {
+  padding-bottom: var(--sp-4);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tq-fio-fala {
+    animation: none;
+  }
+}
+
+/* ------------------------------------------- documento personalizado */
+
+.tq-personalizado-previa {
+  margin: 14px 0;
+}
+
+.tq-personalizado-previa iframe {
+  display: block;
+  width: 100%;
+  height: min(78vh, 920px);
+  border: 1px solid rgb(255 255 255 / 0.12);
+  border-radius: 10px;
+  background: #fff;
+}
+
+.tq-personalizado-alterar {
+  display: grid;
+  gap: 8px;
+  margin: 14px 0;
+}
+
+.tq-personalizado-alterar textarea {
+  min-height: 72px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgb(255 255 255 / 0.14);
+  background: rgb(255 255 255 / 0.04);
+  color: inherit;
+  font: inherit;
+  resize: vertical;
+}
+
+.tq-personalizado-subtitulo {
+  margin: 22px 0 8px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.tq-personalizado-historico {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tq-personalizado-historico li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 9px;
+  border: 1px solid rgb(255 255 255 / 0.08);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.tq-personalizado-historico li[aria-current='true'] {
+  border-color: rgb(var(--c-primary) / 0.45);
+}
+
+.tq-prep-ajuste {
+  margin: 12px 0;
+  padding: 10px 12px;
+  border: 1px solid rgb(255 255 255 / 0.08);
+  border-radius: 12px;
+}
+
+.tq-prep-ajuste h3 {
+  margin: 0 0 4px;
+}
+
+.tq-prep-linhas {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 6px;
+  font-size: var(--fs-ui);
+  color: rgb(214 218 222);
+}
+
+.tq-prep-instante {
+  font-variant-numeric: tabular-nums;
+  color: rgb(166 169 173);
+}
+
+.tq-prep-esperou,
+.tq-prep-silencio {
+  color: rgb(166 169 173);
+}
+
+/* Controles do acervo seguem os campos e ações já usados em Conexões. */
+.tq-busca-acervo { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; margin: 18px 0 10px; }
+.tq-busca-acervo label, .tq-filtro-participante, .tq-opcoes-acervo form > label,
+.tq-conversas-confirma label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; min-width: 0; }
+.tq-busca-acervo label:first-child { flex: 1 1 180px; }
+.tq-busca-acervo input, .tq-filtro-participante input, .tq-opcoes-acervo form input,
+.tq-conversas-confirma input {
+  box-sizing: border-box; max-width: 100%; min-width: 0; padding: 9px 13px; border-radius: 11px;
+  border: 1px solid rgb(255 255 255 / 0.1); background: rgb(20 21 23 / 0.75); color: rgb(214 217 221);
+  font: inherit;
+}
+.tq-filtro-participante { max-width: 340px; margin-bottom: 20px; }
+.tq-opcoes-acervo { margin: 12px 0; font-size: 13px; line-height: 1.6; }
+.tq-opcoes-acervo summary { cursor: pointer; width: fit-content; }
+.tq-opcoes-acervo form { display: flex; flex-direction: column; gap: 12px; max-width: 560px; }
+.tq-opcoes-acervo form > button { align-self: flex-start; }
+.tq-opcoes-acervo p { margin: 10px 0; }
+.tq-opcoes-acervo li { margin: 8px 0; overflow-wrap: anywhere; }
+.tq-conversas-lista li button.tq-conversas-renomear {
+  flex: 0 0 auto; width: auto; padding: 0 6px; color: rgb(168 171 175); font-size: 11px;
+}
+.tq-conversas-lista .tq-busca-acervo { padding: 0 10px; }
+.tq-conversas-lista li .tq-conversas-confirma button { width: auto; display: inline-flex; margin-top: 8px; }

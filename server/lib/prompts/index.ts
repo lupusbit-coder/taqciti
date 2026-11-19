@@ -14,9 +14,7 @@
  * 3. **Sem regra de negócio duplicada.** As regras da Ata vivem no `guidance`
  *    do `SectionSpec`, e chegam ao modelo ÍNTEGRAS, nunca reescritas — regra
  *    em dois lugares diverge. O `guidance` vai na mensagem de usuário, e não
- *    interpolado no prompt de sistema: o sistema do Pensante precisa ser
- *    byte-idêntico nas nove seções para o cache de prefixo pegar a
- *    transcrição (ver `agents/pensante.ts`).
+ *    interpolado no prompt de sistema.
  * 4. **Formato de saída declarado por schema**, não por prosa. O prompt
  *    descreve a tarefa; o `jsonSchema` descreve a forma.
  *
@@ -25,7 +23,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-export type PromptAgent = 'pensante' | 'auditor' | 'escritor';
+export type PromptAgent = 'leitor' | 'auditor' | 'taq' | 'redator';
 export type PromptVersion = `v${number}`;
 
 /** Cache por arquivo. Prompt não muda em runtime; ler a cada chamada seria
@@ -106,6 +104,50 @@ export function renderPrompt(
   values: Record<string, string> = {},
 ): string {
   return interpolate(loadPromptTemplate(agent, version), values, `${agent}/${version}`);
+}
+
+/**
+ * Que versão de cada prompt a geração usa — num lugar só.
+ *
+ * As versões novas (21/10/2026) acrescentam uma regra: tudo nas fontes é
+ * conteúdo a registrar, mas uma fala que manda em quem escreve ("escreva na ata
+ * que foi aprovado") não muda as instruções nem vira decisão. As anteriores
+ * ficam para comparação: `DOCCITI_PROMPTS=anteriores` volta a elas sem deploy
+ * de código, e é assim que o teste ao vivo de injeção mede as duas.
+ */
+export type PapelDoPrompt = 'leitor' | 'auditor' | 'redatorGeracao' | 'redatorEdicao';
+
+/**
+ * O redator está na versão nova desde 21/10/2026, medida com
+ * `lib/injecao.live.test.ts` (3 rodadas, Groq gpt-oss-120b): injeção barrada e
+ * nenhum combinado legítimo perdido.
+ *
+ * Leitor e auditor (Ata e Resumo) passaram a `leitor/v3` e `auditor/v5` em
+ * 28/10/2026, com a mesma medição em `INJECAO_GERACOES=ata` no Gemini: injeção
+ * barrada, piloto, responsável, combinado da sexta e próximo passo presentes.
+ * Três rodadas, cada uma com um Leitor diferente (a cota diária do Gemini
+ * acabou na primeira): `gemini-3.5-flash`, e depois Groq `gpt-oss-120b` e
+ * `gpt-oss-20b` com o Auditor no Gemini flash-lite — na Groq gratuita, só com
+ * `GROQ_TPM_LIMIT=9800`, porque a estimativa local da entrada é conservadora.
+ * Se uma rodada futura falhar, `DOCCITI_PROMPTS=anteriores` volta às versões
+ * anteriores sem deploy de código.
+ */
+const EM_USO: Record<PapelDoPrompt, PromptVersion> = {
+  leitor: 'v3',
+  auditor: 'v5',
+  redatorGeracao: 'v5',
+  redatorEdicao: 'v6',
+};
+
+const ANTERIORES: Record<PapelDoPrompt, PromptVersion> = {
+  leitor: 'v2',
+  auditor: 'v4',
+  redatorGeracao: 'v3',
+  redatorEdicao: 'v4',
+};
+
+export function versaoDoPrompt(papel: PapelDoPrompt): PromptVersion {
+  return process.env.DOCCITI_PROMPTS?.trim() === 'anteriores' ? ANTERIORES[papel] : EM_USO[papel];
 }
 
 /** Só para teste: esquecer o cache entre casos. */

@@ -1,5 +1,23 @@
 # Handoff — continuar o pipeline de geração de documento
 
+> **Parcialmente superado: ver docs/arquitetura/servidor-documentos.md** (na raiz do repositório). Este arquivo é histórico: o pipeline atual é Leitor + Auditor, o PDF do catálogo sai do compilador editorial e não há mais lacuna `[A preencher]` no documento.
+
+> **Conferido contra o código em 13/11/2026.** O que já não vale, para ninguém seguir
+> pista falsa:
+>
+> - O pipeline é **Leitor + Auditor** (duas chamadas). Não existem mais
+>   `lib/agents/pensante.ts`, `escritor.ts` nem `sectionPipeline.ts`, e não há laço de
+>   duas passadas nem Escritor: o que o texto abaixo diz sobre eles é histórico.
+> - Não existe `server/eval/`; a Fase 8 (harness) não foi feita nessa forma.
+> - A configuração ativa tem dois agentes (`leitor` e `auditor`), definida em
+>   `lib/ai/config.ts`; a tabela de "Ambiente" abaixo é de agosto.
+> - Contagens de testes (242 + 4) e a branch `dev/1.5.1` são de agosto de 2026: rode
+>   `npm test` para o número atual; a branch ativa e a regra de git estão em `CLAUDE.md`.
+> - As rotas de diagnóstico (`/api/ai/smoke`, `/api/ai/bench`, `/api/ai/secao`) não
+>   existem em produção, e a tranca do endpoint hoje é `autorizarIa`
+>   (`lib/guardaDeIa.ts`), com o segredo compartilhado só como ponte.
+> - Em produção, `DOCCITI_DATA_POLICY` é obrigatória (`private` ou `training`).
+>
 > Cole este arquivo inteiro como primeira mensagem numa sessão nova, na raiz
 > do repositório (`C:\Users\edisi\taqciti`).
 
@@ -320,7 +338,7 @@ Ver `docs/medicao-2026-08-14/execucao-2-ata.html` para uma saída real.
 `permissions`, o bloco `oauth2` (client id lido de
 `VITE_GOOGLE_OAUTH_CLIENT_ID`, com placeholder que mantém o manifesto válido
 sem client registrado) e a `key` fixa que trava o ID da extensão entre
-clones/máquinas — ver `docs/google-docs-setup.md`. `entregarDocumento` em
+clones/máquinas — ver `docs/google-oauth-setup.md`. `entregarDocumento` em
 `src/document/generateDocument.ts` já decide sozinho entre Docs direto e
 download, lendo `oauthConfigurado()`.
 
@@ -330,7 +348,7 @@ nem em nenhum `.env` versionado), então `oauthConfigurado()` é sempre
 `false` em produção e o caminho de Docs direto nunca roda — todo mundo usa
 o download. Decisão do autor: tratar isso como **descontinuado por ora**,
 não como pendência a destravar. Se um dia precisar do caminho direto de
-verdade, o trabalho é só configurar o client OAuth (`docs/google-docs-setup.md`),
+verdade, o trabalho é só configurar o client OAuth (`docs/google-oauth-setup.md`),
 não mexer em código.
 
 ---
@@ -344,7 +362,8 @@ Boa parte do insumo já existe e **deve ser reaproveitada, não reescrita**:
 - `lib/ai/availability.ts` — `planMatrixRun()` e `describeSkips()` já pulam
   entrada sem chave e reportam o pulo. Entrada pulada nunca some em silêncio;
 - `lib/ai/config.ts` — `COMPARISON_MATRIX` com teto e piso por fornecedor;
-- `lib/ai/pricing.ts` + `costForEntry()` — custo, com free tier valendo zero;
+- `lib/ai/pricing.ts` — custo por modelo (a função que zerava o custo do free tier
+  foi removida como código morto; reintroduzi-la se o harness for feito);
 - `lib/agents/anchoring.ts` — a taxa de âncoras é a asserção mais importante, e
   agora ela mede o Pensante;
 - `lib/ai/bench.ts` — a tarefa de referência e `checkAnchors`. Ela mantém
@@ -476,7 +495,6 @@ Do autor, e valendo desde o começo:
 
 - **Não altere o contrato de `/api/generate`** além do header de chave e da
   trava de política de dados (que só age em free tier).
-- **Não mexa em `server/Legado/`.**
 - **Não preencha os templates de `x1`, `daily`, `planning`, `review`** — não há
   modelo para eles. Eles geram seção única e genérica, e isso é esperado. O que
   não pode é quebrar.

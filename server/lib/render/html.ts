@@ -39,8 +39,17 @@
  */
 import type { DocumentType } from '../documentTypes';
 import { TEMPLATES } from '../templates';
-import { specForSection, textoDeLacuna, type DocumentData, type Gap } from '../documentData';
+import {
+  rotuloDoPeriodo,
+  specForSection,
+  textoDeLacuna,
+  juntarFrases,
+  linhaDoEncaminhamento,
+  type DocumentData,
+  type Gap,
+} from '../documentData';
 import type { SectionSpec } from '../templates/types';
+import { ehRotuloDeSelf } from '../rotuloDeSelf';
 import { marcaDataUri, MARCA_CAPA_ALTURA_PT, MARCA_CAPA_LARGURA_PT } from './brand';
 import {
   CINZA_LINHA,
@@ -148,7 +157,7 @@ interface SectionRenderer {
    * carta. Só Tópicos discutidos, Decisões, Outcomes, Outputs e Conclusão
    * ganham cabeçalho.
    *
-   * É a única divergência deliberada entre o HTML e o markdown do Escritor: o
+   * É a única divergência deliberada entre o HTML e o markdown: o
    * markdown é rascunho de tela e mantém todos os cabeçalhos, para a pessoa
    * saber o que veio de onde. O que NÃO pode divergir — texto de lacuna e
    * regra de seção vazia — está preso por teste.
@@ -164,8 +173,8 @@ export const SECTION_RENDERERS: Record<string, SectionRenderer> = {
     // CAPA (ver `subtituloDaCapa`), e no modelo ele aparece uma vez só, sob o
     // título — repeti-lo aqui era divergência, não redundância inofensiva.
     render(data, gaps) {
-      const quando = data.metadata?.date;
-      return linhaRotulada('DATA', quando ? escapeHtml(quando) : lacunaDe(gaps, 'metadata.date'));
+      const quando = data.metadata?.date ? escapeHtml(data.metadata.date) : lacunaDe(gaps, 'metadata.date');
+      return quando ? linhaRotulada('DATA', quando) : '';
     },
   },
 
@@ -183,14 +192,20 @@ export const SECTION_RENDERERS: Record<string, SectionRenderer> = {
   participantes: {
     cabecalho: false,
     render(data, gaps) {
-      const itens = (data.participants ?? []).map((participante) => {
-        const cargo = participante.role
-          ? escapeHtml(participante.role)
-          : lacunaDe(gaps, `participants[${participante.name}].role`);
-        return `${escapeHtml(participante.name)} &ndash; ${cargo}`;
-      });
+      // "Você" não é nome e não entra; sem cargo, sai só o nome.
+      const itens = (data.participants ?? [])
+        .filter((participante) => !ehRotuloDeSelf(participante.name))
+        .map((participante) => {
+          const cargo = participante.role
+            ? escapeHtml(participante.role)
+            : lacunaDe(gaps, `participants[${participante.name}].role`);
+          const nome = cargo
+            ? `${escapeHtml(participante.name)} &ndash; ${cargo}`
+            : escapeHtml(participante.name);
+          return participante.atuacao ? `${nome}: ${escapeHtml(participante.atuacao)}` : nome;
+        });
       return [
-        p(`<span style="${S.rotulo}">PARTICIPANTES &ndash; CARGO:</span>`, S.rotuloLinha),
+        p(`<span style="${S.rotulo}">PARTICIPANTES:</span>`, S.rotuloLinha),
         lista(itens, false, S.itemParticipante),
       ]
         .filter(Boolean)
@@ -214,7 +229,7 @@ export const SECTION_RENDERERS: Record<string, SectionRenderer> = {
   decisoes: {
     cabecalho: true,
     // Só `text`. A concordância ancorada é evidência para a auditoria, não
-    // conteúdo da ata — e o markdown do Escritor também não a imprime.
+    // conteúdo da ata — e o markdown também não a imprime.
     render: (data) => lista((data.decisions ?? []).map((d) => escapeHtml(d.text))),
   },
 
@@ -228,23 +243,58 @@ export const SECTION_RENDERERS: Record<string, SectionRenderer> = {
     render: (data) => lista((data.outputs ?? []).map((o) => escapeHtml(o.text))),
   },
 
-  conclusao: {
+  resumo_executivo: {
     cabecalho: true,
-    render: (data) => (data.conclusion ? p(escapeHtml(data.conclusion.text)) : ''),
+    // Um parágrafo corrido: a prova é frase a frase nos dados, a leitura não.
+    render: (data) => {
+      const texto = juntarFrases((data.executiveSummary ?? []).map((a) => a.text));
+      return texto ? p(escapeHtml(texto)) : '';
+    },
+  },
+
+  encaminhamentos: {
+    cabecalho: true,
+    // Lista, e não tabela: o HTML é o que o import do Google Docs aceita. A
+    // tabela fica no PDF. Sem dono, a ação vai para o próprio rótulo.
+    render(data) {
+      const todos = data.actionItems ?? [];
+      const comDono = todos.filter((e) => e.responsavel).map((e) => escapeHtml(linhaDoEncaminhamento(e)));
+      const semDono = todos.filter((e) => !e.responsavel).map((e) => escapeHtml(linhaDoEncaminhamento(e)));
+      return [
+        comDono.length > 0 ? lista(comDono) : '',
+        semDono.length > 0 ? p(`<span style="${S.rotulo}">SEM RESPONSÁVEL DEFINIDO:</span>`, S.rotuloLinha) : '',
+        semDono.length > 0 ? lista(semDono) : '',
+      ]
+        .filter(Boolean)
+        .join('\n');
+    },
+  },
+
+  em_aberto: {
+    cabecalho: true,
+    render: (data) => lista((data.openPoints ?? []).map((a) => escapeHtml(a.text))),
+  },
+
+  pontos_de_atencao: {
+    cabecalho: true,
+    render: (data) => lista((data.openPoints ?? []).map((a) => escapeHtml(a.text))),
   },
 
   assinatura: {
     cabecalho: false,
     render(data, gaps) {
+      // Sem nome de quem assina não há fecho: um "Atenciosamente" sobre um
+      // campo vazio é pior que nenhum.
       const nome = data.signature?.name
         ? escapeHtml(data.signature.name)
         : lacunaDe(gaps, 'signature.name');
+      if (!nome) return '';
       const cargo = data.signature?.role
         ? escapeHtml(data.signature.role)
         : lacunaDe(gaps, 'signature.role');
       return [
         p('Atenciosamente,', `${S.corpo};margin-top:28pt`),
-        p(`${nome} &ndash; ${cargo}`),
+        p(cargo ? `${nome} &ndash; ${cargo}` : nome),
       ].join('\n');
     },
   },
@@ -266,11 +316,34 @@ export const SECTION_RENDERERS: Record<string, SectionRenderer> = {
             ? escapeHtml(par.resposta)
             : lacunaDe(gaps, `qa[${index}].resposta`);
           return [
-            linhaRotulada('Gente e gestão', pergunta),
-            linhaRotulada('Entrevistado', resposta),
+            ...(pergunta ? [linhaRotulada('Gente e gestão', pergunta)] : []),
+            ...(resposta ? [linhaRotulada('Entrevistado', resposta)] : []),
           ].join('\n');
         })
         .join(`\n<div style="margin:0 0 14pt 0"></div>\n`);
+    },
+  },
+
+  resumo_por_periodo: {
+    // Sem <h2> próprio, como o X1: o <h1> da abertura já diz o que é o
+    // documento. Cada trecho abre com a linha em negrito "1. Título (intervalo)"
+    // e segue com o resumo em parágrafos.
+    cabecalho: false,
+    render(data) {
+      return (data.periods ?? [])
+        .map((periodo, index) => {
+          const intervalo = rotuloDoPeriodo(periodo);
+          const titulo = `${index + 1}. ${periodo.title}${intervalo ? ` (${intervalo})` : ''}`;
+          const paragrafos = periodo.summary
+            .split(/\n+/)
+            .filter((linha) => linha.trim())
+            .map((linha) => p(escapeHtml(linha)));
+          return [
+            p(`<span style="${S.rotulo}">${escapeHtml(titulo)}</span>`, S.rotuloLinha),
+            ...paragrafos,
+          ].join('\n');
+        })
+        .join('\n');
     },
   },
 };
@@ -282,17 +355,13 @@ const GENERIC_RENDERER: SectionRenderer = {
 };
 
 /**
- * O marcador do campo, ou um marcador genérico quando a lacuna não chegou.
- *
- * O fallback existe porque campo ausente sem lacuna correspondente é possível
- * — `askWhenMissing` vazio faz a seção degradar em silêncio de propósito — e
- * ali o documento ainda precisa mostrar que falta algo. Deixar o campo vazio
- * diria ao leitor que a reunião não tinha aquilo, e não que não se conseguiu
- * determinar.
+ * O marcador do campo — só quando a lacuna é uma dúvida EXTREMA. Qualquer
+ * outro campo ausente simplesmente não entra no documento (`null`): um
+ * "[A preencher: …]" num documento que o cliente lê é defeito, não aviso.
  */
-function lacunaDe(gaps: Lacunas, field: string): string {
+function lacunaDe(gaps: Lacunas, field: string): string | null {
   const gap = doCampo(gaps, field);
-  return gap ? lacuna(gap.question) : `<span style="${S.lacuna}">${escapeHtml(textoDeLacuna(field))}</span>`;
+  return gap?.extrema === true ? lacuna(gap.question) : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -306,13 +375,6 @@ export const RODAPE = [
   'Centro Integrado de tecnologia da Informação',
   'Centro de Informática, Universidade Federal de Pernambuco- CIn, UFPE',
 ];
-
-/** Esta seção ganha `<h2>` no HTML, ou título de seção no PDF? Exportado
- *  pelo mesmo motivo de `RODAPE` — `pdf.ts` precisa da mesma resposta, e
- *  duas listas hardcoded divergem cedo ou tarde. */
-export function temCabecalho(sectionId: string): boolean {
-  return (SECTION_RENDERERS[sectionId] ?? GENERIC_RENDERER).cabecalho;
-}
 
 export interface RenderHtmlInput {
   documentType: DocumentType;
@@ -349,7 +411,7 @@ export function renderHtml(input: RenderHtmlInput): string {
       const spec = specForSection(section);
       const renderer = SECTION_RENDERERS[section.id] ?? GENERIC_RENDERER;
 
-      // A MESMA regra de vazio que o Escritor usa (`serialize` devolvendo
+      // A MESMA regra de vazio que o markdown usa (`serialize` devolvendo
       // null). Duas definições de "vazio" fariam o HTML e o markdown
       // discordarem sobre quais seções existem.
       const vazia = spec.serialize(input.data, section.id) === null;
@@ -459,15 +521,12 @@ function blocoDeAbertura(titulo: string, subtitulo: string): string {
  *  não na página de conteúdo. Devolve '' pros tipos de documento sem o
  *  conceito de projeto/data. */
 function subtituloDaCapa(data: DocumentData, gaps: Lacunas): string {
-  const projeto = data.metadata?.projectName;
-  const quando = data.metadata?.date;
-  return p(
-    [
-      projeto ? escapeHtml(projeto) : lacunaDe(gaps, 'metadata.projectName'),
-      quando ? escapeHtml(quando) : lacunaDe(gaps, 'metadata.date'),
-    ].join(' - '),
-    S.subtitulo,
-  );
+  const projeto = data.metadata?.projectName
+    ? escapeHtml(data.metadata.projectName)
+    : lacunaDe(gaps, 'metadata.projectName');
+  const quando = data.metadata?.date ? escapeHtml(data.metadata.date) : lacunaDe(gaps, 'metadata.date');
+  const partes = [projeto, quando].filter((parte): parte is string => parte !== null);
+  return partes.length > 0 ? p(partes.join(' - '), S.subtitulo) : '';
 }
 
 /** Linha fina cinza, texto preto — no modelo o cinza é só do traço. */
@@ -483,12 +542,14 @@ function rodape(): string {
  * Lacunas que nenhum campo colocou no texto — tipicamente as de afirmação
  * descartada pelo Auditor, que não têm um campo próprio para ocupar.
  *
- * Vão para o fim da seção em vez de sumirem. Mesma decisão do Escritor: fim
+ * Vão para o fim da seção em vez de sumirem. Mesma decisão do markdown: fim
  * é pior que o lugar certo, e lacuna colada no parágrafo errado vira
  * afirmação errada.
  */
 function pendenciasSoltas(gaps: Gap[], jaRenderizado: string): string {
-  const soltas = gaps.filter((gap) => !jaRenderizado.includes(escapeHtml(gap.question)));
+  const soltas = gaps.filter(
+    (gap) => gap.extrema === true && !jaRenderizado.includes(escapeHtml(gap.question)),
+  );
   if (soltas.length === 0) return '';
   return soltas.map((gap) => p(lacuna(gap.question))).join('\n');
 }

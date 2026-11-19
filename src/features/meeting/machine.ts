@@ -18,6 +18,7 @@ import type {
   AccountBoundaryState,
   CaptionChunk,
   LiveSegment,
+  MeetingRecord,
   MeetingSessionState,
   MeetingState,
   Participant,
@@ -51,12 +52,20 @@ export type MeetingEvent =
       titleAuto?: boolean;
       captionsEnabled: boolean;
       at: number;
+      /**
+       * A pessoa escolheu continuar esta gravação do histórico (da MESMA sala,
+       * conferido pelo background). A sessão reabre com o id, as falas e os
+       * participantes dela, e as falas novas entram nela.
+       */
+      continuar?: MeetingRecord;
     }
   | { type: 'CAPTIONS_STATE'; enabled: boolean }
   | { type: 'CAPTION_CHUNK'; chunk: CaptionChunk }
   | { type: 'PARTICIPANTS_UPDATED'; participants: Participant[] }
   | { type: 'ACCOUNT_BOUNDARY_UPDATED'; boundary: AccountBoundaryState }
   | { type: 'CAPTURE_DEGRADED'; at: number }
+  /** A captura voltou a ler as legendas. O par de CAPTURE_DEGRADED. */
+  | { type: 'CAPTURE_RECOVERED' }
   /** Grafias que eram a mesma pessoa viraram uma: corrige o já capturado. */
   | { type: 'SPEAKERS_MERGED'; renames: SpeakerRename[] }
   | { type: 'RECONNECT' }
@@ -186,6 +195,7 @@ function freshSession(
     droppedSegments: 0,
     reconnectCount: 0,
     captureDegradedCount: 0,
+    captureHealthy: true,
     lastChunkAt: null,
     wasDiscardedAndRestarted: false,
     captionLanguage: 'unknown',
@@ -196,6 +206,28 @@ function freshSession(
     phase: event.captionsEnabled ? 'recording' : 'captionsRequired',
     session,
   };
+}
+
+function retomarGravacao(
+  event: Extract<MeetingEvent, { type: 'MEETING_DETECTED' }>,
+  r: MeetingRecord,
+): MeetingState {
+  const session: MeetingSessionState = {
+    ...freshSession(event).session!,
+    meetingId: r.id,
+    title: r.title,
+    titleAuto: false,
+    startedAt: r.startedAt,
+    participants: r.participants ?? [],
+    speakersObserved: r.speakersObserved ?? [],
+    segments: r.segments,
+    sealedCaptionIds: collectCaptionIds(r.segments),
+    droppedSegments: r.metadata?.droppedSegments ?? 0,
+    reconnectCount: (r.metadata?.reconnectCount ?? 0) + 1,
+    captureDegradedCount: r.metadata?.captureDegradedCount ?? 0,
+    wasDiscardedAndRestarted: r.metadata?.wasDiscardedAndRestarted ?? false,
+  };
+  return { phase: event.captionsEnabled ? 'recording' : 'captionsRequired', session };
 }
 
 export function transition(state: MeetingState, event: MeetingEvent): MeetingState {
@@ -234,6 +266,14 @@ export function transition(state: MeetingState, event: MeetingEvent): MeetingSta
             reconnectCount: current.reconnectCount + 1,
           },
         };
+      }
+
+      // A pessoa escolheu continuar uma gravação guardada desta sala: a sessão
+      // reabre sobre ela, com o mesmo id (o histórico é atualizado, não
+      // duplicado). Os captionIds antigos ficam selados: legenda nova nunca se
+      // funde a uma fala de ontem.
+      if (event.continuar && event.continuar.meetingCode === event.meetingCode) {
+        return retomarGravacao(event, event.continuar);
       }
 
       // Qualquer outro cenário — idle, pós-reunião antiga, ou até uma sala
@@ -294,6 +334,9 @@ export function transition(state: MeetingState, event: MeetingEvent): MeetingSta
         lastChunkAt: event.chunk.atMs,
         captionLanguage,
         chunksSinceLanguageCheck,
+        // Trecho aplicado é a prova de que a captura lê as legendas. Se havia
+        // interrupção registrada, ela acabou aqui.
+        captureHealthy: true,
       });
     }
 
@@ -322,7 +365,20 @@ export function transition(state: MeetingState, event: MeetingEvent): MeetingSta
       if (!isActive(state) || state.session === null) return state;
       return withSession(state, {
         captureDegradedCount: (state.session.captureDegradedCount ?? 0) + 1,
+        captureHealthy: false,
       });
+    }
+
+    /**
+     * A captura voltou. Chega por evento próprio, e não só pelo trecho
+     * seguinte, porque a volta pode ser silenciosa: o observer se recolou e a
+     * sala ficou em silêncio de verdade. Esperar um chunk deixaria a interface
+     * avisando de uma interrupção que já passou.
+     */
+    case 'CAPTURE_RECOVERED': {
+      if (!isActive(state) || state.session === null) return state;
+      if (state.session.captureHealthy !== false) return state;
+      return withSession(state, { captureHealthy: true });
     }
 
     /**

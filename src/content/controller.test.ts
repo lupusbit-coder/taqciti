@@ -1,4 +1,4 @@
-﻿/**
+/**
  * O PORTÃO DA CAPTURA: nada é registrado antes de a pessoa dizer que sim.
  *
  * Este é o teste que impede a regressão mais cara do produto — a extensão
@@ -53,6 +53,14 @@ function fakeProvider() {
     /** A sala já estava aberta quando o script entrou (reload da aba). */
     jaEstavaNaSala(sala = SALA) {
       detectada = sala;
+    },
+    /**
+     * O Meet re-renderizou e, por alguns quadros, `detectMeeting()` não
+     * reconhece a sala — o botão de sair sumiu da árvore e voltará. A reunião
+     * NÃO acabou: nenhum `onMeetingEnd` é disparado.
+     */
+    somePorUmInstante() {
+      detectada = null;
     },
   };
 }
@@ -163,6 +171,37 @@ describe('detectar uma reunião não é começar a registrá-la', () => {
   });
 
   /*
+   * A REGRESSÃO que fazia o "sim" não ligar nada.
+   *
+   * Quem responde na sidebar responde de outro contexto: a decisão chega aqui
+   * pelo storage, e nesse instante o `detectMeeting()` pode responder `null`
+   * por alguns quadros, porque o Meet re-renderiza a sala inteira com
+   * frequência. O controller guardava a reunião pendente para exatamente esse
+   * caso — e a apagava uma linha ANTES de escolher o alvo, então o alvo era
+   * sempre `null` e a captura não começava. A pergunta sumia das duas
+   * superfícies, nada era gravado, e não havia erro nenhum para investigar.
+   */
+  it('o aceite liga a captura mesmo se o Meet não estiver reconhecível naquele instante', async () => {
+    const fake = fakeProvider();
+    await montarControlador(fake);
+
+    fake.entrarNaSala();
+    await assentar();
+
+    const { lerReuniaoDetectada, guardarDecisao } = await import(
+      '@/features/meeting/consent'
+    );
+    const anunciada = await lerReuniaoDetectada();
+    expect(anunciada?.participacaoId).toBeTruthy();
+
+    fake.somePorUmInstante();
+    await guardarDecisao(anunciada!.participacaoId, 'aceito');
+    await assentar();
+
+    expect(enviadas(sendMessage)).toContain('meet/detected');
+  });
+
+  /*
    * O mesmo link, outra reunião. A participação anterior foi FECHADA há muito,
    * então entrar de novo abre uma nova — e a autorização antiga não acompanha.
    */
@@ -189,5 +228,69 @@ describe('detectar uma reunião não é começar a registrá-la', () => {
     const anunciada = await lerReuniaoDetectada();
     expect(anunciada?.participacaoId).toBeTruthy();
     expect(anunciada?.participacaoId).not.toBe(anterior.id);
+  });
+});
+
+describe('o portão não morre na primeira falha do storage de sessão', () => {
+  /*
+   * Abrir o navegador com a reunião restaurada: a aba do Meet roda antes de o
+   * service worker liberar a área de sessão, e a primeira leitura é recusada.
+   * Antes, a sala ficava marcada como anunciada e a pergunta nunca aparecia.
+   */
+  it('a primeira leitura recusada não impede a pergunta de aparecer', async () => {
+    const sessao = (globalThis as unknown as { chrome: { storage: { session: { get: ReturnType<typeof vi.fn> } } } })
+      .chrome.storage.session;
+    const fake = fakeProvider();
+    await montarControlador(fake);
+
+    const original = sessao.get.getMockImplementation()!;
+    let recusas = 1;
+    sessao.get.mockImplementation(async (...args: unknown[]) => {
+      if (recusas-- > 0) throw new Error('Access to storage is not allowed from this context.');
+      return (original as (...a: unknown[]) => unknown)(...args);
+    });
+    fake.entrarNaSala();
+    await assentar(1_400);
+
+    const { STORAGE_KEYS } = await import('@/shared/config/constants');
+    const anunciada = (await (sessao.get as unknown as (k: string) => Promise<unknown>)(
+      STORAGE_KEYS.pendingMeeting,
+    )) as Record<string, { meetingCode?: string }>;
+    expect(anunciada[STORAGE_KEYS.pendingMeeting]?.meetingCode).toBe(SALA.meetingCode);
+    // E continua sem captura: a pergunta apareceu, ninguém respondeu.
+    expect(enviadas(sendMessage)).not.toContain('meet/detected');
+  });
+});
+
+describe('continuar a gravação desta sala', () => {
+  it('a pergunta anuncia a gravação anterior, e "continuar" pede ao background ESSA gravação', async () => {
+    const { STORAGE_KEYS } = await import('@/shared/config/constants');
+    const chromeGlobal = (globalThis as unknown as { chrome: { storage: { local: { set: (v: unknown) => Promise<void> }; session: { get: (k: string) => Promise<Record<string, unknown>> } } } }).chrome;
+    await chromeGlobal.storage.local.set({
+      [STORAGE_KEYS.history]: [
+        {
+          id: 'rec-1', meetingCode: SALA.meetingCode, title: 'Planning de ontem', startedAt: 1, endedAt: 2, durationSeconds: 1,
+          participants: [], segments: [{ captionId: 'c', speaker: 'Ana', text: 'oi', startOffsetMs: 0, endOffsetMs: 1 }],
+          status: 'ready', metadata: { capturedCaptions: true, droppedSegments: 0, reconnectCount: 0, wasDiscardedAndRestarted: false },
+        },
+      ],
+    });
+    const fake = fakeProvider();
+    await montarControlador(fake);
+    fake.entrarNaSala();
+    await assentar();
+
+    const anunciada = (await chromeGlobal.storage.session.get(STORAGE_KEYS.pendingMeeting))[STORAGE_KEYS.pendingMeeting] as {
+      participacaoId: string;
+      anterior?: { id: string };
+    };
+    expect(anunciada.anterior?.id).toBe('rec-1');
+
+    const { guardarDecisao } = await import('@/features/meeting/consent');
+    await guardarDecisao(anunciada.participacaoId, 'continuar:rec-1');
+    await assentar();
+
+    const detectada = sendMessage.mock.calls.map((c) => c[0] as { type: string; continuarId?: string }).find((m) => m.type === 'meet/detected');
+    expect(detectada?.continuarId).toBe('rec-1');
   });
 });
