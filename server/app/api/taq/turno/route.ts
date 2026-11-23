@@ -13,6 +13,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { corsHeaders } from '@/lib/apiGuard';
 import { autorizarIa } from '@/lib/guardaDeIa';
+import { adaptadorAnthropic } from '@/lib/taq/anthropic';
 import { atenderTurno } from '@/lib/taq/atender';
 import { adaptadorGemini } from '@/lib/taq/gemini';
 import { adaptadorGroq } from '@/lib/taq/groq';
@@ -41,7 +42,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const { status, corpo: resposta } = await atenderTurno(corpo, {
     // `groq` é temporário — ver o cabeçalho de lib/taq/groq.ts.
-    adaptadores: { google: adaptadorGemini, groq: adaptadorGroq },
+    adaptadores: { anthropic: adaptadorAnthropic, google: adaptadorGemini, groq: adaptadorGroq },
     sinal: request.signal,
   });
   return NextResponse.json(resposta, { status, headers });

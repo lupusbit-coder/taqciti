@@ -13,11 +13,12 @@
  * O que É reaproveitado: o formato `provedor:modelo` (`parseOverride`), o nome
  * da variável da chave por provedor e a política de dados da chave.
  *
- * ── Dois provedores, por enquanto ────────────────────────────────────────────
+ * ── Três provedores ──────────────────────────────────────────────────────────
  *
- * Google (`gemini.ts`) e, temporariamente, Groq (`groq.ts`) têm adaptador com
- * ferramentas. Escolher outro provedor em `TAQ_ORQUESTRADOR` não é erro de
- * sintaxe: é uma pendência, dita como tal.
+ * Anthropic (`anthropic.ts`, desde 23/11/2026: `TAQ_ORQUESTRADOR=anthropic:<modelo>`;
+ * o apelido `claude:` não vale no formato com modelo), Google (`gemini.ts`) e, temporariamente, Groq
+ * (`groq.ts`) têm adaptador com ferramentas. Escolher outro provedor em
+ * `TAQ_ORQUESTRADOR` não é erro de sintaxe: é uma pendência, dita como tal.
  *
  * O modelo padrão foi conferido na lista de modelos da chave configurada em
  * 2026-09-22 (`models.list`): `gemini-3.5-flash` está disponível e é o mesmo que
@@ -40,6 +41,7 @@ export type ProvedorDoTaq = ProviderId | 'groq';
 
 /** Provedores com adaptador de ferramentas implementado, e a variável da chave de cada um. */
 const CHAVE_DO_ADAPTADOR: Partial<Record<ProvedorDoTaq, string>> = {
+  anthropic: API_KEY_ENV_VAR.anthropic,
   google: API_KEY_ENV_VAR.google,
   groq: 'GROQ_API_KEY',
 };
@@ -84,7 +86,7 @@ export function resolverConfiguracao(env: NodeJS.ProcessEnv = process.env): Conf
   if (!variavel) {
     pendencias.push(
       `O provedor "${provedor}" ainda não tem adaptador com ferramentas para o Taq. ` +
-        `Use ${VARIAVEL_DO_MODELO}=google:<modelo> ou groq:<modelo>.`,
+        `Use ${VARIAVEL_DO_MODELO}=anthropic:<modelo>, google:<modelo> ou groq:<modelo>.`,
     );
   } else {
     if (!env[variavel]?.trim()) {

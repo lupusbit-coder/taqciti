@@ -307,7 +307,10 @@ const APELIDO_DE_PROVEDOR: Record<string, ProviderId> = {
 
 /** O modelo usado quando só o PROVEDOR foi escolhido, sem dizer qual modelo. */
 const MODELO_PADRAO_POR_PROVEDOR: Record<ProviderId, string> = {
-  anthropic: 'claude-sonnet-5',
+  // Era `claude-sonnet-5` (geração anterior); desde 23/11/2026 o padrão é o
+  // Opus atual. Leitor e Auditor podem ser escolhidos à parte (DOCCITI_LEITOR,
+  // DOCCITI_AUDITOR).
+  anthropic: 'claude-opus-5-5',
   // Sem modelo decidido ainda — ver o README da fase e a lista de pendências.
   openai: 'gpt-4.1-mini',
   google: 'gemini-3.5-flash',

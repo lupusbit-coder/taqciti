@@ -48,12 +48,24 @@ describe('configuração do Taq', () => {
     expect(config.pendencias.length).toBeGreaterThan(0);
   });
 
+  // A Anthropic ganhou adaptador em 23/11/2026; OpenAI continua sem.
   it('provedor sem adaptador de ferramentas vira pendência dita', () => {
     const config = resolverConfiguracao({
-      TAQ_ORQUESTRADOR: 'anthropic:claude-sonnet-5',
-      ANTHROPIC_API_KEY: 'x',
+      TAQ_ORQUESTRADOR: 'openai:gpt-5',
+      OPENAI_API_KEY: 'x',
     } as unknown as NodeJS.ProcessEnv);
     expect(config.pendencias.join(' ')).toMatch(/ainda não tem adaptador/);
+  });
+
+  it('Anthropic é aceita, e sem a chave a pendência nomeia ANTHROPIC_API_KEY', () => {
+    const semChave = resolverConfiguracao({ TAQ_ORQUESTRADOR: 'anthropic:claude-opus-5-5' } as unknown as NodeJS.ProcessEnv);
+    expect(semChave.provedor).toBe('anthropic');
+    expect(semChave.pendencias.join(' ')).toMatch(/ANTHROPIC_API_KEY/);
+    const pronto = resolverConfiguracao({
+      TAQ_ORQUESTRADOR: 'anthropic:claude-opus-5-5',
+      ANTHROPIC_API_KEY: 'x',
+    } as unknown as NodeJS.ProcessEnv);
+    expect(pronto).toMatchObject({ provedor: 'anthropic', modelo: 'claude-opus-5-5', pendencias: [] });
   });
 
   it('modelo configurável por TAQ_ORQUESTRADOR', () => {

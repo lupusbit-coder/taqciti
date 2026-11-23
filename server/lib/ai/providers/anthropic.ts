@@ -24,6 +24,15 @@ import { parseRetryAfter, requireApiKey, runCompletion, type RawInvocation } fro
 
 /** Modelos que aceitam `thinking: { type: 'adaptive' }` e `output_config.effort`. */
 const ADAPTIVE_THINKING_MODELS = new Set([
+  // A geração atual (conferida em 23/11/2026): raciocínio sempre ligado nos
+  // três primeiros, e `effort` aceito em todos.
+  'claude-fable-5-2',
+  'claude-mythos-5-2',
+  'claude-fable-5-1',
+  'claude-mythos-5-1',
+  'claude-opus-5-5',
+  'claude-sonnet-5-5',
+  'claude-haiku-5-5',
   'claude-fable-5',
   'claude-mythos-5',
   'claude-opus-5',
@@ -35,6 +44,13 @@ const ADAPTIVE_THINKING_MODELS = new Set([
 ]);
 
 const CONTEXT_WINDOWS: Record<string, number> = {
+  'claude-fable-5-2': 1_000_000,
+  'claude-mythos-5-2': 1_000_000,
+  'claude-fable-5-1': 1_000_000,
+  'claude-mythos-5-1': 1_000_000,
+  'claude-opus-5-5': 1_000_000,
+  'claude-sonnet-5-5': 1_000_000,
+  'claude-haiku-5-5': 1_000_000,
   'claude-fable-5': 1_000_000,
   'claude-mythos-5': 1_000_000,
   'claude-opus-5': 1_000_000,
@@ -67,8 +83,8 @@ function client(): Anthropic {
   return cached;
 }
 
-/** Reconhece sobrecarga — `overloaded_error` (529) e 5xx transitório. */
-function asOverloaded(model: string, error: unknown): OverloadedError | undefined {
+/** Reconhece sobrecarga — `overloaded_error` (529) e 5xx transitório. Também usado pelo Taq. */
+export function asOverloaded(model: string, error: unknown): OverloadedError | undefined {
   const status = (error as { status?: unknown })?.status;
   const isOverloaded =
     error instanceof Anthropic.InternalServerError ||
@@ -84,8 +100,8 @@ function asOverloaded(model: string, error: unknown): OverloadedError | undefine
   );
 }
 
-/** Reconhece 429 no formato que o SDK da Anthropic levanta. */
-function asRateLimit(model: string, error: unknown): RateLimitError | undefined {
+/** Reconhece 429 no formato que o SDK da Anthropic levanta. Também usado pelo Taq. */
+export function asRateLimit(model: string, error: unknown): RateLimitError | undefined {
   if (!(error instanceof Anthropic.RateLimitError)) return undefined;
   const headers = (error as { headers?: unknown }).headers;
   const retryAfter =

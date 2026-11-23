@@ -50,6 +50,13 @@ export interface ModelPrice extends Rates {
  * que têm faixa alta acima de 200k — ver as tabelas abaixo.
  */
 const ANTHROPIC_PRICING: Record<string, ModelPrice> = {
+  // Geração atual, conferida em 23/11/2026 (tabela de modelos da Anthropic).
+  // A leitura de cache NÃO segue 0.1× em todos: Opus 5.5 e Fable 5.2 cobram
+  // $0.20. Haiku 5.5: preço de prompts até 100k tokens ($0.50/$2.50 acima).
+  'claude-fable-5-2': { inputPerMTok: 8, outputPerMTok: 40, cachedInputPerMTok: 0.2, cacheWriteMultiplier: 1.25 },
+  'claude-opus-5-5': { inputPerMTok: 4, outputPerMTok: 20, cachedInputPerMTok: 0.2, cacheWriteMultiplier: 1.25 },
+  'claude-sonnet-5-5': { inputPerMTok: 2, outputPerMTok: 10, cachedInputPerMTok: 0.1, cacheWriteMultiplier: 1.25 },
+  'claude-haiku-5-5': { inputPerMTok: 0.1, outputPerMTok: 0.5, cachedInputPerMTok: 0.01, cacheWriteMultiplier: 1.25 },
   'claude-opus-5': { inputPerMTok: 5, outputPerMTok: 25, cachedInputPerMTok: 0.5, cacheWriteMultiplier: 1.25 },
   'claude-opus-4-8': { inputPerMTok: 5, outputPerMTok: 25, cachedInputPerMTok: 0.5, cacheWriteMultiplier: 1.25 },
   // $2/$10 anunciado como preço introdutório até 2026-08-31 VIROU o preço
