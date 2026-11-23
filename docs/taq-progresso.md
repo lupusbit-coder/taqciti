@@ -141,13 +141,21 @@ Gemini paga com política privada.
 
 As duas cotas diárias do Groq (200 mil tokens por modelo) acabaram de novo.
 
+### Rodada de 23/11/2026 (Gemini `gemini-3.5-flash`, chave gratuita, política `private` local)
+
+Duas execuções de `trabalho.live.test.ts`, depois do `verify-ao-vivo`. Na primeira,
+3 de 9 passaram; na segunda, 2 de 9 (captura entre elas). Todas as falhas da segunda
+são `limite_do_provedor` ("A cota diária do provedor acabou"), não comportamento do
+Taq. **Horário continua não validado ao vivo**, junto com a revalidação de rascunho e
+decisão revista: rodar de novo com cota livre, ou com chave paga.
+
 ## Verificação visual
 
 `scripts/verify-ao-vivo.cjs` (Meet simulado, com a extensão e o servidor de verdade;
-existe desde 28/10/2026) **nunca foi executado**: o cartão de apoio e o "O que falta
-fechar" ao vivo seguem não verificados. O trecho do consentimento foi reescrito em
-11/11/2026 para responder pela sidebar (a cápsula ficou com shadow root `closed`) e
-também não foi executado: exige chave de IA.
+existe desde 28/10/2026) **rodou verde em 23/11/2026**: consentimento pela sidebar,
+14 falas capturadas e salvas, cartão de apoio e "O que falta fechar" lidos pelo
+modelo, injeção sem efeito. Resultado em `docs/verification/ao-vivo/` e detalhes em
+`docs/segundo-cerebro.md`.
 
 `scripts/verify-trabalho.cjs` (Edge, perfil isolado, dados `[TESTE]`, sem IA)
 → `docs/verification/trabalho/`: cartões na HOME e na sidebar, página

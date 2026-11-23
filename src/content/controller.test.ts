@@ -262,6 +262,75 @@ describe('o portão não morre na primeira falha do storage de sessão', () => {
   });
 });
 
+/*
+ * As legendas são da extensão, SEMPRE, enquanto esta aba captura (decisão do
+ * usuário, 23/11/2026). Antes o religar só valia antes da primeira legenda
+ * (`captionsRequired`) e desistia depois de 6 tentativas: legenda desligada no
+ * meio da gravação deixava o resto da reunião sem transcrição, em silêncio.
+ */
+describe('o vigia mantém as legendas ligadas durante a captura', () => {
+  async function gravando() {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] });
+    const { transition } = await import('@/features/meeting/machine');
+    const recording = transition(
+      { phase: 'idle', session: null },
+      {
+        type: 'MEETING_DETECTED', meetingId: 'm-1', meetingCode: SALA.meetingCode, provider: 'fake',
+        tabId: null, title: SALA.title, captionsEnabled: true, at: Date.now(),
+      },
+    );
+    sendMessage.mockImplementation(async (m: ExtensionMessage) =>
+      m.type === 'meet/detected' ? recording : { phase: 'idle', session: null },
+    );
+    const { abrirParticipacao, guardarDecisao } = await import('@/features/meeting/consent');
+    const participacao = await abrirParticipacao(SALA.meetingCode, Date.now());
+    await guardarDecisao(participacao.id, 'aceito');
+
+    const fake = fakeProvider();
+    let ligadas = true;
+    const ligar = vi.fn(() => true);
+    fake.provider.areCaptionsEnabled = () => ligadas;
+    fake.provider.requestEnableCaptions = ligar;
+    fake.jaEstavaNaSala();
+    const controller = await montarControlador(fake);
+    await assentar();
+    expect(enviadas(sendMessage)).toContain('meet/detected');
+    return { controller, ligar, desligar: () => { ligadas = false; } };
+  }
+
+  it('legenda ligada não é tocada', async () => {
+    const { controller, ligar } = await gravando();
+    vi.advanceTimersByTime(10_000);
+    expect(ligar).not.toHaveBeenCalled();
+    controller.stop();
+    vi.useRealTimers();
+  });
+
+  it('legenda desligada no meio da gravação é religada', async () => {
+    const { controller, ligar, desligar } = await gravando();
+    desligar();
+    vi.advanceTimersByTime(1_600);
+    expect(ligar).toHaveBeenCalled();
+    controller.stop();
+    vi.useRealTimers();
+  });
+
+  it('depois da rajada o vigia não desiste: segue tentando, mais devagar', async () => {
+    const { controller, ligar, desligar } = await gravando();
+    desligar();
+    vi.advanceTimersByTime(15_000);
+    const depoisDaRajada = ligar.mock.calls.length;
+    expect(depoisDaRajada).toBeGreaterThanOrEqual(6);
+    vi.advanceTimersByTime(60_000);
+    const novas = ligar.mock.calls.length - depoisDaRajada;
+    // Uma a cada 10 s: nem desistiu, nem clica a cada poll.
+    expect(novas).toBeGreaterThanOrEqual(5);
+    expect(novas).toBeLessThanOrEqual(7);
+    controller.stop();
+    vi.useRealTimers();
+  });
+});
+
 describe('continuar a gravação desta sala', () => {
   it('a pergunta anuncia a gravação anterior, e "continuar" pede ao background ESSA gravação', async () => {
     const { STORAGE_KEYS } = await import('@/shared/config/constants');

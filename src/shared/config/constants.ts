@@ -212,8 +212,10 @@ export const MEET_POLL_INTERVAL_MS = 1500;
 /** Polls consecutivos sem UI de chamada antes de considerar a reunião encerrada. */
 export const MEET_END_CONFIRM_POLLS = 2;
 
-/** Tentativas de ligar as legendas automaticamente antes de pedir ajuda ao usuário. */
+/** Rajada de tentativas de ligar as legendas, uma por poll, no começo. */
 export const AUTO_CAPTIONS_MAX_ATTEMPTS = 6;
+/** Depois da rajada o vigia não desiste: tenta de novo neste ritmo, sem fim. */
+export const AUTO_CAPTIONS_INTERVALO_LENTO_MS = 10_000;
 
 /**
  * Intervalo mínimo entre varreduras da região de legendas. O Meet reescreve

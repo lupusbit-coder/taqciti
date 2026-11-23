@@ -19,6 +19,7 @@ import type {
 } from '@/shared/types/domain';
 import { DEFAULT_PANEL_PREFS, IDLE_STATE } from '@/shared/types/domain';
 import {
+  AUTO_CAPTIONS_INTERVALO_LENTO_MS,
   AUTO_CAPTIONS_MAX_ATTEMPTS,
   MEET_POLL_INTERVAL_MS,
 } from '@/shared/config/constants';
@@ -317,7 +318,8 @@ export class ContentController {
       }),
 
       this.provider.onCaptionsStateChange((enabled) => {
-        if (enabled) this.stopCaptionRetries();
+        // O vigia de legendas NÃO para aqui: com a legenda ligada ele só
+        // observa, e é ele que religa se ela cair no meio da gravação.
         void sendMessage({ type: 'meet/captions', enabled });
       }),
 
@@ -641,6 +643,17 @@ export class ContentController {
 
   // ---------- legendas automáticas ----------
 
+  /*
+   * As legendas são da extensão, SEMPRE, enquanto esta aba captura (decisão do
+   * usuário, 23/11/2026). Antes o religar só valia em `captionsRequired` e
+   * desistia depois de AUTO_CAPTIONS_MAX_ATTEMPTS: botão do Meet atrasado deixava
+   * a pessoa presa em "ative as legendas", e legenda desligada NO MEIO da
+   * gravação não era religada (a fase continua `recording`), perdendo o resto da
+   * reunião em silêncio. Agora é um vigia: rajada de tentativas no começo e, se
+   * não pegar, uma a cada AUTO_CAPTIONS_INTERVALO_LENTO_MS, sem desistir. Só
+   * clica com a legenda DESLIGADA (`requestEnableCaptions` confere antes), então
+   * legenda ligada não é tocada.
+   */
   private attemptEnableCaptions(): void {
     this.captionAttempts += 1;
     this.provider.requestEnableCaptions();
@@ -648,18 +661,20 @@ export class ContentController {
 
   private ensureCaptionRetries(): void {
     if (this.captionRetryTimer !== null) return;
-    this.attemptEnableCaptions();
-    this.captionRetryTimer = setInterval(() => {
-      if (
-        this.provider.areCaptionsEnabled() ||
-        this.captionAttempts >= AUTO_CAPTIONS_MAX_ATTEMPTS
-      ) {
-        this.stopCaptionRetries();
-        if (this.lastState) this.applyState(this.lastState);
+    let ultimaTentativa = 0;
+    const vigiar = () => {
+      if (this.provider.areCaptionsEnabled()) {
+        this.captionAttempts = 0;
         return;
       }
+      if (this.provider.detectMeeting() === null) return;
+      const rajada = this.captionAttempts < AUTO_CAPTIONS_MAX_ATTEMPTS;
+      if (!rajada && Date.now() - ultimaTentativa < AUTO_CAPTIONS_INTERVALO_LENTO_MS) return;
+      ultimaTentativa = Date.now();
       this.attemptEnableCaptions();
-    }, MEET_POLL_INTERVAL_MS);
+    };
+    vigiar();
+    this.captionRetryTimer = setInterval(vigiar, MEET_POLL_INTERVAL_MS);
   }
 
   private stopCaptionRetries(): void {
@@ -715,12 +730,12 @@ export class ContentController {
     const minha =
       state.session !== null && state.session.meetingCode === this.salaDaCaptura;
 
-    // Legendas: liga sozinho enquanto a reunião (DESTA aba) espera por elas.
-    // `detectMeeting` varre o DOM do Meet: só quando a resposta importa, e não
-    // a cada estado novo (que chega várias vezes por segundo gravando).
-    if (state.phase === 'captionsRequired' && minha && this.provider.detectMeeting() !== null) {
+    // Legendas: o vigia fica de pé enquanto ESTA aba captura (ver
+    // `ensureCaptionRetries`). Pausa é captura desligada de verdade: sem vigia.
+    // `detectMeeting` (varre o DOM) roda só dentro do vigia, no ritmo dele.
+    if (minha && (state.phase === 'captionsRequired' || state.phase === 'recording')) {
       this.ensureCaptionRetries();
-    } else if (state.phase !== 'captionsRequired') {
+    } else {
       this.stopCaptionRetries();
       this.captionAttempts = 0;
     }

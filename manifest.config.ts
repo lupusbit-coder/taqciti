@@ -3,7 +3,8 @@
  *
  * Ver `content_scripts` e `host_permissions` abaixo: o TaqCITi só age no Google
  * Meet (`https://meet.google.com/*`), e o painel persiste entre navegações
- * dentro dele porque o Chrome reinjeta o content script declarado.
+ * dentro dele porque o Chrome reinjeta o content script declarado. A permissão
+ * de host é `<all_urls>` só porque o print exige (ver `host_permissions`).
  */
 import { defineManifest } from '@crxjs/vite-plugin';
 import { loadEnv } from 'vite';
@@ -262,16 +263,24 @@ export default defineManifest({
   permissions: ['storage', 'sidePanel', 'scripting', 'identity', 'alarms'],
 
   /*
-   * Só o Meet. O painel só existe lá: `canInject` (background/injectPanel.ts)
-   * recusa qualquer outra aba, `tabs.query` e `tabs.sendMessage` só endereçam
-   * abas do Meet, e o `executeScript` da primeira execução só injeta nelas.
-   * Foi `<all_urls>` enquanto o painel viveu em toda página (plano de
-   * segurança, 21/10/2026: o content script já voltou ao Meet; as permissões
-   * de host acompanham). O servidor e as APIs do Google são chamados por
-   * `fetch` de páginas da extensão, com CORS do lado de lá — não dependem de
-   * `host_permissions`.
+   * `<all_urls>` por causa do PRINT (decisão do usuário, 23/11/2026).
+   *
+   * Em 21/10/2026 (plano de segurança) isto virou só o Meet, e o print quebrou
+   * sem ninguém ver: `chrome.tabs.captureVisibleTab` exige `<all_urls>` ou
+   * `activeTab` — permissão de host da própria página NÃO basta ("Either the
+   * '<all_urls>' or 'activeTab' permission is required", reproduzido no Edge).
+   * `activeTab` só vale se a pessoa abrir o TaqCiti pelo ícone naquela aba (pela
+   * cápsula, não), e a permissão opcional pedia um aviso no primeiro print: o
+   * usuário escolheu a permissão geral, sabendo do aviso amplo na instalação.
+   *
+   * O que continua restrito ao Meet é o que importa para a superfície de
+   * ataque: o content script (`content_scripts` acima), `canInject`
+   * (background/injectPanel.ts), `tabs.query`/`tabs.sendMessage` só para abas
+   * do Meet e a barreira de remetente (`background/remetente.ts`). O servidor e
+   * as APIs do Google são chamados por `fetch` de páginas da extensão, com CORS
+   * do lado de lá — não dependem disto.
    */
-  host_permissions: ['https://meet.google.com/*'],
+  host_permissions: ['<all_urls>'],
 
   // Conteúdo injetado só alcança arquivo da extensão declarado aqui — e o
   // loader do @crxjs faz `import()` dos chunks do painel, então eles precisam

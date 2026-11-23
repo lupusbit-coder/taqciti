@@ -162,6 +162,71 @@ describe('GoogleMeetProvider — captura degradada explícita', () => {
   });
 });
 
+/**
+ * O vigia da captura (`checkCaptureHealth`). Texto parado na região de legendas
+ * depois de 25 s não prova falha: a última legenda pode continuar visível no
+ * silêncio. Em 23/11/2026, no verify-ao-vivo, uma pausa assim virou "Erro na
+ * captura" com as 14 falas já capturadas. A regra: relê a região; só é falha se a
+ * releitura achar fala que o observer perdeu, ou se a região for outra.
+ */
+describe('GoogleMeetProvider — vigia da captura não confunde silêncio com falha', () => {
+  const LEGENDA = `
+    <div role="region" aria-label="Legendas">
+      <div class="nMcdL"><span class="KcIKyf">Ana Souza</span><div class="bh44bd">Fica combinado o envio na sexta.</div></div>
+    </div>`;
+
+  type Internos = {
+    captionRegion: Element | null;
+    captionsOn: boolean;
+    captureExpectedSince: number;
+    scanCaptions(): void;
+    checkCaptureHealth(): void;
+  };
+
+  function comLegendaJaLida() {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-11-23T10:00:00-03:00'));
+    render(LEGENDA);
+    const provider = new GoogleMeetProvider();
+    const health: Array<[boolean, string | undefined]> = [];
+    const chunks: string[] = [];
+    provider.onCaptureHealth((healthy, reason) => health.push([healthy, reason]));
+    provider.onCaptionChunk((chunk) => chunks.push(chunk.text));
+    const internos = provider as unknown as Internos;
+    internos.captionRegion = document.querySelector('[role="region"]');
+    internos.captionsOn = true;
+    internos.captureExpectedSince = Date.now();
+    internos.scanCaptions();
+    return { internos, health, chunks };
+  }
+
+  it('legenda já capturada parada na tela é silêncio, não falha', () => {
+    const { internos, health, chunks } = comLegendaJaLida();
+    expect(chunks).toEqual(['Fica combinado o envio na sexta.']);
+    vi.advanceTimersByTime(60_000);
+    internos.checkCaptureHealth();
+    expect(health).not.toContainEqual([false, 'stall']);
+    expect(chunks).toHaveLength(1);
+  });
+
+  it('fala que o observer perdeu é capturada na releitura e conta como falha', () => {
+    const { internos, health, chunks } = comLegendaJaLida();
+    vi.advanceTimersByTime(30_000);
+    document.querySelector('.bh44bd')!.textContent = 'Fica combinado o envio na sexta. E a revisão na segunda.';
+    internos.checkCaptureHealth();
+    expect(chunks.at(-1)).toContain('revisão na segunda');
+    expect(health).toContainEqual([false, 'stall']);
+  });
+
+  it('região trocada pelo Meet continua sendo falha', () => {
+    const { internos, health } = comLegendaJaLida();
+    internos.captionRegion = document.createElement('div');
+    vi.advanceTimersByTime(30_000);
+    internos.checkCaptureHealth();
+    expect(health).toContainEqual([false, 'stall']);
+  });
+});
+
 describe('GoogleMeetProvider — o fim da chamada', () => {
   const EM_CHAMADA = '<button aria-label="Sair da chamada">call_end</button>';
 

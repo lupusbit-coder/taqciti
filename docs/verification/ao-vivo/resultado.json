@@ -1,0 +1,34 @@
+{
+  "verificacoes": {
+    "login_do_google_fechado": 1,
+    "modo_gravado": "discreto",
+    "capsula_presente": true,
+    "pergunta_respondida": true,
+    "rede": [
+      "/api/taq/estado  -> 200 em 245 ms",
+      "/api/taq/turno intervencao-v1 -> 200 em 5062 ms",
+      "/api/taq/turno estado-v1 -> 200 em 5058 ms",
+      "/api/taq/estado  -> 200 em 17 ms"
+    ],
+    "sidebar_tem_a_reuniao": true,
+    "chaves_da_sessao": [
+      "taq:meetingConsent",
+      "taq:panelTabs",
+      "taq:participation",
+      "taq:pendingMeeting",
+      "taq:state"
+    ],
+    "assistente_conectado": true,
+    "resposta_do_estado": "{\"tipo\":\"ferramentas\",\"texto\":\"\",\"chamadas\":[{\"id\":\"call_13838253232297351861\",\"nome\":\"atualizar_pontos\",\"argumentos\":{\"pontos\":[{\"texto\":\"Troca do ERP por solução em nuvem\",\"estado\":\"adiado\",\"falas\":[4],\"nota\":\"Fica para o próximo trimestre.\"},{\"dono\":\"Carla Dias\",\"estado\":\"decidido\",\"texto\":\"Camada de API na frente do ERP\",\"falas\":[6,8],\"nota\":\"Decidido piloto da camada de API no módulo financeiro sob responsabilidade da Carla.\"},{\"nota\":\"Falta definir responsável e prazo para a validação.\",\"texto\":\"Validação de duplicidades com o cliente\",\"falas\":[11],\"estado\":\"discutido\"}],\"assunto\":{\"falas\":[11],\"texto\":\"Validação de duplicidades com o cliente\"},\"fechamento\":\"Quem valida as duplicidades com o cliente e qual o prazo?\"}}],\"continuacao\":\"[{\\\"functionCall\\\":{\\\"name\\\":\\\"atualizar_pontos\\\",\\\"args\\\":{\\\"pontos\\\":[{\\\"texto\\\":\\\"Troca do ERP por solução em nuvem\\\",\\\"estado\\\":\\\"adiado\\\",\\\"falas\\\":[4],\\\"nota\\\":\\\"Fica para o próximo trimestre.\\\"},{\\\"dono\\\":\\\"Carla Dias\\\",\\\"estado\\\":\\\"decidido\\\",\\\"texto\\\":\\\"Camada de API na frente do ERP\\\",\\\"falas\\\":[6,8],\\\"nota\\\":\\\"Decidido piloto da camada de API no módulo financeiro sob responsabilidade da Carla.\\\"},{\\\"nota\\\":\\\"Falta definir responsável e prazo para a validação.\\\",\\\"texto\\\":\\\"Validação de duplicidades com o cliente\\\",\\\"falas\\\":[11],\\\"estado\\\":\\\"discutido\\\"}],\\\"assunto\\\":{\\\"falas\\\":[11],\\\"texto\\\":\\\"Validação de duplicidades com o cliente\\\"},\\\"fechamento\\\":\\\"Quem valida as duplicidades com o cliente e qual o prazo?\\\"},\\\"id\\\":\\\"call_13838253232297351861\\\"},\\\"thoughtSignature\\\":\\\"EpcBCpQBAWkUfROnlpm0+lY/NDpgh2A7GrOAv6V+xFrDsivxB3bjo4bqr2TGfx82tBM6806gs7KVsaMqi3On7aHRH95TZsWVsr5kCbTpghy/yT6o7JzdGuZ0ye7AX9qFJDAupGTog9Fro0hEgMzBBcJP2deY6GHruzR46nW3Nkgmg9hh7pRrd1voOTRJIeabIp8OOLKkPQ4btA==\\\"}]\",\"uso\":{\"entrada\":2315,\"saida\":199},\"provedor\":\"google\",\"modelo\":\"gemini-3.5-flash\",\"instrucoesVersao\":\"estado-v1\",\"latenciaMs\":5015}",
+    "estado_leu": true,
+    "estado_trecho": "O que falta fechar\n2 em aberto\n\nParece que estão falando de: Validação de duplicidades com o cliente\n\nValidação de duplicidades com o cliente\nEstado de “Validação de duplicidades com o cliente”\nA esclarecer\nDiscutido\nA confirmar\nDecidido\nAdiado\n\nFalta definir responsável e prazo para a validação.\n\nVer fonte\nTroca do ERP por solução em nuvem\nEstado de “Troca do ERP por solução em nuvem”\nA esclarecer\nDiscutido\nA confirmar\nDecidido\nAdiado\n\nFica para o próximo trimestre.\n\nVer fonte\nCamada de API na frente do ERP\nEstado de “Camada de API na frente do ERP”\nA esclarecer\nDiscutido\nA confirmar\nDecidido\nAdiado\n\nResponsável: Carla Dias · Prazo não definido\n\nDecidido piloto da camada de API no módulo financeiro sob responsabilidade da Carla.\n\nVer fonte\nAtualizar\nFechar a reunião\nLido até a fala 12. É uma leitura do Taq: corrija se estiver errada.\n\nAvisar no chat da reunião que você está transcrevend",
+    "injecao_no_estado": false,
+    "cartao_de_apoio": true,
+    "apoio_trecho": "Apoio discreto\nPausar sugestões\n\nPara fechar\nRecomendação\n\nFalta definir quem fará a validação das duplicidades com o cliente.\n\nSugestão de pergunta — não é uma fala registrada\n“Carla, você consegue assumir também essa validação das duplicidades com o cliente ou definimos outro responsável?”\n\nA condutora expressou dúvida explícita sobre quem deve assumir a validação das duplicidades.\n\nUsei esta pergunta\nIsso já foi resolvido\nGuardar para depois\nDescartar\nVer fonte\nO que falta fechar\n2 em aberto\n",
+    "reuniao_salva": true,
+    "falas_salvas": 14,
+    "erros_de_pagina": [],
+    "chamadas_pendentes": []
+  },
+  "falhas": []
+}

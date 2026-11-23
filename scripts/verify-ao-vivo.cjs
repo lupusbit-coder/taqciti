@@ -1,7 +1,8 @@
-// ATENÇÃO (11/11/2026): o trecho 'Meet: a cápsula aparece e a sidebar aceita' foi
-// REESCRITO quando o shadow root da cápsula virou closed (consentimento pela
-// sidebar, presença pelo host `taqciti-root` + print) e AINDA NÃO FOI EXECUTADO:
-// exige chave de IA.
+// Primeira execução em 23/11/2026. Ela achou: o vigia da captura chamando
+// silêncio de "Erro na captura" (corrigido no GoogleMeetProvider) e o falso
+// verde de "assistente conectado" (corrigido abaixo). Política `training` no
+// servidor deixa o Taq "pendente" de propósito: o "Ler a reunião" fica
+// desabilitado e o trecho do "O que falta fechar" não roda.
 //
 // A reunião AO VIVO contra a extensão RODANDO: captura de legendas, cartão de
 // apoio e "O que falta fechar", com o servidor e o modelo de verdade.
@@ -77,6 +78,21 @@ const falhas = [];
     }
   };
   await context.route('https://meet.google.com/**', (r) => r.fulfill({ status: 200, contentType: 'text/html', body: MEET }));
+  // Pedido feito pela pessoa (o "Ler a reunião") abre a janela de login do
+  // Google quando não há conta guardada (`identidadeParaIa`). No perfil
+  // isolado ninguém responde, e a leitura ficava em "Lendo a reunião…" para
+  // sempre (23/11/2026). Aqui a pessoa FECHA a janela: o Taq segue sem
+  // identidade, pela ponte do segredo — o caminho real de quem recusa o login.
+  verificacoes.login_do_google_fechado = 0;
+  context.on('page', async (p) => {
+    try {
+      await p.waitForLoadState('domcontentloaded', { timeout: 10000 }).catch(() => {});
+      if (/accounts\.google\.com|oauth/i.test(p.url())) {
+        verificacoes.login_do_google_fechado += 1;
+        await p.close();
+      }
+    } catch { /* a página pode já ter fechado */ }
+  });
 
   try {
     let worker = context.serviceWorkers()[0];
@@ -192,14 +208,25 @@ const falhas = [];
     });
 
     await tentar('Sidebar: o assistente está conectado ao servidor', async () => {
+      // Esperar o aviso "não está conectado" SUMIR dava falso verde (23/11/2026):
+      // enquanto a disponibilidade ainda é "verificando" o aviso nem existe, e a
+      // checagem passava antes de ele aparecer. O sinal positivo é o "Ler a
+      // reunião" HABILITADO — ele só habilita com o Taq pronto.
       // Sem waitForFunction: ele avalia por eval, e a CSP da extensão o recusa.
-      await painel.getByText('O assistente não está conectado').waitFor({ state: 'detached', timeout: 30000 });
-      verificacoes.assistente_conectado = true;
+      // A seção começa recolhida: o botão só existe com ela aberta.
+      await painel.getByRole('button', { name: 'O que falta fechar' }).click();
+      const ler = painel.getByRole('button', { name: /Ler a reunião|Atualizar/ });
+      await ler.waitFor({ timeout: 15000 });
+      const limite = Date.now() + 30000;
+      while (!(await ler.isEnabled()) && Date.now() < limite) await painel.waitForTimeout(500);
+      verificacoes.assistente_conectado = await ler.isEnabled();
+      if (!verificacoes.assistente_conectado) throw new Error('"Ler a reunião" continua desabilitado: o Taq não ficou pronto');
     });
 
     await tentar('O que falta fechar: "Ler a reunião" devolve pontos com estado', async () => {
-      const abrir = painel.getByText('O que falta fechar').first();
-      await abrir.click();
+      // A seção já foi aberta na checagem anterior; só abre se estiver recolhida.
+      const cabeca = painel.getByRole('button', { name: 'O que falta fechar' });
+      if ((await cabeca.getAttribute('aria-expanded')) !== 'true') await cabeca.click();
       const ler = painel.getByRole('button', { name: /Ler a reunião|Atualizar/ });
       await ler.waitFor({ timeout: 10000 });
       await ler.click();

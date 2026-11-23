@@ -586,6 +586,21 @@ export class GoogleMeetProvider implements MeetingProvider {
     }
     if (!hasVisibleCaption) return;
 
+    // Texto na tela não quer dizer texto PERDIDO: depois da última fala a
+    // legenda pode ficar visível. Bastava 25 s de silêncio com ela ali para a
+    // reunião virar "Erro na captura" (visto ao vivo em 23/11/2026, no
+    // verify-ao-vivo). Relê a região com o mesmo leitor da captura: se nada
+    // novo sai, o que está visível já foi capturado — é silêncio. Região
+    // trocada pelo Meet, ou releitura que acha fala perdida, continua falha.
+    if (this.captionRegion === region && region.isConnected) {
+      const antes = this.lastChunkAt;
+      this.scanCaptions();
+      if (this.lastChunkAt === antes) {
+        this.setCaptureStalled(false);
+        return;
+      }
+    }
+
     logger.debug('meet: captura parada, reatando o observer');
     this.setCaptureStalled(true);
     this.detachCaptionObserver();

@@ -48,7 +48,7 @@ em código.
   `docs/arquitetura/taq-assistente.md`.
 - Tela "Preparar" no navegador: `node scripts/verify-preparar.cjs <playwright-core> <pasta da build de desenvolvimento>` (resultado em `docs/verification/preparar/`).
 - Contra o provedor real, com reunião **sintética** (chave gratuita só aceita dado inventado): subir o servidor (`cd server; npx next build; npx next start -p 3100`) e rodar os arquivos `*.live.test.ts` com `TAQ_LIVE_URL` e `TAQ_LIVE_KEY` (ver o cabeçalho de cada um). Cobrem: `intervencao-v1` (varredura, laço completo, retirada), `estado-v1`, `copilot-v2`, `acompanhamento-v1` (`juiz.live.test.ts`), histórico por cortes. (A extensão não referencia mais `conducao-v1` em `src/`; o servidor ainda o mapeia em `server/lib/taq/instrucoes.ts:74`.)
-- Reunião ao vivo sintética, com a extensão rodando: `scripts/verify-ao-vivo.cjs` (captura de legendas, cartão de apoio e "O que falta fechar", contra uma página do Meet simulada). **Nunca rodou**; ver a seção de pendências. O trecho do consentimento foi reescrito em 11/11/2026 (responde pela sidebar, porque o shadow root da cápsula é `closed`) e ainda não foi executado: exige chave de IA.
+- Reunião ao vivo sintética, com a extensão rodando: `scripts/verify-ao-vivo.cjs` (captura de legendas, cartão de apoio e "O que falta fechar", contra uma página do Meet simulada). **Rodou verde pela primeira vez em 23/11/2026** (Gemini `gemini-3.5-flash`, política `private` no servidor local), com resultado e capturas em `docs/verification/ao-vivo/`. Exige a política `private`: com `training` o Taq fica "pendente" de propósito e a leitura não roda. Sem conta do Google guardada, "Ler a reunião" abre o login; o script o fecha, como a pessoa faria, e o Taq segue pela ponte do segredo.
 
 ## Publicação: servidor antes da extensão
 
@@ -62,9 +62,12 @@ quais já foram publicadas: não verificado.
 
 ## O que ainda não está feito ou validado
 
-- **Não visto no navegador:** o cartão de apoio, o cartão "O que falta fechar" e o laço ao vivo
-  (precisam de uma reunião do Meet em andamento). `scripts/verify-ao-vivo.cjs` existe para isso,
-  mas nunca foi executado: continua **não visto no navegador**. A tela "Preparar" (mapa de
+- **Visto no navegador em 23/11/2026** (`scripts/verify-ao-vivo.cjs`, reunião sintética): o
+  cartão de apoio no modo Discreto (sugestão pertinente, marcada como "não é uma fala
+  registrada"), o "O que falta fechar" (adiado, decidido com o dono que assumiu, discutido sem
+  dono inventado) e a fala de injeção sem efeito em nenhum dos dois. A primeira execução achou
+  dois bugs, corrigidos no `dceaff3`: silêncio com a última legenda na tela virava "Erro na
+  captura", e a checagem de "assistente conectado" do script dava falso verde. A tela "Preparar" (mapa de
   contextos) foi verificada no Edge com `verify-preparar.cjs`, que desde 11/11/2026 cobre também
   "Ajustes sugeridos", "Aplicar ao meu assistente" e "Agora não"; o "Reproduzir" só teve o
   rótulo conferido, sem clique (envia trechos ao provedor). Capturas em `docs/verification/preparar/`.

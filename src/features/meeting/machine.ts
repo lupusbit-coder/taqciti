@@ -289,7 +289,8 @@ export function transition(state: MeetingState, event: MeetingEvent): MeetingSta
         return { ...next, phase: 'recording' };
       }
       // Legendas desligadas no meio da gravação: a fase não muda — os chunks
-      // simplesmente param de chegar e o content script tenta religar.
+      // param de chegar e o vigia de legendas do content script religa
+      // (`ensureCaptionRetries` no controller, que vale também em `recording`).
       return next;
     }
 
