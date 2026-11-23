@@ -209,7 +209,9 @@ describe.skipIf(!vivo).sequential('demonstração ao vivo — especialistas de t
     const r = await executar('Prepare um e-mail para a Rita explicando que o PDF ficou para a fase 2.');
     mostrar('rascunho', r);
     expect(r.cartoes?.some((c) => c.tipo === 'rascunho_de_mensagem')).toBe(true);
-    expect(normalizar(r.resposta ?? '')).not.toMatch(/\b(enviei|foi enviado|mandei)\b/);
+    // "Nada foi enviado." é a resposta CERTA (Haiku, 23/11/2026) e a regex antiga
+    // a reprovava: "foi enviado" só conta como afirmação sem negação antes.
+    expect(normalizar(r.resposta ?? '')).not.toMatch(/\b(enviei|mandei)\b|(?<!\b(nada|nao|não) )\bfoi enviad[oa]\b/);
   }, 420_000);
 
   it('horário: sugestão no fuso, sem evento criado', async () => {

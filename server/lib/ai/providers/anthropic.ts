@@ -117,6 +117,23 @@ export function asRateLimit(model: string, error: unknown): RateLimitError | und
   );
 }
 
+/**
+ * A saída estruturada da Anthropic recusa objeto sem `additionalProperties:
+ * false` explícito (400 "For 'object' type, 'additionalProperties' must be
+ * explicitly set to false", na primeira execução real, 23/11/2026). O schema
+ * vem de `jsonSchema.ts`, compartilhado com Google e OpenAI, que não exigem;
+ * por isso o ajuste é aqui, numa cópia. Exportado para teste.
+ */
+export function schemaParaAnthropic(no: unknown): unknown {
+  if (Array.isArray(no)) return no.map(schemaParaAnthropic);
+  if (!no || typeof no !== 'object') return no;
+  const copia: Record<string, unknown> = {};
+  for (const [chave, valor] of Object.entries(no)) copia[chave] = schemaParaAnthropic(valor);
+  const ehObjeto = copia.type === 'object' || (Array.isArray(copia.type) && copia.type.includes('object'));
+  if (ehObjeto && copia.additionalProperties === undefined) copia.additionalProperties = false;
+  return copia;
+}
+
 function buildMessages(invocation: RawInvocation): Anthropic.MessageParam[] {
   return invocation.messages.map((message, index) => {
     const isCacheAnchor = index === 0 && invocation.cacheablePrefixLength !== undefined;
@@ -163,7 +180,11 @@ export const anthropicProvider: Provider = {
       const supportsAdaptive = ADAPTIVE_THINKING_MODELS.has(model);
 
       try {
-        const response = await client().messages.create({
+        // STREAM, não `create`: a geração pede `max_tokens` alto, e o SDK recusa
+        // a chamada sem streaming ("Streaming is required for operations that may
+        // take longer than 10 minutes") — visto na primeira execução real, em
+        // 23/11/2026. `finalMessage()` devolve a mensagem inteira, como o `create`.
+        const response = await client().messages.stream({
           model,
           max_tokens: invocation.maxTokens,
           system: invocation.system,
@@ -173,7 +194,12 @@ export const anthropicProvider: Provider = {
             ? {
                 output_config: {
                   ...(invocation.jsonSchema
-                    ? { format: { type: 'json_schema' as const, schema: invocation.jsonSchema } }
+                    ? {
+                        format: {
+                          type: 'json_schema' as const,
+                          schema: schemaParaAnthropic(invocation.jsonSchema) as Record<string, unknown>,
+                        },
+                      }
                     : {}),
                   // `medium` é o ponto de equilíbrio custo/qualidade dos
                   // agentes deste pipeline; o harness da Fase 8 é o lugar
@@ -182,7 +208,7 @@ export const anthropicProvider: Provider = {
                 },
               }
             : {}),
-        });
+        }).finalMessage();
 
         if (response.stop_reason === 'refusal') {
           throw new ProviderError('anthropic', model, 'requisição recusada pelos classificadores.');
