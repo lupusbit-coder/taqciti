@@ -174,7 +174,8 @@ describe('política de dados', () => {
 
   it('matrixEntryForModel encontra a entrada do modelo ativo do Auditor', () => {
     const { provider, model } = DEFAULT_AGENT_CONFIG.auditor;
-    expect(matrixEntryForModel(provider, model)?.id).toBe('google-barato');
+    // Auditor na Anthropic desde 23/11/2026 (era google-barato).
+    expect(matrixEntryForModel(provider, model)?.id).toBe('anthropic-barato');
   });
 
   it('a nota da entrada de free tier registra os três motivos', () => {

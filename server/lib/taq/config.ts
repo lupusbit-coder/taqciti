@@ -20,9 +20,9 @@
  * (`groq.ts`) têm adaptador com ferramentas. Escolher outro provedor em
  * `TAQ_ORQUESTRADOR` não é erro de sintaxe: é uma pendência, dita como tal.
  *
- * O modelo padrão foi conferido na lista de modelos da chave configurada em
- * 2026-09-22 (`models.list`): `gemini-3.5-flash` está disponível e é o mesmo que
- * o pipeline já usa no Pensante.
+ * O modelo padrão é o Haiku atual desde 23/11/2026 (decisão do usuário: todos
+ * os agentes na Anthropic, mesma divisão de antes — o Taq ficava no
+ * `gemini-3.5-flash`). Validado ao vivo: 9 de 9 jornadas de trabalho.
  */
 import { API_KEY_ENV_VAR } from '@/lib/ai/availability';
 import { parseOverride, politicaDeDadosNaoDeclarada } from '@/lib/ai/config';
@@ -31,7 +31,7 @@ import type { EstadoDoTaq } from './contrato';
 import { VERSAO_DAS_INSTRUCOES } from './instrucoes';
 
 export const VARIAVEL_DO_MODELO = 'TAQ_ORQUESTRADOR';
-export const PADRAO = 'google:gemini-3.5-flash';
+export const PADRAO = 'anthropic:claude-haiku-5-5';
 
 /**
  * `groq` é do Taq só, e temporário (ver `groq.ts`): não é um `ProviderId` do
@@ -47,7 +47,6 @@ const CHAVE_DO_ADAPTADOR: Partial<Record<ProvedorDoTaq, string>> = {
 };
 
 export interface ConfiguracaoDoTaq {
-  buscaNaInternet: EstadoDoTaq['buscaNaInternet'];
   provedor: ProvedorDoTaq | null;
   modelo: string | null;
   politicaDeDados: 'private' | 'training';
@@ -71,7 +70,6 @@ export function resolverConfiguracao(env: NodeJS.ProcessEnv = process.env): Conf
     }
   } catch (error) {
     return {
-      buscaNaInternet: { disponivel: false, motivo: 'A configuração de IA precisa ser corrigida.' },
       provedor: null,
       modelo: null,
       politicaDeDados,
@@ -93,17 +91,14 @@ export function resolverConfiguracao(env: NodeJS.ProcessEnv = process.env): Conf
       pendencias.push(`Falta ${variavel} no servidor (server/.env.local ou variáveis da Vercel).`);
     }
   }
-  let motivo = '';
-  if (env.TAQ_BUSCA_NA_INTERNET !== 'ligada') motivo = 'Busca pausada no servidor para evitar custos.';
-  else if (pendencias.length || politicaDeDados !== 'private') motivo = 'A busca aguarda uma chave de IA compatível com os dados do TaqCiti.';
-  else if (provedor !== 'google' || !/^gemini-3[.-]/.test(modelo)) motivo = 'O modelo configurado ainda não tem busca integrada no TaqCiti.';
-  return { provedor, modelo, politicaDeDados, pendencias, buscaNaInternet: { disponivel: !motivo, motivo } };
+  // A busca na internet (`TAQ_BUSCA_NA_INTERNET`) saiu em 23/11/2026, por
+  // decisão do usuário: o Taq responde só a partir dos registros da pessoa.
+  return { provedor, modelo, politicaDeDados, pendencias };
 }
 
 export function estadoPublico(config: ConfiguracaoDoTaq): EstadoDoTaq {
   return {
     pronto: config.pendencias.length === 0,
-    buscaNaInternet: config.buscaNaInternet,
     provedor: config.provedor,
     modelo: config.modelo,
     instrucoesVersao: VERSAO_DAS_INSTRUCOES,

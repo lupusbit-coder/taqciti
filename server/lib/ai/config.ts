@@ -20,7 +20,11 @@ export interface AgentModelConfig {
 }
 
 /**
- * Configuração ATIVA: Gemini, `flash` na leitura e `lite` na conferência.
+ * Configuração ATIVA: Anthropic, `sonnet` na leitura e `haiku` na conferência
+ * (desde 23/11/2026, decisão do usuário: todos os agentes na Anthropic, na
+ * MESMA divisão de antes — era Gemini `flash` na leitura e `flash-lite` na
+ * conferência). Medido ao vivo no mesmo dia: com Sonnet também no Auditor, o
+ * resumo executivo inteiro era derrubado por citação curta demais.
  * São DUAS chamadas por documento — ver `generateStep.ts`.
  *
  * A configuração de produção pretendida está em `COMPARISON_MATRIX` e é
@@ -42,11 +46,11 @@ const DEFAULT_AGENT_CONFIG: Record<AgentName, AgentModelConfig> = {
   // já foi visto devolvendo "gesto" onde a transcrição diz "gestão" numa
   // execução do bench, derrubando a taxa de 100% para 29% — intermitente,
   // amostra de duas execuções. É a dívida #5 do handoff.
-  leitor: { provider: 'google', model: 'gemini-3.5-flash' },
+  leitor: { provider: 'anthropic', model: 'claude-sonnet-5-5' },
 
   // A CONFERÊNCIA — julgamento binário sobre excertos curtos, todos numa
   // chamada. É verificação, não deliberação.
-  auditor: { provider: 'google', model: 'gemini-3.5-flash-lite' },
+  auditor: { provider: 'anthropic', model: 'claude-haiku-5-5' },
 };
 
 // ---------------------------------------------------------------------------
@@ -126,18 +130,16 @@ export const COMPARISON_MATRIX: MatrixEntry[] = [
     id: 'anthropic-caro',
     provider: 'anthropic',
     tier: 'caro',
-    model: 'claude-opus-5',
-    note: 'Teto da Anthropic. $5/$25 por MTok, 1M de contexto.',
+    // Geração atual desde 23/11/2026 (era Opus 5 e Haiku 4.5).
+    model: 'claude-opus-5-5',
+    note: 'Teto da Anthropic. $4/$20 por MTok, 1M de contexto.',
   },
   {
     id: 'anthropic-barato',
     provider: 'anthropic',
     tier: 'barato',
-    model: 'claude-haiku-4-5',
-    note:
-      'Piso da Anthropic. $1/$5, mas 200k de contexto (não 1M) e sem ' +
-      'raciocínio adaptativo — os dois limites que podem derrubá-lo no Pensante, ' +
-      'que agora lê a transcrição inteira.',
+    model: 'claude-haiku-5-5',
+    note: 'Piso da Anthropic. $0.10/$0.50 (prompt até 100k), 1M de contexto, raciocínio adaptativo. Auditor ativo.',
   },
   {
     id: 'google-caro-preview',
