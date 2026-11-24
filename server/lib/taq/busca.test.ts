@@ -7,6 +7,8 @@ import { criarAdaptadorGemini, type ClienteGemini } from './gemini';
 const env: NodeJS.ProcessEnv = {
   NODE_ENV: 'test',
   GOOGLE_API_KEY: 'somente-teste',
+  // A busca é do Gemini; o padrão do Taq virou Anthropic em 23/11/2026.
+  TAQ_ORQUESTRADOR: 'google:gemini-3.5-flash',
   DOCCITI_DATA_POLICY: 'private',
 };
 const pedido = {
