@@ -47,7 +47,6 @@ const CHAVE_DO_ADAPTADOR: Partial<Record<ProvedorDoTaq, string>> = {
 };
 
 export interface ConfiguracaoDoTaq {
-  buscaNaInternet: EstadoDoTaq['buscaNaInternet'];
   provedor: ProvedorDoTaq | null;
   modelo: string | null;
   politicaDeDados: 'private' | 'training';
@@ -71,7 +70,6 @@ export function resolverConfiguracao(env: NodeJS.ProcessEnv = process.env): Conf
     }
   } catch (error) {
     return {
-      buscaNaInternet: { disponivel: false, motivo: 'A configuração de IA precisa ser corrigida.' },
       provedor: null,
       modelo: null,
       politicaDeDados,
@@ -93,17 +91,14 @@ export function resolverConfiguracao(env: NodeJS.ProcessEnv = process.env): Conf
       pendencias.push(`Falta ${variavel} no servidor (server/.env.local ou variáveis da Vercel).`);
     }
   }
-  let motivo = '';
-  if (env.TAQ_BUSCA_NA_INTERNET !== 'ligada') motivo = 'Busca pausada no servidor para evitar custos.';
-  else if (pendencias.length || politicaDeDados !== 'private') motivo = 'A busca aguarda uma chave de IA compatível com os dados do TaqCiti.';
-  else if (provedor !== 'google' || !/^gemini-3[.-]/.test(modelo)) motivo = 'O modelo configurado ainda não tem busca integrada no TaqCiti.';
-  return { provedor, modelo, politicaDeDados, pendencias, buscaNaInternet: { disponivel: !motivo, motivo } };
+  // A busca na internet (`TAQ_BUSCA_NA_INTERNET`) saiu em 23/11/2026, por
+  // decisão do usuário: o Taq responde só a partir dos registros da pessoa.
+  return { provedor, modelo, politicaDeDados, pendencias };
 }
 
 export function estadoPublico(config: ConfiguracaoDoTaq): EstadoDoTaq {
   return {
     pronto: config.pendencias.length === 0,
-    buscaNaInternet: config.buscaNaInternet,
     provedor: config.provedor,
     modelo: config.modelo,
     instrucoesVersao: VERSAO_DAS_INSTRUCOES,

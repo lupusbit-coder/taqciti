@@ -4,23 +4,24 @@ Runbook completo. Nenhuma chave aparece aqui: tudo é variável de ambiente, e o
 mesmo procedimento serve para a sua chave hoje e para a da empresa depois —
 troca-se o valor, não o código.
 
-> **Produção atual: Vercel.** Desde **22/09/2026** o servidor roda na **Vercel**, em
-> `<URL-DO-SERVIDOR-DE-PRODUCAO>` — é o endereço que o `.env` da extensão aponta.
-> **O deploy é manual**: nenhum push publica nada sozinho. O host anterior foi o
-> Railway (até 22/09/2026); onde o texto abaixo menciona o Railway, é histórico ou
-> comparação.
+> **Produção atual: Railway** (de volta desde **23/11/2026**; entre 22/09 e
+> 23/11/2026 foi a Vercel). O servidor roda em `<URL-DO-SERVIDOR-DE-PRODUCAO>`, o
+> endereço que o `.env` da extensão aponta. **O redeploy é automático** a cada push
+> na branch conectada no painel do Railway. Onde o texto abaixo descreve a Vercel,
+> vale para quem voltar a ela.
 >
-> Pontos que valem na Vercel hoje:
+> Pontos que valem no Railway hoje:
 >
 > - **`DATABASE_URL` tem que ser o endereço do _pooler_ da Supabase**, não o da
->   conexão direta (o erro de `lib/conector/banco.ts` quando a variável falta já
->   aponta para as variáveis do projeto na Vercel).
-> - **O teto de função vale** (`maxDuration`, seção 5) e a região `gru1` de
->   `server/vercel.json` também (seção 8).
+>   conexão direta.
+> - O app roda como processo Node de vida longa (`next start`): o `maxDuration`
+>   das rotas e a região de `server/vercel.json` não têm efeito (seções 5 e 8).
 > - **`DOCCITI_DATA_POLICY` é obrigatória em produção** (seção 4). Sem ela, as
 >   rotas de geração respondem 503. "Produção", para o código, é
->   `VERCEL_ENV=production`: defina a variável no ambiente **Production** do
->   projeto na Vercel (um deploy de *Preview* não é produção e não tem a trava).
+>   `RAILWAY_ENVIRONMENT_NAME=production` (o Railway define sozinho no ambiente
+>   chamado `production`) ou `VERCEL_ENV=production` (`emProducao`, em
+>   `lib/ai/config.ts`). Um ambiente do Railway com outro nome não é produção e não
+>   tem as travas.
 >
 > **ANTES de publicar este servidor: aplique `server/lib/conector/esquema.sql` no
 > banco de produção** (commit `365ef8c`). O esquema ganhou a coluna
@@ -31,10 +32,8 @@ troca-se o valor, não o código.
 > dias a partir do momento em que o esquema é aplicado, então nenhum conector é
 > derrubado na hora. A ordem é: esquema, depois deploy.
 >
-> **Para publicar** (manual): defina as variáveis da seção 2 no ambiente
-> Production, dispare o deploy de produção (no painel, *Redeploy* do último
-> deploy promovido a produção, ou `vercel deploy --prod` com o projeto ligado) e
-> rode a prova de fumaça da seção 6.
+> **Para publicar**: defina as variáveis da seção 2 no serviço do Railway, dê push
+> na branch conectada (ou *Redeploy* no painel) e rode a prova de fumaça da seção 6.
 >
 > O app continua sendo um Next.js (App Router) comum, sem `output: 'export'` e
 > sem nada que exija hospedagem especial — qualquer host Node/Next serve. O que
@@ -44,8 +43,8 @@ troca-se o valor, não o código.
 
 ## Manter sem custos e trocar a chave depois
 
-A busca na internet nasce desligada: mantenha `TAQ_BUSCA_NA_INTERNET=desligada`
-(ausência da variável também desliga). Não há consulta de teste ao modelo ao abrir
+Não há busca na internet (saiu em 23/11/2026; `TAQ_BUSCA_NA_INTERNET` não é mais
+lida e pode ser apagada do host). Não há consulta de teste ao modelo ao abrir
 a extensão: `GET /api/taq/estado` apenas lê configuração, sem validar a chave no
 provedor e sem gastar tokens. Uma chave presente pode estar expirada ou sem cota;
 nesses casos, o erro só será conhecido ao fazer um pedido real.
@@ -64,27 +63,16 @@ Quando houver uma chave funcional:
    tratamento compatível, sem uso dos dados para treinamento. Ajuste
    `TAQ_ORQUESTRADOR`, `DOCCITI_LEITOR` e `DOCCITI_AUDITOR` se precisar trocar
    também os modelos, verificando disponibilidade e preços do provedor.
-3. **Só quando aceitar os custos de pesquisa**, use
-   `TAQ_BUSCA_NA_INTERNET=ligada`. A integração atual aceita Google Gemini 3 com
-   busca nativa e ferramentas locais; outros modelos mantêm a busca indisponível.
-4. Publique o código preparado com `vercel deploy --prod` a partir do projeto
+3. Publique o código preparado com `vercel deploy --prod` a partir do projeto
    ligado. Para futuras trocas apenas de variável, faça **Redeploy** do deploy que
    já contém este código. Redeploy de uma versão antiga não publica mudanças locais.
-5. Volte à janela da extensão: ela consulta a disponibilidade ao ganhar foco e a
+4. Volte à janela da extensão: ela consulta a disponibilidade ao ganhar foco e a
    cada minuto enquanto visível. A partir desta atualização da extensão, futuras
    trocas de chave não precisam de reinstalação ou rebuild. A primeira atualização
    do cliente ainda precisa ser carregada em `chrome://extensions`.
 
-Para pesquisar, no perfil **Personalizado**, abra **Busca na internet**, marque
-**Permitir quando estiver disponível** e salve em **Usar este assistente**. A
-permissão vale para as conversas com o Taq, não para geração automática de
-documentos nem apoio automático durante a reunião. Reuniões já iniciadas mantêm
-o perfil com que começaram. As respostas guardam os links e as sugestões da
-pesquisa; as sugestões são renderizadas em iframe isolado, sem scripts.
-
-Desligar só a busca **não impede custos das outras chamadas de IA** depois de
-instalar uma chave paga. Para manter custo zero agora, não ative faturamento nem
-use uma chave paga. Os testes desta integração usam respostas simuladas.
+Uma chave paga **gera custo nas chamadas de IA** depois de instalada. Para manter
+custo zero agora, não ative faturamento nem use uma chave paga. Os testes desta integração usam respostas simuladas.
 
 ## 1. Criar o projeto
 
@@ -101,10 +89,11 @@ servidor em `server/`. O host precisa saber disso.
 extensão (Vite) achando que é o app Next, e o deploy falha ou publica a coisa
 errada. É ajuste de projeto, no painel — não dá para configurar por arquivo.
 
-No Railway (host anterior), o redeploy era automático a cada push na branch
-conectada (`main`) — ~1 minuto nas duas vezes medidas em 22/08/2026. **Na Vercel,
-hoje, não.** O deploy é manual, e é por isso que `docs/publicar-release.md` manda
-publicar o servidor **antes** de cortar a tag: nada o atualiza no caminho.
+No Railway (produção atual), o redeploy é automático a cada push na branch
+conectada — ~1 minuto nas duas vezes medidas em 22/08/2026. Confira no painel
+**qual repositório e qual branch** o serviço segue: um push em outro lugar não
+publica nada. Na Vercel o deploy era manual. Em qualquer host,
+`docs/publicar-release.md` manda publicar o servidor **antes** de cortar a tag.
 
 ---
 
@@ -120,7 +109,7 @@ de host para host.
 | `ANTHROPIC_API_KEY` | não | Só se trocar o provedor em `lib/ai/config.ts`. |
 | `XAI_API_KEY` | não | Idem. |
 | `DOCCITI_MAX_TRANSCRIPT_CHARS` | não | Teto por requisição. Padrão 400000. |
-| `DOCCITI_DATA_POLICY` | **sim, em produção** | `private` (chave paga, sem treinamento) ou `training` (chave que treina). Em produção (`VERCEL_ENV=production`), ausente → as rotas de geração respondem 503 e o Taq fica pendente (503). Com `training` → a geração é recusada (400) e o Taq também (403): em produção o `"sintetica": true` do cliente não vale. Fora de produção (inclusive *Preview*) é opcional. Ver a seção 4 (`lib/ai/config.ts`, `lib/taq/config.ts`). |
+| `DOCCITI_DATA_POLICY` | **sim, em produção** | `private` (chave paga, sem treinamento) ou `training` (chave que treina). Em produção (`RAILWAY_ENVIRONMENT_NAME=production` ou `VERCEL_ENV=production`), ausente → as rotas de geração respondem 503 e o Taq fica pendente (503). Com `training` → a geração é recusada (400) e o Taq também (403): em produção o `"sintetica": true` do cliente não vale. Fora de produção (inclusive *Preview*) é opcional. Ver a seção 4 (`lib/ai/config.ts`, `lib/taq/config.ts`). |
 | `DOCCITI_LEITOR` / `DOCCITI_AUDITOR` (`DOCCITI_PENSANTE` ainda vale pelo Leitor) | não | `provedor:modelo`, para trocar de modelo sem recompilar. |
 | `DATABASE_URL` | sim, para o conector/sincronização | Postgres do acervo sincronizado (`lib/conector/banco.ts`). Na Supabase, o endereço do _pooler_. |
 | `GOOGLE_OAUTH_WEB_CLIENT_ID` | sim, para a identidade por Google | Cliente OAuth "Aplicativo da Web" que o servidor confere (campo `aud`) ao validar o token. Sem ela, a identidade recusa tudo — falha fechada (`lib/identidade/google.ts`). Ver `docs/google-oauth-setup.md`. |
@@ -137,7 +126,6 @@ de host para host.
 | `DOCCITI_TIMEZONE` | não | Fuso usado para a data da reunião (`lib/dataDaReuniao.ts`). |
 | `TAQ_ORQUESTRADOR` | não | Modelo do Taq, `provedor:modelo`. Padrão `google:gemini-3.5-flash`; só `google` e `groq` têm adaptador com ferramentas, outro provedor deixa o Taq pendente (`lib/taq/config.ts`). |
 | `TAQ_MAX_CONTEXTO_CHARS` | não | Teto do pedido do Taq, em caracteres. Padrão 300000 (`lib/taq/atender.ts`). |
-| `DOCCITI_MODELO_TRANSCRICAO` | não | Modelo de transcrição de áudio/vídeo da importação (`/api/importacao/transcrever`, `lib/importacao/transcrever.ts`). A rota usa `GROQ_API_KEY`, exige `DOCCITI_DATA_POLICY=private` (sem isso, 503) e aceita até 4 MB por arquivo. |
 | `OPENAI_API_KEY` | só com o provedor OpenAI | Chave do provedor (`lib/ai/providers/openai.ts`). |
 | `DOCCITI_PROMPTS` | não | `anteriores` volta às versões de prompt anteriores sem deploy de código (`lib/prompts/index.ts`). |
 | `DOCUMENTOS_RACIOCINIO_GERACAO` / `DOCUMENTOS_RACIOCINIO_EDICAO` | não | Esforço de raciocínio (`low`, `medium`, `high`) ao gerar e ao editar documento personalizado. Padrões `medium` e `low` (`lib/documentos/gerar.ts`). |
@@ -228,8 +216,11 @@ produção ela é **obrigatória** (`lib/ai/config.ts`, `politicaDeDadosNaoDecla
   captura reunião de verdade.
 - ausente, em produção → 503 nas rotas de geração, e o Taq aparece como pendente.
 
-"Em produção" quer dizer `VERCEL_ENV=production`, que a Vercel só define no
-ambiente Production. Fora dele (desenvolvimento, *Preview*) a variável é opcional. O aviso de treinamento também dispara
+"Em produção" quer dizer `RAILWAY_ENVIRONMENT_NAME=production` (o Railway define
+no ambiente chamado `production`) ou `VERCEL_ENV=production` (a Vercel só define no
+ambiente Production) — `emProducao`, em `lib/ai/config.ts`. Até 25/11/2026 só a
+Vercel contava, e no Railway as travas ficavam desligadas em silêncio. Fora de
+produção (desenvolvimento, *Preview*, outro ambiente) a variável é opcional. O aviso de treinamento também dispara
 quando o modelo configurado é de uma entrada da matriz que treina
 (`usesContentForTraining`), mesmo com `private` — então declarar `private` não
 basta se o modelo escolhido for de treinamento.

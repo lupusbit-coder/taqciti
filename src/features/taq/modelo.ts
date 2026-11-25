@@ -14,7 +14,6 @@
  * localmente, e a interface diz isso.
  */
 import { z } from 'zod/v4';
-import { pesquisaWebSchema } from './pesquisaWeb';
 import {
   SERVER_BASE_URL,
   SERVER_SHARED_KEY,
@@ -50,7 +49,6 @@ export interface DeclaracaoDeFerramenta {
 }
 
 export interface PedidoDeTurno {
-  buscaNaInternet?: boolean;
   instrucoes: string;
   contexto: string;
   mensagens: MensagemDoTurno[];
@@ -63,7 +61,6 @@ export const respostaDoTurnoSchema = z.object({
   texto: z.string(),
   chamadas: z.array(chamadaSchema),
   continuacao: z.string().optional(),
-  pesquisaWeb: pesquisaWebSchema.optional(),
   uso: z.object({
     entrada: z.number().int().nonnegative(),
     saida: z.number().int().nonnegative(),
@@ -86,7 +83,6 @@ const erroSchema = z.object({
 });
 
 export const estadoDoTaqSchema = z.object({
-  buscaNaInternet: z.object({ disponivel: z.boolean(), motivo: z.string() }).optional(),
   pronto: z.boolean(),
   provedor: z.string().nullable(),
   modelo: z.string().nullable(),

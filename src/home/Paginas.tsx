@@ -1,4 +1,4 @@
-﻿/**
+/**
  * A seção Reuniões.
  *
  * (Documentos mora em `Documentos.tsx` e Conexões em `Conexoes.tsx` — as duas
@@ -37,9 +37,7 @@ import { GerarDocumento } from './GerarDocumento';
 import { NotasDaReuniao } from './NotasDaReuniao';
 import { PrintsDaReuniao } from './PrintsDaReuniao';
 import { useCabemDuasColunas } from './useLargura';
-import { BuscaDoAcervo, useBuscaDoAcervo, correspondeABusca, dentroDoPeriodo } from '@/shared/ui/BuscaDoAcervo';
-import { ImportarReuniao } from './ImportarReuniao';
-import { Automacoes } from './Automacoes';
+import { BuscaDoAcervo, porNomeMaisRecentes, useBuscaDoAcervo } from '@/shared/ui/BuscaDoAcervo';
 
 /** O título da seção, sem subtítulo: a tela se explica pelo que mostra. */
 function Cabecalho({ titulo }: { titulo: string }) {
@@ -103,12 +101,7 @@ export function PaginaReunioes({
   const [confirmandoId, setConfirmandoId] = useState<string | null>(null);
   const [erroDaLista, setErroDaLista] = useState('');
   const busca = useBuscaDoAcervo();
-  const [participante, setParticipante] = useState('');
-  const filtrados = registros.filter((r) => dentroDoPeriodo(r.startedAt, busca.de, busca.ate)
-    && correspondeABusca(busca.consulta, [r.title, notas[r.id]?.texto, ...r.participants.map((p) => p.name),
-      ...r.segments.flatMap((s) => [s.text, s.speaker]),
-      ...(r.revisao?.segmentos.map((s) => s.text) ?? [])])
-    && correspondeABusca(participante, [...r.participants.map((p) => p.name), ...r.segments.map((s) => s.speaker)]));
+  const filtrados = porNomeMaisRecentes(registros, busca.consulta, (r) => r.title, (r) => r.startedAt);
 
   const apagar = (id: string) => {
     void platform
@@ -145,12 +138,13 @@ export function PaginaReunioes({
   return (
     <div className="tq-pagina">
       <Cabecalho titulo="Reuniões" />
-      <ImportarReuniao onAbrir={onAbrir} />
-      <Automacoes />
-      <BuscaDoAcervo busca={busca} rotulo="Buscar reuniões" total={filtrados.length} />
-      <label className="tq-filtro-participante">Participante<input type="search" value={participante}
-        onChange={(e) => setParticipante(e.target.value)} placeholder="Nome de participante ou falante" /></label>
-      {carregado && registros.length > 0 && filtrados.length === 0 && <Vazio>Nenhuma reunião encontrada. Ajuste a busca ou os filtros.</Vazio>}
+      {/* "Importar reunião" e "Automações após reuniões" saíram em 23/11/2026 (pedido do usuário). */}
+      <BuscaDoAcervo busca={busca} rotulo="Buscar pelo nome da reunião" total={filtrados.length} />
+      {carregado && registros.length > 0 && filtrados.length === 0 && (
+        // Sem botão próprio: o "Limpar busca" já está logo acima, e dois
+        // botões iguais lado a lado confundiam (visto na captura de tela).
+        <p className="tq-vazio"><strong>Nenhuma reunião com esse nome.</strong> Tente outro termo ou limpe a busca.</p>
+      )}
 
       {!carregado ? (
         <Vazio>Lendo o histórico…</Vazio>
@@ -218,25 +212,12 @@ export function PaginaReunioes({
             return (
               <div key={r.id} className="tq-item-linha">
                 <button type="button" className="tq-item tq-linha-reuniao" onClick={() => onAbrir(r.id)}>
+                  {/* Só o nome (23/11/2026, pedido do usuário): data, hora, duração,
+                      última fala e selos saíram da linha; a lista já vem em ordem
+                      de data. "Ao vivo agora" fica, porque muda o que se pode fazer. */}
                   <strong>{r.title}</strong>
-                  {r.importacao && <span className="tq-linha-selo">Importada · {r.importacao.nome}</span>}
-                  <span className="tq-meta">
-                    {r.status === 'recording' ? (
-                      <span className="tq-ao-vivo-txt">Ao vivo agora</span>
-                    ) : (
-                      <span>{formatDate(r.startedAt)}</span>
-                    )}
-                    <span className="tq-relogio">{formatTime(r.startedAt)}</span>
-                    {r.status !== 'recording' && (
-                      <span>{r.importacao && !r.durationSeconds ? 'Duração não informada' : formatDurationHuman(r.durationSeconds)}</span>
-                    )}
-                  </span>
-                  {(r.segments.length > 0 || notas[r.id] || vinculados > 0) && (
-                    <small>
-                      {r.segments.length > 0 && `“${r.segments.at(-1)!.text}”`}
-                      {notas[r.id] && <span className="tq-linha-selo">com nota</span>}
-                      {vinculados > 0 && <span className="tq-linha-selo">com documento</span>}
-                    </small>
+                  {r.status === 'recording' && (
+                    <span className="tq-meta"><span className="tq-ao-vivo-txt">Ao vivo agora</span></span>
                   )}
                 </button>
                 {/* A que está sendo gravada não se apaga: a captura ainda escreve nela. */}

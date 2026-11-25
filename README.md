@@ -138,7 +138,7 @@ funcionava na máquina de quem construiu.
   abre o painel lateral e a aba da HOME, e faz o print da aba da reunião.
 - `src/document/` — a página de geração de documento a partir de uma reunião.
 - `src/features/taq/` — o assistente **Taq**: orquestrador, ferramentas, catálogo e
-  contratos. Os subsistemas ficam ao lado (`acompanhamento`, `apoio`, `calibracao`,
+  contratos. Os subsistemas ficam ao lado (`acompanhamento`, `apoio`,
   `conducao`, `estado`, `trabalho`). Ver [`docs/arquitetura/taq-assistente.md`](docs/arquitetura/taq-assistente.md).
 - `src/features/integracoes/` — as integrações com o Google (Gmail, Agenda, Docs), todas
   com confirmação por clique.

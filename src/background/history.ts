@@ -12,17 +12,6 @@ import { readLocal, writeLocal } from '@/shared/services/storage';
 
 const VALID_STATUSES: readonly HistoryStatus[] = ['recording', 'ready'];
 
-/** Reimportar o mesmo arquivo abre o original sem sobrescrever nome ou edições. */
-export async function importarRegistro(record: MeetingRecord): Promise<{ id: string; existente: boolean }> {
-  return comTravaLocal(STORAGE_KEYS.history, async () => {
-    const history = await listHistory();
-    const anterior = history.find((r) => r.id === record.id || (record.importacao && r.importacao?.hash === record.importacao.hash));
-    if (anterior) return { id: anterior.id, existente: true };
-    await writeLocal(STORAGE_KEYS.history, [record, ...history].sort((a, b) => b.startedAt - a.startedAt));
-    return { id: record.id, existente: false };
-  });
-}
-
 /** A resposta tardia não ressuscita registro apagado nem revisa outra captura. */
 export async function guardarRevisao(original: MeetingRecord, revisao: NonNullable<MeetingRecord['revisao']>): Promise<void> {
   await comTravaLocal(STORAGE_KEYS.history, async () => {

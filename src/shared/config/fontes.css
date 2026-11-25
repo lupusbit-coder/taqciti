@@ -6,16 +6,7 @@
  * Licença OFL embarcada em public/licenses/DM-Sans-OFL.txt.
  * O alias TaqCiti evita colisão com fontes da página hospedeira no Meet.
  * Barlow permanece apenas na marca, para conservar seu desenho original.
- * Manrope dá às falas do Taq um desenho próprio, com a OFL junto da extensão.
  */
-@font-face {
-  font-family: 'TaqCiti Manrope';
-  font-style: normal;
-  font-weight: 200 800;
-  font-display: swap;
-  src: url('../fonts/manrope/manrope.ttf') format('truetype');
-}
-
 /* latin-ext */
 @font-face {
   font-family: 'TaqCiti DM Sans';

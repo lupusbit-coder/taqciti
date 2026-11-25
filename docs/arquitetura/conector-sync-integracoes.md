@@ -208,23 +208,13 @@ fica.
   novo" sem tocar no banco; escrita local invalida. Por instância (outra instância só
   vê a mudança quando o TTL vence). `cache.ts` (buscas do conector): TTL 30 s.
 
-**Importação e automações (trabalho novo, ainda não commitado; em uso no código)**:
-reuniões importadas de `.txt/.vtt/.srt/mídia` (`src/features/importacao/`, tela
-`src/home/ImportarReuniao.tsx`) entram em `taq:history` (via `importarRegistro`, id
-`importado-<hash>`) com o campo `importacao` (`nome`, `formato`, `hash`, `importadaEm`; o
-`hash` evita duplicar). Como `montarDesejado` lê a mesma chave, elas sobem como qualquer
-reunião, sem código próprio em `src/features/sync/`: a projeção do conector não leva o
-campo `importacao`, mas a cópia fiel leva (`copiaDaReuniao` copia o registro inteiro). O
-servidor só participa na transcrição de mídia (`servidor-documentos.md`, seção 11). As
-automações (`src/features/automacoes/`, tela `src/home/Automacoes.tsx`) são uma fila local
-(`taqciti:automacoes:v1` para as preferências, `taqciti:automacoes:fila:v1` para a fila,
-alarme de 1 min com o nome da chave da fila) que, ao fim de uma reunião, gera resumo e/ou
-compromissos pelo adaptador do Taq (instruções `automacoes-v1`), sem efeito externo. O que
-sobe e o que não sobe, conferido: o resumo vira um documento comum (`guardarDocumentoUnico`)
-e sobe pela coleção de documentos; os compromissos vão para `taq:trabalho`
-(`registrarCompromissos`), chave que NÃO está em `CHAVES_OBSERVADAS` nem em
-`montarDesejado`, portanto NÃO sobem (nem voltam em outra máquina); a fila e as
-preferências também não sobem.
+**Reuniões importadas (recurso removido em 23/11/2026)**: "Importar reunião" e as
+"Automações após reuniões" saíram (pedido do usuário), com `src/features/importacao/`,
+`src/features/automacoes/` e a rota de transcrição do servidor. As reuniões importadas
+antes continuam em `taq:history` com o campo `importacao` e sobem como qualquer
+reunião (a projeção do conector não leva o campo; a cópia fiel leva). As preferências e
+a fila das automações (`taqciti:automacoes:v1`, `taqciti:automacoes:fila:v1`), que nunca
+subiam, são apagadas pela migração de storage versão 5.
 
 **Restauração em outra máquina**: instalar a extensão, entrar com a mesma conta
 CITi e ligar a sincronização em Conexões. Cursor 0 traz tudo, em páginas.

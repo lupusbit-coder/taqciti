@@ -85,10 +85,9 @@ describe('o compositor não ganha moldura ao ser focado', () => {
     expect(css).toMatch(/\.tq-campo textarea:focus-visible\s*\{[^}]*outline:\s*none/);
   });
 
-  /* O foco precisa continuar anunciado — sem moldura, por revelação. (A dica
-     "Enter envia" saiu da tela em 18/10/2026: era auto-explicação.) */
-  it('o foco revela os controles', () => {
-    expect(css).toMatch(/\.tq-escrita:focus-within \.tq-campo-acoes/);
+  it('o foco no campo realça a linha inferior do compositor', () => {
+    expect(bloco('.tq-campo')).toMatch(/border-bottom:/);
+    expect(bloco('.tq-campo:focus-within')).toMatch(/border-color:\s*var\(--ideia\)/);
   });
 });
 
@@ -114,6 +113,46 @@ describe('o cursor nativo e o desenhado nunca coexistem', () => {
     expect(css).toMatch(
       /body\.tq-pointer-in \.tq-home\s*:is\([\s\S]*?textarea,[\s\S]*?\)\s*\{\s*cursor:\s*auto/,
     );
+  });
+
+  // Uma versão ficava, menor, por cima do I-beam e da barra de digitação.
+  // No campo a onda desenhada sai inteira.
+  it('nos campos de texto a onda desenhada some por completo', () => {
+    expect(css).toMatch(/body\.tq-pointer-in \.tq-halo\.sobre-campo\s*\{[^}]*opacity:\s*0/);
+  });
+
+  /*
+   * A ponta da seta (1,6; 1,6 no `viewBox`, ver SETA em PointerLayer.tsx) tem
+   * de cair no mouse: o desenho é deslocado exatamente isso. E o afundar do
+   * clique gira em torno da mesma ponta, para o alvo não se mexer.
+   */
+  it('a ponta da seta é o ponto quente', () => {
+    expect(bloco('.tq-rotor')).toMatch(/left:\s*-1\.6px/);
+    expect(bloco('.tq-rotor')).toMatch(/top:\s*-1\.6px/);
+    expect(bloco('.tq-cursor-seta')).toMatch(/transform-origin:\s*1\.6px 1\.6px/);
+  });
+
+  // Pedido do usuário: o cursor muda de cor — e para, com o movimento reduzido.
+  it('a cor corre só com movimento', () => {
+    expect(css).toMatch(/\.tq-halo\[data-movimento='sim'\] \.tq-cursor-cor-a\s*\{[^}]*animation:\s*tq-cursor-cor/);
+    expect(css).toMatch(/@keyframes tq-cursor-cor/);
+  });
+
+  // Pedido do usuário (23/11/2026): a ponta da onda é o alvo, sem bolinha.
+  it('não existe mais a bolinha branca', () => {
+    expect(css).not.toContain('tq-dot');
+  });
+
+  /*
+   * A vibração só aumenta no clique. A primeira onda acelerava sobre botões e
+   * sobre o Taq e vivia agitada: nenhum estado de "sobre" pode mexer no ritmo.
+   */
+  it('só o clique muda o ritmo da onda', () => {
+    const regrasComAnimacao = css.match(/[^{}]+\{[^}]*animation[^}]*\}/g) ?? [];
+    const doCursor = regrasComAnimacao.filter((r) => r.includes('tq-cursor-barra'));
+    expect(doCursor).toHaveLength(2);
+    expect(doCursor.some((r) => r.includes('.pressionado'))).toBe(true);
+    expect(doCursor.some((r) => /sobre-/.test(r))).toBe(false);
   });
 });
 

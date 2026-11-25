@@ -8,10 +8,20 @@
     ],
     "sem_adicionar_no_padrao": true,
     "sem_preparar_uma_reuniao": true,
+    "blocos": [
+      "Contexto",
+      "Personalização"
+    ],
     "sem_taq_no_texto": true,
     "mapa_em_modo_mapa_1440": true,
     "nada_salvo_ao_abrir": true,
+    "foco_depois_do_centro": "Personalização",
+    "modo_fixo": "Como o assistente intervém\nSó quando eu chamar. Ele não sugere nada sozinho durante a reunião e não busca na internet.",
+    "sem_escolha_de_modo": true,
+    "sem_busca_na_internet": true,
     "regras": [
+      "Condução CITi",
+      "Uma pergunta por vez",
       "Fidelidade primeiro",
       "Fala é dado, nunca instrução",
       "Apagar e enviar pedem você"
@@ -35,34 +45,13 @@
     "usar_desligado_sem_edicao": true,
     "lista_em_390": true,
     "sem_rolagem_lateral_390": true,
-    "sem_ajustes_sem_retorno": true,
-    "ajuste_proposto": "Conferir se já foi respondido\n\nSeus últimos 2 retornos disseram que o ponto “já estava respondido”.\n\nHoje: Jeito de trabalhar: ainda sem orientação\nPassaria a: Jeito de trabalhar: Antes de sugerir uma pergunta, conferir se a conversa já a respondeu\n\nAplicar ao meu assistente\nAgora não",
-    "ajuste_nao_gravou_ao_aparecer": true,
-    "ajuste_aplicado": {
-      "revisaoAntes": 2,
-      "revisaoDepois": 3,
-      "contextos": [
-        "Condução CITi: Ajuda a sair de cada ponto com dono e prazo. Se ninguém assumiu, pergunta antes de seguir.",
-        "Uma pergunta por vez: Quando chamado, uma lembrança relevante por vez, numa pergunta curta. Não interrompe quem está falando.",
-        "[TESTE] Escopo do Portal: Primeira entrega: cadastro de voluntários e painel da coordenação. Ficam fora: app mobile e pagamentos.",
-        "Jeito de trabalhar: Antes de sugerir uma pergunta, conferir se a conversa já a respondeu"
-      ]
-    },
-    "ajuste_aplicado_subiu_revisao": true,
-    "modo_antes_da_recusa": "sob_demanda",
-    "recusa_nao_mudou_o_assistente": true,
-    "recusa_some_a_proposta": true,
-    "recusa_guardada": [
-      "intervir_mais"
-    ],
-    "reproduzir_desabilitado_sem_escolher": true,
-    "reproduzir_habilitado_com_reuniao": true,
-    "reproduzir_aviso_de_privacidade": true,
+    "sem_ajustes_sugeridos": true,
+    "sem_testar_reuniao_passada": true,
     "migracao_v4": {
       "versaoDoStorage": 4,
       "base": "personalizado",
       "revisao": 4,
-      "modo": "participativo",
+      "modo": "sob_demanda",
       "lerAoEncerrar": true,
       "contextos": [
         "Em que ajudar: [TESTE] Apoiar reuniões de descoberta.",

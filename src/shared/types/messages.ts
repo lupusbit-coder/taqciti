@@ -4,7 +4,6 @@
  * atravessando fronteiras de contexto.
  */
 import { z } from 'zod';
-import { importacaoSchema } from '@/features/importacao/transcricao';
 
 export const participantSchema = z.object({
   name: z.string().min(1).max(120),
@@ -253,7 +252,6 @@ export const uiMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('ui/reset') }),
   z.object({ type: z.literal('ui/dismissLanguageWarning') }),
   z.object({ type: z.literal('ui/history/delete'), id: z.string() }),
-  z.object({ type: z.literal('ui/history/import'), dados: importacaoSchema }).strict(),
   z.object({
     type: z.literal('ui/history/rename'),
     id: z.string(),
@@ -272,6 +270,8 @@ export const uiMessageSchema = z.discriminatedUnion('type', [
    * registro como o histórico o tinha, e uma reunião gravada por versão antiga
    * pode não ter algum deles. Recusar a mensagem deixaria a pessoa sem poder
    * recuperar a reunião. O background regrava `status` como 'ready'.
+   * `importacao` fica embora importar tenha saído (23/11/2026): uma reunião
+   * importada antes pode estar na lixeira.
    */
   z.object({
     type: z.literal('ui/history/restore'),

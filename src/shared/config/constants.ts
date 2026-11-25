@@ -184,13 +184,6 @@ export const STORAGE_KEYS = {
   conducao: 'taq:conducao',
 
   /**
-   * chrome.storage.local — as sugestões de condução (privadas, para quem
-   * conduz) e o feedback sobre elas. Derivados da reunião: apagá-la leva as
-   * dela. Ver `features/apoio/store.ts`.
-   */
-  apoio: 'taq:apoio',
-
-  /**
    * chrome.storage.local — o estado dos pontos de cada reunião (a esclarecer,
    * discutido, a confirmar, decidido, adiado), com a fala que sustenta cada um.
    * Derivado da reunião: apagá-la leva o dela. Ver `features/estado/store.ts`.
@@ -216,6 +209,12 @@ export const MEET_END_CONFIRM_POLLS = 2;
 export const AUTO_CAPTIONS_MAX_ATTEMPTS = 6;
 /** Depois da rajada o vigia não desiste: tenta de novo neste ritmo, sem fim. */
 export const AUTO_CAPTIONS_INTERVALO_LENTO_MS = 10_000;
+/**
+ * Ao ENTRAR na sala (antes de qualquer "sim" para gravar), quantos polls a
+ * extensão tenta ligar a legenda e pô-la em português. Depois disso ela larga:
+ * quem desligar a legenda ou trocar o idioma de propósito não é contrariado.
+ */
+export const LEGENDAS_NA_ENTRADA_MAX_POLLS = 20;
 
 /**
  * Intervalo mínimo entre varreduras da região de legendas. O Meet reescreve
@@ -252,7 +251,7 @@ export const LIVE_SAVE_THROTTLE_MS = 4000;
 export const ACTIVE_IDENTITY_NAMESPACE_KEY = 'taq:activeIdentityNamespace';
 /** Versão global das migrações locais; não pertence a um usuário. */
 export const LOCAL_STORAGE_SCHEMA_VERSION_KEY = 'taq:storageSchemaVersion';
-export const LOCAL_STORAGE_SCHEMA_VERSION = 4;
+export const LOCAL_STORAGE_SCHEMA_VERSION = 5;
 export const ANONYMOUS_IDENTITY_NAMESPACE = 'anonymous';
 
 export const PROVIDER_GOOGLE_MEET = 'google-meet';

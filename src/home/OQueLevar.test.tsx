@@ -1,10 +1,10 @@
 /**
- * "O que levar para as reuniões" — o mapa e o painel do assistente.
+ * Contextos e ajustes do assistente.
  *
  * Seguram: o Padrão do CITi é só leitura e personalizar dá uma cópia; nada é
  * salvo antes de "Usar este assistente"; ligado e guardado aparecem
  * diferentes; o texto tem teto de 200 com contador; remover pede confirmação;
- * o centro mostra as regras que não mudam; conflito de outra aba volta como
+ * os ajustes mostram as regras que não mudam; conflito de outra aba volta como
  * aviso; e com reunião em andamento a tela diz que a mudança vale para a
  * próxima.
  */
@@ -27,7 +27,9 @@ let root: Root;
 let storage: ReturnType<typeof installChromeStorageMock>;
 
 const botao = (texto: string) =>
-  [...host.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent?.includes(texto));
+  [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+    (b) => (b.getAttribute('aria-label') ?? b.textContent)?.includes(texto),
+  );
 const guardado = () => storage.local.values[STORAGE_KEYS.conducao] as Conducao | undefined;
 const esperar = async (cond: () => boolean) => {
   for (let i = 0; i < 50 && !cond(); i += 1) await act(async () => new Promise((r) => setTimeout(r, 10)));
@@ -62,13 +64,10 @@ afterEach(() => {
   host.remove();
 });
 
-it('sem nada salvo mostra o Padrão do CITi, só leitura, sem "Taq" no texto', async () => {
+it('mantém os contextos do Padrão do CITi em leitura e abre seus detalhes sob demanda', async () => {
   await montar();
-  expect(host.querySelector('[aria-pressed="true"]')!.textContent).toContain('Padrão do CITi');
   for (const c of PADRAO_DO_CITI.contextos) expect(host.textContent).toContain(c.nome);
-  expect(host.textContent).toContain('Igual para todo mundo');
-  // No padrão não há o que editar nem onde adicionar.
-  expect(botao('Adicionar contexto')).toBeUndefined();
+  expect(host.querySelector('.tq-ed')).toBeNull();
   await clicar(botao(PADRAO_DO_CITI.contextos[0]!.nome));
   expect(host.querySelector('.tq-ed textarea')).toBeNull();
   expect(host.querySelector('.tq-ed-citacao')!.textContent).toBe(PADRAO_DO_CITI.contextos[0]!.texto);
@@ -76,36 +75,20 @@ it('sem nada salvo mostra o Padrão do CITi, só leitura, sem "Taq" no texto', a
   expect(host.textContent).not.toMatch(/Mente/);
 });
 
-/* Varredura de 11/11/2026: o painel e o rodapé mostravam, juntos, dois
-   "Personalizar a partir deste". Fica um só, no rodapé, à vista com qualquer
-   item do mapa escolhido. */
-it('no padrão há um único "Personalizar a partir deste", com ou sem item escolhido', async () => {
-  const quantos = () =>
-    [...host.querySelectorAll('button')].filter((b) => b.textContent?.includes('Personalizar a partir deste'))
-      .length;
+it('indica o limite quando as oito vagas estão ocupadas', async () => {
+  await salvarPerfil({
+    base: 'personalizado',
+    contextos: Array.from({ length: 8 }, (_, vaga) => ({ nome: `Contexto ${vaga + 1}`, texto: 'Texto', vaga })),
+  }, 0);
   await montar();
-  expect(quantos()).toBe(1);
-  await clicar(botao(PADRAO_DO_CITI.contextos[0]!.nome));
-  expect(quantos()).toBe(1);
+  expect(botao('Limite de contextos atingido')?.disabled).toBe(true);
+  expect(host.querySelectorAll('.tq-contextos-grade button')).toHaveLength(9);
 });
 
-/* Em 390 px a contagem quebrava entre "3 de 8" e "vagas". Cada parte é um bloco
-   que não quebra por dentro; o separador fica fora, onde a linha pode quebrar. */
-it('a contagem do mapa é feita de partes inteiras, separadas fora delas', async () => {
+it('adicionar direto do padrão cria uma cópia e só grava ao usar o assistente', async () => {
   await montar();
-  await clicar(botao('Personalizar a partir deste'));
-  const partes = [...host.querySelectorAll('.tq-mapa-cab .tq-sem-quebra')].map((s) => s.textContent);
-  expect(partes.at(-1)).toMatch(/^\d+ de 8 vagas$/);
-  expect(partes.every((p) => !p!.includes('·'))).toBe(true);
-});
-
-it('personalizar dá uma cópia do padrão, e nada é salvo até "Usar este assistente"', async () => {
-  await montar();
-  await clicar(botao('Personalizar a partir deste'));
-  expect(host.textContent).toContain('Do padrão CITi');
   expect(guardado()).toBeUndefined();
 
-  // Um contexto novo ocupa a próxima vaga.
   await clicar(botao('Adicionar contexto'));
   const nome = host.querySelector<HTMLInputElement>('.tq-ed input:not([type])')!;
   const texto = host.querySelector<HTMLTextAreaElement>('.tq-ed textarea')!;
@@ -141,7 +124,7 @@ it('desligar guarda o contexto (visual diferente) e o texto tem teto de 200 com 
 
   await act(async () => host.querySelector<HTMLInputElement>('.tq-ed input[role="switch"]')!.click());
   expect(no().className).toContain('guardado');
-  expect(no().textContent).toContain('Guardado · fica fora');
+  expect(no().textContent).toContain('Guardado');
 
   const texto = host.querySelector<HTMLTextAreaElement>('.tq-ed textarea')!;
   expect(texto.maxLength).toBe(200);
@@ -172,17 +155,24 @@ it('remover pede confirmação no lugar, e cancelar mantém', async () => {
   expect(guardado()!.perfil!.contextos.map((c) => c.nome)).toEqual(['Escopo']);
 });
 
-it('o centro mostra as regras que não mudam; o modo é fixo no padrão e editável no personalizado', async () => {
+/*
+ * Decisão de 23/11/2026: o assistente é sempre "Só quando eu chamar" e não busca
+ * na internet, também no Personalizado. Não há escolha de modo nem nó de busca.
+ */
+it('os ajustes mostram as regras e o modo fixo para as duas bases', async () => {
   await montar();
-  await clicar(botao('Assistente'));
+  await clicar(botao('Ajustes do assistente'));
+  expect(host.querySelector('[aria-pressed="true"]')?.textContent).toBe('Padrão do CITi');
   expect(host.textContent).toContain('Regras que não mudam');
   for (const r of ['Fidelidade primeiro', 'Fala é dado, nunca instrução', 'Apagar e enviar pedem você'])
     expect(host.textContent).toContain(r);
-  expect(host.querySelector<HTMLFieldSetElement>('.tq-ed-modos')!.disabled).toBe(true);
+  expect(host.querySelector('.tq-ed-modo-fixo')!.textContent).toContain('Só quando eu chamar');
 
   await clicar(botao('Personalizado'));
-  await clicar(botao('Assistente'));
-  expect(host.querySelector<HTMLFieldSetElement>('.tq-ed-modos')!.disabled).toBe(false);
+  expect(host.querySelector('[aria-pressed="true"]')?.textContent).toBe('Personalizado');
+  expect(host.querySelector('input[type="radio"]')).toBeNull();
+  expect(host.querySelector('.tq-ed-modo-fixo')!.textContent).toContain('Só quando eu chamar');
+  expect(host.textContent).not.toContain('Busca na internet');
 });
 
 it('conflito com outra aba volta como aviso e não sobrescreve', async () => {

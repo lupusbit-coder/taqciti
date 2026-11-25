@@ -146,7 +146,7 @@ export function AssistantView({
   // Depois de pintar, decide se acompanha. `useLayoutEffect` porque medir
   // altura depois do paint entregaria a posição do quadro anterior.
   useLayoutEffect(() => {
-    if (!noFimRef.current) return;
+    if (vazia || !noFimRef.current) return;
     window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'auto' });
     // Segunda passada no quadro seguinte: a marca do agente é um `<canvas>` e o
     // texto pode refluir, então a altura final às vezes só existe depois do
@@ -157,7 +157,7 @@ export function AssistantView({
       }
     });
     return () => cancelAnimationFrame(id);
-  }, [total, gravando, agente.atividade, agente.etapa]);
+  }, [vazia, total, gravando, agente.atividade, agente.etapa]);
 
   /** Mantém a altura do campo colada no conteúdo, até o teto. */
   const ajustarAltura = (el: HTMLTextAreaElement) => {
@@ -313,16 +313,15 @@ export function AssistantView({
   );
 
   return (
-    <section className="tq-palco" aria-label="Conversa com o assistente">
+    <section
+      className={`tq-palco${vazia ? ' tq-palco-vazio' : ''}`}
+      aria-label="Conversa com o assistente"
+    >
       <div className="tq-conversa">
-        {/*
-         * A abertura é só a marca viva e o slogan. Sem saudação grande e sem o
-         * nome do assistente: fora da conversa ele não tem nome — é presença.
-         */}
         {vazia ? (
           <div className="tq-abertura">
-            <MarcaDoTaq estado="repouso" tamanho={56} ouve />
-            <p className="tq-slogan">Sempre te ouvindo</p>
+            <MarcaDoTaq estado="repouso" tamanho={48} ouve />
+            <h1 className="tq-slogan">Sempre te ouvindo</h1>
             {primeiroUso && (
               <div className="tq-primeiro-uso">
                 <p>Entre numa reunião do Google Meet e aceite registrar: ela aparece aqui.</p>
@@ -356,12 +355,6 @@ export function AssistantView({
         )}
       </div>
 
-      {/*
-       * A ESCRITA. Sem barra, sem caixa, sem linha divisória: só o texto sobre o
-       * ambiente, com a onda atrás. `data-tq-escrita` marca a área onde o cursor
-       * personalizado acende verde — e só ela, para o brilho continuar
-       * significando "aqui se escreve".
-       */}
       <form
         className="tq-escrita"
         data-tq-escrita
@@ -396,11 +389,6 @@ export function AssistantView({
             }}
           />
 
-          {/*
-           * Sem o "+" de anexar (21/10/2026): ele abria o seletor de arquivo,
-           * mas só o NOME seguia com a mensagem — quem anexava achava que o Taq
-           * tinha lido o arquivo. Volta quando houver para onde mandá-lo.
-           */}
           <div className="tq-campo-acoes">
             <button
               type="submit"
@@ -413,16 +401,7 @@ export function AssistantView({
           </div>
         </div>
 
-        {/*
-         * O estado da IA, dito ANTES de escrever.
-         *
-         * Descobrir que não haverá resposta depois de ter formulado a pergunta
-         * é descobrir tarde demais — e faz a tela parecer um chat que falhou,
-         * em vez de um chat que ainda não existe.
-         */}
-        <div className="tq-escrita-pe">
-          <AvisoDoTaq taq={taq} onVerificarDeNovo={onVerificarDeNovo} />
-        </div>
+        <AvisoDoTaq taq={taq} onVerificarDeNovo={onVerificarDeNovo} />
       </form>
     </section>
   );
@@ -459,33 +438,31 @@ function AvisoDoTaq({
   // isto é o estado do produto, e não uma fala dele.
   if (taq.fase === 'pronto') {
     return (
-      <p
-        className="tq-com-ia tq-status-ia"
-        role="status"
-        title="Os trechos que o assistente consulta vão ao provedor de IA."
-      >
-        IA conectada
+      <p className="tq-status-ia" role="status" title="Os trechos que o assistente consulta vão ao provedor de IA.">
+        <span>IA conectada</span>
       </p>
     );
   }
   return (
     <p
-      className={`tq-sem-ia tq-status-ia${taq.fase === 'verificando' ? ' verificando' : ' fora'}`}
+      className={`tq-status-ia ${taq.fase === 'verificando' ? 'verificando' : 'fora'}`}
       role="status"
     >
-      {taq.fase === 'verificando'
-        ? 'Verificando a IA…'
-        : taq.fase === 'pendente'
-          ? `IA indisponível. ${taq.motivos.join(' ')}`
-          : 'IA fora do ar. Sua mensagem fica salva.'}
-      {taq.fase !== 'verificando' && (
-        <>
-          {' '}
-          <button type="button" className="tq-linkish" onClick={onVerificarDeNovo}>
-            verificar de novo
-          </button>
-        </>
-      )}
+      <span>
+        {taq.fase === 'verificando'
+          ? 'Verificando a IA…'
+          : taq.fase === 'pendente'
+            ? `IA indisponível. ${taq.motivos.join(' ')}`
+            : 'IA fora do ar. Sua mensagem fica salva.'}
+        {taq.fase !== 'verificando' && (
+          <>
+            {' '}
+            <button type="button" className="tq-linkish" onClick={onVerificarDeNovo}>
+              verificar de novo
+            </button>
+          </>
+        )}
+      </span>
     </p>
   );
 }

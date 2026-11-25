@@ -63,7 +63,9 @@ describe('perfil', () => {
     const r = await salvarPerfil(PESSOAL, 0);
     expect(r.tipo).toBe('ok');
     const { perfil } = await lerConducao();
-    expect(perfil).toMatchObject({ revisao: 1, base: 'personalizado', buscaNaInternet: true });
+    // Pedido com busca e "discreto": sai sem busca e "só quando eu chamar" (23/11/2026, topo de `store.ts`).
+    expect(perfil).toMatchObject({ revisao: 1, base: 'personalizado', intervencao: { modo: 'sob_demanda' } });
+    expect(perfil).not.toHaveProperty('buscaNaInternet');
     expect(perfil!.contextos.map((x) => [x.nome, x.ligado])).toEqual([
       ['Escopo do Portal', true],
       ['Histórico do cliente', false],
@@ -73,12 +75,11 @@ describe('perfil', () => {
 
   it('edição com revisão velha dá conflito e não grava', async () => {
     await salvarPerfil(PESSOAL, 0);
-    await salvarPerfil({ ...PESSOAL, buscaNaInternet: false }, 1);
+    await salvarPerfil({ ...PESSOAL, contextos: [PESSOAL.contextos[0]] }, 1);
     const r = await salvarPerfil({ ...PESSOAL, contextos: [] }, 1);
     expect(r.tipo).toBe('conflito');
     const { perfil } = await lerConducao();
-    expect(perfil!.contextos).toHaveLength(2);
-    expect(perfil!.buscaNaInternet).toBe(false);
+    expect(perfil!.contextos).toHaveLength(1);
   });
 
   it('salvar o mesmo conteúdo não cria revisão', async () => {
@@ -118,7 +119,8 @@ describe('perfil', () => {
   it('com base no padrão, o guardado não carrega contextos e o resolvido traz os do pacote', async () => {
     await salvarPerfil({ base: 'padrao', contextos: [{ nome: 'Intruso', texto: 'x' }], buscaNaInternet: true, lerAoEncerrar: true }, 0);
     const { perfil } = await lerConducao();
-    expect(perfil).toMatchObject({ base: 'padrao', contextos: [], buscaNaInternet: false, lerAoEncerrar: true });
+    expect(perfil).toMatchObject({ base: 'padrao', contextos: [], lerAoEncerrar: true });
+    expect(perfil).not.toHaveProperty('buscaNaInternet');
     const resolvido = resolverPerfil(conteudoDe(perfil!));
     expect(resolvido.contextos.map((x) => x.nome)).toEqual(PADRAO_DO_CITI.contextos.map((x) => x.nome));
     expect(resolvido.contextos.every((x) => x.ligado && x.origem === 'padrao')).toBe(true);
@@ -131,7 +133,7 @@ describe('perfil', () => {
       0,
     );
     const { perfil } = await lerConducao();
-    expect(perfil).toMatchObject({ base: 'personalizado', intervencao: { modo: 'participativo' } });
+    expect(perfil).toMatchObject({ base: 'personalizado', intervencao: { modo: 'sob_demanda' } });
     expect(perfil!.contextos.map((x) => x.nome)).toEqual(['Em que ajudar', 'O que observar']);
   });
 
@@ -154,18 +156,33 @@ describe('o perfil em uso na reunião', () => {
   it('fica com a cópia de quando começou; a mudança vale a partir da próxima', async () => {
     await salvarPerfil(PESSOAL, 0);
     await fixarPerfilDaReuniao('ao-vivo');
-    await salvarPerfil({ ...PESSOAL, intervencao: { modo: 'participativo' } }, 1);
+    await salvarPerfil({ ...PESSOAL, contextos: [PESSOAL.contextos[0]] }, 1);
 
     const c = await lerConducao();
-    expect(perfilQueValeParaAReuniao(c, 'ao-vivo').intervencao.modo).toBe('discreto');
+    expect(perfilQueValeParaAReuniao(c, 'ao-vivo').contextos).toHaveLength(2);
     expect(perfilEmUsoDaReuniao(c, 'ao-vivo')!.perfilRevisao).toBe(1);
-    expect(perfilQueValeParaAReuniao(c, 'a-proxima').intervencao.modo).toBe('participativo');
+    expect(perfilQueValeParaAReuniao(c, 'a-proxima').contextos).toHaveLength(1);
+  });
+
+  // A cópia guardada antes da decisão de 23/11/2026, com "discreto" e busca, também sai travada.
+  it('cópia antiga de uma reunião, com outro modo ou busca, não liga nada', async () => {
+    await salvarPerfil(PESSOAL, 0);
+    await fixarPerfilDaReuniao('ao-vivo');
+    const guardado = await chrome.storage.local.get(null);
+    const [chave, valor] = Object.entries(guardado).find(([, v]) => (v as { emUso?: unknown })?.emUso)!;
+    const usado = (valor as { emUso: Array<{ perfilUsado: Record<string, unknown> }> }).emUso[0]!.perfilUsado;
+    usado.intervencao = { modo: 'participativo' };
+    usado.buscaNaInternet = true;
+    await chrome.storage.local.set({ [chave]: valor });
+    const vale = perfilQueValeParaAReuniao(await lerConducao(), 'ao-vivo');
+    expect(vale).toMatchObject({ intervencao: { modo: 'sob_demanda' } });
+    expect(vale).not.toHaveProperty('buscaNaInternet');
   });
 
   it('fixar de novo (a mesma reunião retomada) não troca a cópia', async () => {
     await salvarPerfil(PESSOAL, 0);
     await fixarPerfilDaReuniao('ao-vivo');
-    await salvarPerfil({ ...PESSOAL, buscaNaInternet: false }, 1);
+    await salvarPerfil({ ...PESSOAL, contextos: [PESSOAL.contextos[0]] }, 1);
     await fixarPerfilDaReuniao('ao-vivo');
     expect(perfilEmUsoDaReuniao(await lerConducao(), 'ao-vivo')!.perfilRevisao).toBe(1);
   });
@@ -214,26 +231,10 @@ describe('briefing', () => {
     expect(b.perfilUsado!.contextos[0]!.texto).toBe(PERFIL.missao);
   });
 
-  it('o modo só desta reunião é escolha explícita: não altera o perfil nem as outras reuniões', async () => {
-    await salvarPerfil(PERFIL, 0);
-    await salvarBriefing('m-1', { objetivo: 'A' }, 0);
-    const r = await salvarBriefing('m-1', { modo: 'participativo' }, 1);
-    expect(r).toMatchObject({ tipo: 'ok', item: { modo: 'participativo', revisao: 2 } });
-    const c = await lerConducao();
-    expect(c.perfil!.intervencao.modo).toBe('discreto'); // o perfil continua igual
-    expect(briefingDaReuniao(c, 'm-1')!.modo).toBe('participativo');
-    await salvarBriefing('m-2', { objetivo: 'B' }, 0);
-    expect(briefingDaReuniao(await lerConducao(), 'm-2')!.modo).toBeUndefined();
-    // Repetir não cria revisão; `null` volta ao do perfil.
-    expect(await salvarBriefing('m-1', { modo: 'participativo' }, 2)).toMatchObject({ item: { revisao: 2 } });
-    const volta = await salvarBriefing('m-1', { modo: null }, 2);
-    expect(volta).toMatchObject({ tipo: 'ok', item: { revisao: 3 } });
-    expect(briefingDaReuniao(await lerConducao(), 'm-1')!.modo).toBeUndefined();
-  });
-
-  it('modo desconhecido não é guardado', async () => {
-    await salvarBriefing('m-1', { objetivo: 'A', modo: 'agressivo' as never }, 0);
-    expect(briefingDaReuniao(await lerConducao(), 'm-1')!.modo).toBeUndefined();
+  // Não há mais modo por reunião (23/11/2026): o que vier no pedido é ignorado.
+  it('o briefing não guarda modo de intervenção', async () => {
+    await salvarBriefing('m-1', { objetivo: 'A', modo: 'participativo' } as never, 0);
+    expect(briefingDaReuniao(await lerConducao(), 'm-1')).not.toHaveProperty('modo');
   });
 
   it('reunião preparada sem perfil salvo guarda o Padrão do CITi, sem revisão', async () => {

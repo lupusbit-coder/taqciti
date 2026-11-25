@@ -36,14 +36,12 @@ const lista = (itens: readonly string[]) => itens.join('; ');
 export function perfilQueValeParaAReuniao(c: Conducao, reuniaoId: string | null): ConteudoDoPerfil {
   if (!reuniaoId) return perfilAtual(c);
   const briefing = briefingDaReuniao(c, reuniaoId);
-  const usado =
+  // Não há mais modo por reunião: o assistente é sempre "Só quando eu chamar"
+  // (ver o topo de `store.ts`).
+  return (
     perfilEmUsoDaReuniao(c, reuniaoId)?.perfilUsado ??
-    (briefing ? (briefing.perfilUsado ?? conteudoDoPadrao()) : perfilAtual(c));
-  // O modo escolhido para ESTA reunião vale só para ela, e só sobre um perfil
-  // personalizado: o padrão é fixo, e escolher um modo não liga o apoio nele.
-  return briefing?.modo && usado.base === 'personalizado'
-    ? { ...usado, intervencao: { ...usado.intervencao, modo: briefing.modo } }
-    : usado;
+    (briefing ? (briefing.perfilUsado ?? conteudoDoPadrao()) : perfilAtual(c))
+  );
 }
 
 export function linhasDaConducao(c: Conducao, reuniao: { id: string; titulo: string } | null): string[] {

@@ -1,28 +1,15 @@
 # A ajuda do TaqCiti — referência verificada
 
-## Acervo individual: importação, busca e automações
+## Acervo individual: busca
 
-Em Reuniões, **Importar reunião** aceita TXT, SRT e VTT UTF-8 (até 1 MB,
-200 mil caracteres e 10 mil trechos). Áudio e vídeo (MP3, MP4, M4A, WAV,
-WEBM, OGG, FLAC, MPEG e MPGA) têm limite de 4 MB por arquivo; são enviados
-ao servidor para transcrição, sem armazenar a mídia. É preciso publicar
-`/api/importacao/transcrever`, configurar `GROQ_API_KEY` e declarar
-`DOCCITI_DATA_POLICY=private`. Sem isso, a importação de texto continua local.
-Não há extração de nomes de falantes do áudio. A data da reunião é informada
-pela pessoa; duração ausente não é estimada. Reimportar um arquivo abre o
-registro existente, sem sobrescrever seu título.
+"Importar reunião" e "Automações após reuniões" saíram da aba Reuniões em
+23/11/2026 (pedido do usuário), com a rota `/api/importacao/transcrever` e o
+prompt `automacoes-v1` do servidor. As reuniões entram só pela captura do Meet;
+as importadas antes continuam no histórico. O que essas duas guardavam no
+navegador é apagado pela migração de storage versão 5.
 
-**Automações após reuniões** oferece resumo em Documentos e até três próximos
-passos candidatos em Acompanhamento. São preferências individuais, desligadas
-inicialmente, aplicadas a novos encerramentos e importações. A fila local é
-retomada com o navegador aberto; não há envio de mensagens nem processamento
-com o navegador fechado. Uma execução interrompida ou falha aguarda **Tentar
-novamente**, sem chamadas repetidas silenciosas. Requer publicar também o
-prompt `automacoes-v1` no servidor antes de distribuir a extensão.
-
-Reuniões, documentos e conversas têm busca local por nome e conteúdo.
-Reuniões filtram também por participante e data; documentos pela data da
-última alteração. A busca ignora acentos e caixa. O menu Conversas permite
+Reuniões e documentos têm busca local pelo nome; conversas, por nome e
+conteúdo. A busca ignora acentos e caixa. O menu Conversas permite
 **Renomear** e **Salvar nome**, preservando mensagens e contexto.
 
 A instalação continua manual. Nenhum destes recursos cria acervo de equipe.

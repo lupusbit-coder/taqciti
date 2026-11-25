@@ -1,7 +1,7 @@
 {
-  "quando": "2026-11-11T13:47:39.106Z",
-  "build": "..\\AppData\\Local\\Temp\\taq-build-final",
-  "browser": "157.0.4341.42",
+  "quando": "2026-11-24T03:12:22.734Z",
+  "build": "..\\AppData\\Local\\Temp\\claude\\eed513b41855abfb\\88e2e4f1-eda9-4cdb-bf50-3948b65c796d\\scratchpad\\build-ajuda",
+  "browser": "edge (contexto persistente)",
   "dados": "[TESTE] sintéticos; geração simulada, sem IA",
   "vistos": [
     "Abrir",
@@ -11,13 +11,12 @@
     "Acompanhamento",
     "Adicionar contexto",
     "Agora não",
-    "Ajustes sugeridos",
+    "Ajustes do assistente",
     "Apagar",
     "Apagar as notas desta reunião",
     "Apagar documento",
     "Apagar esta conversa",
     "Apagar reunião",
-    "Aplicar ao meu assistente",
     "Assistente",
     "Ata de Reunião",
     "Ação",
@@ -29,10 +28,13 @@
     "Baixar Word",
     "Baixar o documento como arquivo de texto",
     "Baixar rascunho",
+    "Buscar conversas",
+    "Buscar pelo nome do documento",
     "Cancelar",
     "Conectadas",
     "Conectar",
     "Conexões",
+    "Contexto",
     "Continuar na conversa",
     "Conversa",
     "Conversas",
@@ -46,7 +48,6 @@
     "Desligar",
     "Desligar brasas do fundo",
     "Destaque",
-    "Discreto: uma lembrança relevante por vez",
     "Doc Conversa (X1)",
     "Documentos",
     "Dúvida",
@@ -57,6 +58,7 @@
     "Finalizar",
     "Fontes",
     "Gerar com o padrão CITi",
+    "Ler ao encerrar a reunião",
     "Mais ações",
     "Nome da reunião",
     "Nome do documento",
@@ -65,24 +67,22 @@
     "Nova",
     "Nova conversa",
     "O que falta fechar",
-    "O que levar para as reuniões",
     "Padrão do CITi",
     "Para conectar",
-    "Participativo: perguntas e encaminhamentos com mais frequência",
     "Pausada",
     "Pausar",
     "Pausar movimento",
     "Pedir alteração",
     "Pergunta rápida",
     "Perguntar sobre o trecho",
-    "Personalizar a partir deste",
+    "Personalização",
     "Preparar",
     "Print",
     "Prints",
     "Registrar",
     "Registrar esta reunião",
     "Regras que não mudam",
-    "Reproduzir",
+    "Renomear",
     "Restaurar",
     "Resumo completo",
     "Retomar",
@@ -90,7 +90,6 @@
     "Reuniões",
     "Salvar",
     "Sem conectar: o caminho manual",
-    "Testar o assistente numa reunião passada",
     "Tirar o contexto desta pergunta",
     "Transcrição",
     "Usar este assistente",
@@ -119,6 +118,8 @@
     "Desligar brasas do fundo": "HOME · Assistente",
     "Pausar movimento": "HOME · Assistente",
     "Enviar": "HOME · Assistente",
+    "Buscar conversas": "HOME · menu Conversas",
+    "Renomear": "HOME · menu Conversas",
     "Apagar": "HOME · menu Conversas",
     "Nova conversa": "HOME · menu Conversas",
     "Nova": "HOME · menu Conversas",
@@ -148,6 +149,7 @@
     "Baixar .md": "HOME · editor",
     "Apagar documento": "HOME · Mais ações do documento",
     "Baixar rascunho": "HOME · editor com falha",
+    "Buscar pelo nome do documento": "HOME · Documentos",
     "Baixar PDF": "HOME · resultado do documento personalizado",
     "Ver": "HOME · painel do documento personalizado",
     "Baixar Word": "HOME · painel do documento personalizado",
@@ -158,19 +160,14 @@
     "Para conectar": "HOME · Conexões",
     "Conectar": "HOME · Conexões",
     "Conectadas": "HOME · Conexões",
-    "O que levar para as reuniões": "HOME · Preparar (Padrão do CITi)",
-    "Padrão do CITi": "HOME · Preparar (Padrão do CITi)",
-    "Personalizar a partir deste": "HOME · Preparar (Padrão do CITi)",
-    "Regras que não mudam": "HOME · Preparar (regras que não mudam)",
-    "Discreto: uma lembrança relevante por vez": "HOME · Preparar (regras que não mudam)",
-    "Participativo: perguntas e encaminhamentos com mais frequência": "HOME · Preparar (regras que não mudam)",
-    "Adicionar contexto": "HOME · Preparar (personalizado)",
+    "Contexto": "HOME · Preparar (Padrão do CITi)",
+    "Ajustes do assistente": "HOME · Preparar (Padrão do CITi)",
+    "Adicionar contexto": "HOME · Preparar (Padrão do CITi)",
+    "Personalização": "HOME · Preparar (ajustes)",
+    "Padrão do CITi": "HOME · Preparar (ajustes)",
+    "Ler ao encerrar a reunião": "HOME · Preparar (ajustes)",
+    "Regras que não mudam": "HOME · Preparar (ajustes)",
     "Usar este assistente": "HOME · Preparar (personalizado)",
-    "Agora não": "HOME · Preparar (ajustes sugeridos)",
-    "Ajustes sugeridos": "HOME · Preparar (ajustes sugeridos)",
-    "Aplicar ao meu assistente": "HOME · Preparar (ajustes sugeridos)",
-    "Testar o assistente numa reunião passada": "HOME · Preparar (ajustes sugeridos)",
-    "Reproduzir": "HOME · Preparar (ajustes sugeridos)",
     "Registrar": "sidebar · Conversa",
     "Registrar esta reunião": "sidebar · Conversa",
     "Abrir HOME": "sidebar · Conversa",
@@ -189,9 +186,31 @@
     "Perguntar sobre o trecho": "sidebar · trecho selecionado",
     "Tirar o contexto desta pergunta": "sidebar · pergunta com contexto",
     "Retomar": "sidebar · reunião simulada pausada",
-    "Pausada": "sidebar · reunião simulada pausada"
+    "Pausada": "sidebar · reunião simulada pausada",
+    "Agora não": "sidebar · pergunta de registro"
   },
   "porEntrada": [
+    {
+      "id": "buscar_acervo",
+      "vistos": [
+        "Buscar pelo nome do documento",
+        "Buscar conversas"
+      ],
+      "nao_vistos": [
+        "Buscar pelo nome da reunião",
+        "Limpar busca"
+      ]
+    },
+    {
+      "id": "renomear_conversa",
+      "vistos": [
+        "Renomear"
+      ],
+      "nao_vistos": [
+        "Nome da conversa",
+        "Salvar nome"
+      ]
+    },
     {
       "id": "registrar_reuniao",
       "vistos": [
@@ -202,7 +221,9 @@
         "Transcrição"
       ],
       "nao_vistos": [
-        "Deseja registrar esta reunião?",
+        "Vamos guardar esta conversa?",
+        "Começar registro",
+        "Novo registro",
         "Continuar de onde parou",
         "Nova gravação",
         "Preparando a transcrição…"
@@ -596,24 +617,14 @@
       "id": "preparar_assistente",
       "vistos": [
         "Preparar",
-        "O que levar para as reuniões",
+        "Contexto",
+        "Personalização",
+        "Ajustes do assistente",
         "Padrão do CITi",
-        "Personalizar a partir deste",
+        "Ler ao encerrar a reunião",
         "Adicionar contexto",
         "Regras que não mudam",
-        "Usar este assistente",
-        "Ajustes sugeridos",
-        "Aplicar ao meu assistente",
-        "Agora não"
-      ],
-      "nao_vistos": []
-    },
-    {
-      "id": "reproduzir_reuniao_passada",
-      "vistos": [
-        "Preparar",
-        "Testar o assistente numa reunião passada",
-        "Reproduzir"
+        "Usar este assistente"
       ],
       "nao_vistos": []
     },
@@ -643,24 +654,6 @@
         "Me ajude a fechar",
         "Registrar como acompanhamento",
         "Registrar como decisão"
-      ]
-    },
-    {
-      "id": "apoio_a_conducao",
-      "vistos": [
-        "Preparar",
-        "Usar este assistente",
-        "Discreto: uma lembrança relevante por vez",
-        "Participativo: perguntas e encaminhamentos com mais frequência"
-      ],
-      "nao_vistos": [
-        "Usei esta pergunta",
-        "Isso já foi resolvido",
-        "Guardar para depois",
-        "Descartar",
-        "Ver fonte",
-        "Pausar sugestões",
-        "Retomar sugestões"
       ]
     },
     {
@@ -814,7 +807,6 @@
     "aparencia",
     "capacidades_do_taq",
     "preparar_assistente",
-    "reproduzir_reuniao_passada",
     "rascunho_de_mensagem",
     "revisar_documento",
     "revisar_exposicao",

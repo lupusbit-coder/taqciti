@@ -7,10 +7,20 @@
  * PERFIL: o assistente é UM SÓ para todas as reuniões e se monta ANTES delas.
  * Ou é o Padrão do CITi (fixo, igual para todos, `padrao.ts`), ou é uma cópia
  * personalizada: até 8 CONTEXTOS curtos (nome e texto em linguagem comum),
- * cada um levado ou guardado, mais dois ajustes que ligam comportamento e por
- * isso não são texto: o modo de intervenção (o apoio age sozinho ou não) e
- * "ler ao encerrar" (consentimento para enviar a reunião ao provedor). A busca
- * na internet é só a preferência por enquanto; a ferramenta não existe.
+ * cada um levado ou guardado, mais "ler ao encerrar" (consentimento para
+ * enviar a reunião ao provedor), que liga comportamento e por isso não é texto.
+ *
+ * ── Só quando a pessoa chamar, e sem busca na internet (23/11/2026) ────────
+ *
+ * Decisão do usuário: o assistente é SEMPRE "Só quando eu chamar"
+ * (`sob_demanda`), também no Personalizado, e não busca na internet. Antes o
+ * Preparar oferecia "discreto" e "participativo" (o apoio sugeria sozinho) e um
+ * interruptor de busca na internet. Saíram a tela, o apoio automático e a
+ * busca, e a normalização os apaga: todo perfil lido ou gravado — inclusive a
+ * cópia de uma reunião (`emUso`) e a do briefing — sai com `sob_demanda` e sem
+ * `buscaNaInternet`, e o briefing sem o modo por reunião. Assim um perfil salvo
+ * antes não traz de volta nada disso. `intervencao.modo` continua no formato,
+ * com um valor só, porque é o que o perfil guardado já tem.
  *
  * BRIEFING: o objetivo de UMA reunião, as questões que não podem ficar sem
  * encaminhamento e o contexto escrito pela pessoa. O objetivo é informado ou
@@ -45,13 +55,12 @@ import { PADRAO_DO_CITI } from './padrao';
 
 export const VERSAO_DA_CONDUCAO = 2;
 
-export const MODOS_DE_INTERVENCAO = ['sob_demanda', 'discreto', 'participativo'] as const;
+/** Um modo só desde 23/11/2026 ("discreto" e "participativo" saíram; ver o topo). */
+export const MODOS_DE_INTERVENCAO = ['sob_demanda'] as const;
 export type ModoDeIntervencao = (typeof MODOS_DE_INTERVENCAO)[number];
 
 export const ROTULO_DO_MODO: Record<ModoDeIntervencao, string> = {
   sob_demanda: 'Só quando eu chamar',
-  discreto: 'Discreto: uma lembrança relevante por vez',
-  participativo: 'Participativo: perguntas e encaminhamentos com mais frequência',
 };
 
 export const MAX_CONTEXTOS = 8;
@@ -96,8 +105,7 @@ export interface ConteudoDoPerfil {
   padraoVersao: number;
   /** Vazio no perfil GUARDADO com base no padrão: o padrão vem do pacote. */
   contextos: ContextoDoAssistente[];
-  /** Permissão de busca nas conversas, condicionada à disponibilidade no servidor. */
-  buscaNaInternet: boolean;
+  /** Sempre `sob_demanda` desde 23/11/2026 (ver o topo). */
   intervencao: { modo: ModoDeIntervencao };
   /**
    * Ao encerrar a reunião, o assistente lê os pontos uma vez (o que foi
@@ -143,12 +151,6 @@ export interface BriefingDaReuniao {
    * vínculo é confirmado por ela e por id: nome nenhum liga um encontro a outro.
    */
   retomar: string[];
-  /**
-   * O modo de intervenção SÓ para esta reunião. Ausente = o do perfil que ela
-   * usa. É escolha explícita da pessoa: nada vira regra geral em silêncio. Só
-   * vale sobre um perfil personalizado (o padrão é fixo).
-   */
-  modo?: ModoDeIntervencao;
   /** A revisão do perfil de quando o briefing foi preparado; `null` = o padrão. */
   perfilRevisao: number | null;
   /**
@@ -214,7 +216,6 @@ function limparIds(itens: unknown, excluir?: string): string[] {
   ].slice(0, MAX_RETOMAR);
 }
 
-const modoValido = (m: unknown): ModoDeIntervencao | undefined => MODOS_DE_INTERVENCAO.find((x) => x === m);
 
 /** A primeira vaga livre do mapa, ou `null` com as 8 ocupadas. */
 export function vagaLivre(contextos: readonly Pick<ContextoDoAssistente, 'vaga'>[]): number | null {
@@ -276,7 +277,7 @@ export function doPerfilV1(bruto: unknown): { conteudo: ConteudoDoPerfil; coubeI
   const b = bruto as Record<string, unknown>;
   const missao = limpar(b.missao, MAX_TEXTO);
   if (!missao) return null;
-  const i = (b.intervencao ?? {}) as { modo?: unknown; estilo?: unknown };
+  const i = (b.intervencao ?? {}) as { estilo?: unknown };
   const lista = (x: unknown) => limparLista(x).join('; ');
   const partes: Array<[string, string, string]> = [
     ['v1-missao', 'Em que ajudar', missao],
@@ -309,8 +310,7 @@ export function doPerfilV1(bruto: unknown): { conteudo: ConteudoDoPerfil; coubeI
       base: 'personalizado',
       padraoVersao: PADRAO_DO_CITI.versao,
       contextos,
-      buscaNaInternet: false,
-      intervencao: { modo: modoValido(i.modo) ?? 'discreto' },
+      intervencao: { modo: PADRAO_DO_CITI.modo },
       ...(b.lerAoEncerrar === true ? { lerAoEncerrar: true as const } : {}),
     },
     coubeInteiro,
@@ -330,7 +330,6 @@ export function normalizarConteudoDoPerfil(bruto: unknown, opcoes: { congelado?:
   const b = bruto as Record<string, unknown>;
   if (eDoFormatoV1(b)) return doPerfilV1(b)?.conteudo ?? null;
   if (b.base !== 'padrao' && b.base !== 'personalizado') return null;
-  const i = (b.intervencao ?? {}) as { modo?: unknown };
   const ler = b.lerAoEncerrar === true ? { lerAoEncerrar: true as const } : {};
   const padraoVersao =
     Number.isInteger(b.padraoVersao) && (b.padraoVersao as number) > 0 ? (b.padraoVersao as number) : PADRAO_DO_CITI.versao;
@@ -339,7 +338,6 @@ export function normalizarConteudoDoPerfil(bruto: unknown, opcoes: { congelado?:
       base: 'padrao',
       padraoVersao,
       contextos: [],
-      buscaNaInternet: false,
       intervencao: { modo: PADRAO_DO_CITI.modo },
       ...ler,
     };
@@ -347,8 +345,7 @@ export function normalizarConteudoDoPerfil(bruto: unknown, opcoes: { congelado?:
     base: b.base,
     padraoVersao,
     contextos: limparContextos(b.contextos),
-    buscaNaInternet: b.buscaNaInternet === true,
-    intervencao: { modo: modoValido(i.modo) ?? PADRAO_DO_CITI.modo },
+    intervencao: { modo: PADRAO_DO_CITI.modo },
     ...ler,
   };
 }
@@ -359,7 +356,6 @@ export function conteudoDoPadrao(): ConteudoDoPerfil {
     base: 'padrao',
     padraoVersao: PADRAO_DO_CITI.versao,
     contextos: PADRAO_DO_CITI.contextos.map((c) => ({ ...c, ligado: true, origem: 'padrao' as const })),
-    buscaNaInternet: false,
     intervencao: { modo: PADRAO_DO_CITI.modo },
   };
 }
@@ -420,18 +416,22 @@ export function normalizarConducao(bruto: unknown): Conducao {
     briefings: Array.isArray(b.briefings)
       ? (b.briefings as BriefingDaReuniao[])
           .filter((x) => !!x && typeof x === 'object' && typeof x.reuniaoId === 'string')
-          .map((x) => ({
-            ...x,
-            objetivo: limpar(x.objetivo, MAX_TEXTO),
-            contexto: limpar(x.contexto, MAX_TEXTO * 2),
-            prioridades: limparLista(x.prioridades),
-            retomar: limparIds(x.retomar),
-            ...(modoValido(x.modo) ? { modo: x.modo as ModoDeIntervencao } : {}),
-            aprovado: x.aprovado === true,
-            perfilRevisao: typeof x.perfilRevisao === 'number' ? x.perfilRevisao : null,
-            perfilUsado: normalizarConteudoDoPerfil(x.perfilUsado, { congelado: true }),
-            historico: Array.isArray(x.historico) ? x.historico : [],
-          }))
+          .map((x) => {
+            const briefing: BriefingDaReuniao = {
+              ...x,
+              objetivo: limpar(x.objetivo, MAX_TEXTO),
+              contexto: limpar(x.contexto, MAX_TEXTO * 2),
+              prioridades: limparLista(x.prioridades),
+              retomar: limparIds(x.retomar),
+              aprovado: x.aprovado === true,
+              perfilRevisao: typeof x.perfilRevisao === 'number' ? x.perfilRevisao : null,
+              perfilUsado: normalizarConteudoDoPerfil(x.perfilUsado, { congelado: true }),
+              historico: Array.isArray(x.historico) ? x.historico : [],
+            };
+            // O modo por reunião saiu (ver o topo): o guardado antes não volta a valer.
+            delete (briefing as { modo?: unknown }).modo;
+            return briefing;
+          })
       : [],
     emUso: Array.isArray(b.emUso)
       ? (b.emUso as PerfilEmUso[]).flatMap((x) => {
@@ -547,7 +547,6 @@ export function conteudoDe(p: PerfilDeConducao): ConteudoDoPerfil {
     base: p.base,
     padraoVersao: p.padraoVersao,
     contextos: p.contextos,
-    buscaNaInternet: p.buscaNaInternet,
     intervencao: p.intervencao,
     ...(p.lerAoEncerrar ? { lerAoEncerrar: true as const } : {}),
   };
@@ -587,8 +586,6 @@ export interface MudancaDoBriefing {
   prioridades?: string[];
   /** Ids dos encontros anteriores a retomar. */
   retomar?: string[];
-  /** O modo só para esta reunião; `null` volta ao do perfil. */
-  modo?: ModoDeIntervencao | null;
 }
 
 export function briefingDaReuniao(c: Conducao, reuniaoId: string): BriefingDaReuniao | null {
@@ -618,16 +615,12 @@ export async function salvarBriefing(
     const prioridades =
       mudanca.prioridades !== undefined ? limparLista(mudanca.prioridades) : (atual?.prioridades ?? []);
     const retomar = mudanca.retomar !== undefined ? limparIds(mudanca.retomar, reuniaoId) : (atual?.retomar ?? []);
-    // `undefined` mantém o que estava; `null` volta ao modo do perfil.
-    const modo: ModoDeIntervencao | undefined =
-      mudanca.modo === undefined ? atual?.modo : mudanca.modo === null ? undefined : modoValido(mudanca.modo);
     if (
       atual &&
       atual.objetivo === objetivo &&
       atual.contexto === contexto &&
       JSON.stringify(atual.prioridades) === JSON.stringify(prioridades) &&
-      JSON.stringify(atual.retomar) === JSON.stringify(retomar) &&
-      atual.modo === modo
+      JSON.stringify(atual.retomar) === JSON.stringify(retomar)
     )
       return { resultado: { tipo: 'ok' as const, item: atual }, mudou: false };
     const briefing: BriefingDaReuniao = {
@@ -640,7 +633,6 @@ export async function salvarBriefing(
       contexto,
       prioridades,
       retomar,
-      ...(modo ? { modo } : {}),
       // Primeira preparação: guarda o perfil de agora, resolvido.
       perfilRevisao: atual ? atual.perfilRevisao : (c.perfil?.revisao ?? null),
       perfilUsado: atual ? atual.perfilUsado : structuredClone(perfilAtual(c)),

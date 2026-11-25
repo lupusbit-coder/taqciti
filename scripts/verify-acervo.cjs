@@ -1,9 +1,44 @@
-/* Verificação em perfil descartável. Só dados sintéticos; respostas de IA simuladas. */
+/*
+ * As buscas do acervo (Reuniões, Conversas, Documentos) contra a extensão
+ * RODANDO, em perfil descartável e só com dados sintéticos semeados no storage.
+ *
+ * Até 23/11/2026 os dados vinham de "Importar reunião" e das "Automações após
+ * reuniões", que saíram da aba Reuniões. Agora são semeados direto, e a volta
+ * confere também que os dois blocos não aparecem mais.
+ *
+ *   npx vite build --mode development --outDir <pasta>
+ *   node scripts/verify-acervo.cjs <playwright-core> <pasta>
+ */
 const { chromium } = require(process.argv[2]);
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+
+const AGORA = Date.now();
+const REUNIAO = {
+  id: 'teste-acervo',
+  title: '[TESTE] Revisão da API',
+  startedAt: AGORA - 3_600_000,
+  endedAt: AGORA - 1_800_000,
+  durationSeconds: 1800,
+  participants: [{ name: 'Ana — teste', isHost: true }],
+  segments: [
+    { captionId: 'a-0', speaker: 'Ana — teste', text: 'Ana vai revisar a API amanhã.', startOffsetMs: 0, endOffsetMs: 3000 },
+    { captionId: 'a-1', speaker: 'Ana — teste', text: 'Uma decisão importante.', startOffsetMs: 4000, endOffsetMs: 6000 },
+  ],
+  status: 'ready',
+  metadata: { capturedCaptions: true, droppedSegments: 0, reconnectCount: 0, wasDiscardedAndRestarted: false },
+};
+const DOCUMENTO = {
+  id: 'doc-acervo',
+  title: '[TESTE] Resumo da reunião',
+  content: '# Resumo\n\nRevisão da API combinada para amanhã.',
+  formato: 'markdown',
+  createdAt: AGORA - 1_000_000,
+  updatedAt: AGORA - 1_000_000,
+  meetingId: REUNIAO.id,
+};
 
 (async () => {
   const perfil = fs.mkdtempSync(path.join(os.tmpdir(), 'taqciti-acervo-'));
@@ -16,72 +51,39 @@ const path = require('node:path');
   const erros = [];
   try {
     const worker = contexto.serviceWorkers()[0] || await contexto.waitForEvent('serviceworker');
-    // O serviço externo é simulado; persistência, parser, fila, mensageria e UI são reais.
-    await worker.evaluate(() => {
-      globalThis.chamadasDeTeste = 0;
-      globalThis.fetch = async (url, init) => {
-        if (String(url).includes('/api/taq/turno')) {
-          globalThis.chamadasDeTeste++;
-          const pedido = JSON.parse(init.body);
-          return Response.json({ tipo: 'final', chamadas: [], uso: { entrada: 1, saida: 1 },
-            provedor: 'teste', modelo: 'sintetico', instrucoesVersao: pedido.instrucoes, latenciaMs: 1,
-            texto: JSON.stringify({ resumo: 'Resumo sintético: revisão da API.', compromissos: [
-              { descricao: 'Revisar a API', segmento: 0, trecho: 'Ana vai revisar a API amanhã.', responsavel: 'Ana', prazo: 'amanhã' },
-            ] }),
-          });
-        }
-        return Response.json({}, { status: 503 });
-      };
-    });
+    // Nada aqui chama IA: qualquer rota do servidor responde indisponível.
     await contexto.route('**/api/**', (route) => route.fulfill({ status: 503, body: '{}' }));
     const pagina = await contexto.newPage();
     pagina.on('pageerror', (e) => erros.push(e.message));
     const base = `chrome-extension://${new URL(worker.url()).host}/src/home/index.html`;
     await pagina.goto(`${base}?secao=reunioes`);
+    await pagina.locator('.tq-home').waitFor();
+    await pagina.evaluate(async ({ r, d }) => chrome.storage.local.set({
+      'taq:history': [r],
+      'taq:documents': [d],
+      'taq:conversations': [{ id: 'conversa-teste', title: 'Nome anterior', createdAt: 1, updatedAt: 1,
+        messages: [{ id: 'm1', role: 'user', text: 'Conversa sobre acessibilidade', at: 1 }] }],
+    }), { r: REUNIAO, d: DOCUMENTO });
+
+    await pagina.reload();
     await pagina.getByRole('heading', { name: 'Reuniões', exact: true }).waitFor();
-    await pagina.getByText('Automações após reuniões', { exact: true }).click();
-    await pagina.getByLabel('Salvar resumo em Documentos', { exact: true }).check();
-    await pagina.getByLabel('Sugerir próximos passos em Acompanhamento', { exact: true }).check();
-    await pagina.getByText('Importar reunião', { exact: true }).click();
-    const arquivo = { name: 'Teste sintético.txt', mimeType: 'text/plain', buffer: Buffer.from('Ana vai revisar a API amanhã.\nUma decisão importante.') };
-    await pagina.getByLabel('Arquivo', { exact: true }).setInputFiles(arquivo);
-    await pagina.getByLabel('Data e hora da reunião', { exact: true }).fill('2026-11-13T10:00');
-    await pagina.getByRole('button', { name: 'Importar', exact: true }).click();
-    await pagina.locator('input.tq-titulo-editavel').waitFor();
-    assert.equal(await pagina.locator('input.tq-titulo-editavel').inputValue(), 'Teste sintético');
-    await pagina.waitForFunction(async () => {
-      const dados = await chrome.storage.local.get('taqciti:automacoes:fila:v1');
-      return dados['taqciti:automacoes:fila:v1']?.[0]?.estado === 'concluida';
-    });
-    const registros = await pagina.evaluate(async () => chrome.storage.local.get(['taq:history', 'taq:documents', 'taq:trabalho']));
-    console.log('Preferências sintéticas:', await pagina.evaluate(async () => chrome.storage.local.get(['taqciti:automacoes:v1', 'taqciti:automacoes:fila:v1'])));
-    assert.equal(registros['taq:history'].length, 1);
-    assert.equal(registros['taq:documents'].length, 1);
-    assert.equal(registros['taq:trabalho'].compromissos[0].situacao, 'candidato');
-    console.log('PASS importação real no background e automações com IA simulada');
-    await pagina.goto(`${base}?secao=reunioes`);
-    await pagina.getByLabel('Buscar reuniões', { exact: true }).fill('DECISAO');
-    assert.equal(await pagina.locator('.tq-linha-reuniao').count(), 1);
-    await pagina.getByLabel('Participante', { exact: true }).fill('Inexistente');
-    assert.equal(await pagina.locator('.tq-linha-reuniao').count(), 0);
-    await pagina.getByLabel('Participante', { exact: true }).fill('');
-    await pagina.getByLabel('Buscar reuniões', { exact: true }).fill('');
-    await pagina.getByLabel('Até', { exact: true }).fill('2026-11-12');
-    assert.equal(await pagina.locator('.tq-linha-reuniao').count(), 0);
-    await pagina.getByRole('button', { name: 'Limpar busca' }).click();
-    await pagina.getByText('Importar reunião', { exact: true }).click();
-    await pagina.getByLabel('Arquivo', { exact: true }).setInputFiles(arquivo);
-    await pagina.getByLabel('Data e hora da reunião', { exact: true }).fill('2026-11-13T10:00');
-    await pagina.getByRole('button', { name: 'Importar', exact: true }).click();
-    await pagina.locator('input.tq-titulo-editavel').waitFor();
-    assert.equal(await worker.evaluate(() => globalThis.chamadasDeTeste), 1);
-    console.log('PASS filtros por texto, data e participante; reimportação não chama IA nem duplica');
-    await pagina.evaluate(async () => {
-      await chrome.storage.local.set({ 'taq:conversations': [{ id: 'conversa-teste', title: 'Nome anterior', createdAt: 1, updatedAt: 1,
-        messages: [{ id: 'm1', role: 'user', text: 'Conversa sobre acessibilidade', at: 1 }] }] });
-    });
+    const texto = await pagina.locator('.tq-pagina').innerText();
+    assert(!/Importar reunião|Automações após reuniões/.test(texto), 'os blocos removidos voltaram a aparecer');
+    console.log('PASS Reuniões sem "Importar reunião" nem "Automações após reuniões"');
+
+    // A busca filtra 250 ms depois da digitação: a contagem espera.
+    const contar = (n) => pagina.waitForFunction((n) => document.querySelectorAll('.tq-linha-reuniao').length === n, n);
+    const campo = pagina.getByRole('searchbox', { name: 'Buscar pelo nome da reunião', exact: true });
+    await campo.fill('revisao API');
+    await contar(1);
+    await campo.fill('inexistente');
+    await contar(0);
+    await pagina.getByRole('button', { name: 'Limpar busca' }).first().click();
+    await contar(1);
+    console.log('PASS busca de reuniões pelo nome, sem acento, e "Limpar busca"');
+
     await pagina.getByRole('button', { name: 'Conversas', exact: true }).click();
-    await pagina.getByLabel('Buscar conversas', { exact: true }).fill('acessibilidade');
+    await pagina.getByRole('searchbox', { name: 'Buscar conversas', exact: true }).fill('acessibilidade');
     await pagina.getByRole('menuitem', { name: 'Renomear a conversa "Nome anterior"' }).click();
     await pagina.getByLabel('Nome da conversa', { exact: true }).fill('Revisão semanal');
     await pagina.getByRole('button', { name: 'Salvar nome', exact: true }).click();
@@ -91,16 +93,18 @@ const path = require('node:path');
     await pagina.getByRole('menuitemradio', { name: /Revisão semanal/ }).waitFor();
     console.log('PASS busca de conversas, renomeação e persistência após recarregar');
     await pagina.getByRole('button', { name: 'Conversas', exact: true }).click();
+
     await pagina.goto(`${base}?secao=documentos`);
-    await pagina.getByLabel('Buscar documentos', { exact: true }).fill('revisao API');
+    await pagina.getByRole('searchbox', { name: 'Buscar pelo nome do documento', exact: true }).fill('resumo da reuniao');
     await pagina.locator('.tq-estante .tq-item-linha').first().waitFor();
-    console.log('PASS busca no conteúdo de documentos gerados');
+    console.log('PASS busca de documentos pelo nome');
+
     for (const largura of [390, 320]) {
       await pagina.setViewportSize({ width: largura, height: 844 });
       await pagina.goto(`${base}?secao=reunioes`);
-      await pagina.getByText('Importar reunião', { exact: true }).click();
+      await pagina.locator('.tq-linha-reuniao').first().waitFor();
       assert(await pagina.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
-      await pagina.screenshot({ path: path.join(perfil, `importacao-${largura}.png`), fullPage: true });
+      await pagina.screenshot({ path: path.join(perfil, `reunioes-${largura}.png`), fullPage: true });
     }
     assert.deepEqual(erros, []);
     console.log('PASS responsividade 390/320 px, sem erros de página');

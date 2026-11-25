@@ -11,7 +11,7 @@ import { lerConducao } from '@/features/conducao/store';
 import { carregarRetomada } from '@/features/conducao/retomada';
 import { criarAdaptadorHttp } from '@/features/taq/modelo';
 import type { MeetingState } from '@/shared/types/domain';
-import { falasConsolidadas } from '@/features/apoio/laco';
+import { falasConsolidadas } from './consolidadas';
 import { atualizarEstadoDaReuniao } from './atualizar';
 import { observarEstados, type Snapshot } from './store';
 

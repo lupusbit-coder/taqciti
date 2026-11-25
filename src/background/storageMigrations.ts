@@ -52,6 +52,19 @@ export async function migrateLocalStorage(): Promise<void> {
     await migrarConducao();
     await writeLocal(LOCAL_STORAGE_SCHEMA_VERSION_KEY, 4);
   }
+
+  if (version < 5) {
+    // Três coisas saíram em 23/11/2026 e o que elas guardavam não tem mais
+    // tela nem código que o leia — sai, como os avisos na versão 3:
+    //   - as sugestões automáticas durante a reunião (`taq:apoio`: sugestões,
+    //     retorno, pausas, medições): o assistente só age quando chamado;
+    //   - as automações após reuniões (preferências e fila).
+    // As reuniões importadas antes continuam no histórico: são reuniões.
+    await removeLocal('taq:apoio');
+    await removeLocal('taqciti:automacoes:v1');
+    await removeLocal('taqciti:automacoes:fila:v1');
+    await writeLocal(LOCAL_STORAGE_SCHEMA_VERSION_KEY, 5);
+  }
 }
 
 /** Era "CITi Flow Companion" (`cfc:*`) → chaves TaqCITi (`taq:*`). */

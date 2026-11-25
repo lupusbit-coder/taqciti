@@ -66,6 +66,24 @@ describe('migrações locais versionadas', () => {
     expect(stored[LOCAL_STORAGE_SCHEMA_VERSION_KEY]).toBe(LOCAL_STORAGE_SCHEMA_VERSION);
   });
 
+  // Versão 5 (23/11/2026): sugestões automáticas e automações saíram; o que estava guardado delas sai junto.
+  it('apaga as sugestões automáticas e as automações guardadas e deixa o resto', async () => {
+    await chrome.storage.local.set({
+      [LOCAL_STORAGE_SCHEMA_VERSION_KEY]: 4,
+      'taq:apoio': { versao: 1, sugestoes: [{ id: 's1' }], feedback: [], pausadas: {}, medicoes: {}, ajustes: {} },
+      'taqciti:automacoes:v1': { resumo: true, compromissos: true },
+      'taqciti:automacoes:fila:v1': [{ id: 'x', estado: 'pendente' }],
+      [STORAGE_KEYS.history]: [legacyMeeting()],
+    });
+    await migrateLocalStorage();
+    const stored = await chrome.storage.local.get(null);
+    expect(stored['taq:apoio']).toBeUndefined();
+    expect(stored['taqciti:automacoes:v1']).toBeUndefined();
+    expect(stored['taqciti:automacoes:fila:v1']).toBeUndefined();
+    expect((stored[STORAGE_KEYS.history] as MeetingRecord[])[0]?.id).toBe('legacy-meeting');
+    expect(stored[LOCAL_STORAGE_SCHEMA_VERSION_KEY]).toBe(5);
+  });
+
   /*
    * O perfil do assistente virou contextos (versão 4). A decisão: nada do que a
    * pessoa escreveu se perde. Cada campo vira um contexto LIGADO dela; texto
@@ -87,7 +105,8 @@ describe('migrações locais versionadas', () => {
       historico: [{ em: 10, acao: 'perfil criado', origem: 'pessoa' }],
     };
 
-    it('converte o perfil e a cópia guardada no briefing, preservando revisão, modo e consentimento', async () => {
+    // O modo NÃO é preservado desde 23/11/2026: todo perfil sai "só quando eu chamar" (topo de `conducao/store.ts`).
+    it('converte o perfil e a cópia guardada no briefing, preservando revisão e consentimento', async () => {
       await chrome.storage.local.set({
         [LOCAL_STORAGE_SCHEMA_VERSION_KEY]: 3,
         [STORAGE_KEYS.conducao]: {
@@ -100,7 +119,7 @@ describe('migrações locais versionadas', () => {
       const stored = await chrome.storage.local.get(null);
       const c = stored[STORAGE_KEYS.conducao] as Conducao;
       expect(stored[LOCAL_STORAGE_SCHEMA_VERSION_KEY]).toBe(LOCAL_STORAGE_SCHEMA_VERSION);
-      expect(c.perfil).toMatchObject({ base: 'personalizado', revisao: 3, criadoEm: 10, intervencao: { modo: 'participativo' }, lerAoEncerrar: true });
+      expect(c.perfil).toMatchObject({ base: 'personalizado', revisao: 3, criadoEm: 10, intervencao: { modo: 'sob_demanda' }, lerAoEncerrar: true });
       expect(c.perfil!.contextos.map((x) => [x.nome, x.texto, x.ligado, x.origem])).toEqual([
         ['Em que ajudar', 'Apoiar reuniões de descoberta com o cliente.', true, 'seu'],
         ['O que observar', 'Impacto; Processo atual', true, 'seu'],

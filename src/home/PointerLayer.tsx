@@ -1,6 +1,29 @@
 /**
- * O cursor da HOME: um ponto no lugar exato do mouse e um anel discreto que
- * chega atrasado.
+ * O cursor da HOME: uma SETA arredondada no degradê da marca, com a ponta no
+ * lugar exato do mouse, e ao lado dela uma onda mínima de quatro barras — o
+ * logo do TaqCiti reduzido ao que cabe num cursor.
+ *
+ * ── Como se chegou a este desenho ──────────────────────────────────────────
+ *
+ * Desde 23/11/2026 (pedido do usuário) o cursor é da marca. As tentativas,
+ * cada uma corrigindo a anterior — e cada uma CONFERIDA em captura de tela:
+ *
+ *   1. A onda do logo deitada, centrada num ponto branco, com atraso. Não se
+ *      lia como cursor: um cursor aponta.
+ *   2. A onda inteira do logo (17 barras, 46px) girada como seta, com a ponta
+ *      no mouse. Grande demais, e um cursor de barras não tem silhueta de
+ *      seta: o olho não acha a ponta.
+ *   3. Cinco barras crescendo a partir da ponta, formando um triângulo. Em
+ *      18px aquilo se lia como o ícone de "play" virado para a direita.
+ *   4. Agora: a silhueta que todo mundo reconhece como cursor — a seta —, com
+ *      contorno branco para se ler em fundo claro e escuro, e a marca no que
+ *      tem de próprio: o degradê (que corre devagar entre verde, ciano, azul
+ *      e violeta) e a onda de barras ao lado da seta.
+ *
+ * As barras "falam" em laço, baixo. SÓ o clique aumenta a vibração (classe
+ * `pressionado`, enquanto o botão está apertado), e a seta afunda um pouco,
+ * como um botão. Passar sobre um botão ou sobre o Taq não acelera nada: uma
+ * versão acelerava, e o cursor vivia agitado.
  *
  * ── Por que ele aparecia onde não devia ────────────────────────────────────
  *
@@ -10,62 +33,66 @@
  * camada desenhada era ligada por JavaScript. As duas coisas podiam discordar.
  * Levar o mouse para a barra do navegador, trocar de aba e voltar, ou sair pela
  * borda sem gerar o evento esperado deixava a página com `cursor: none` e sem
- * ponto nenhum — um cursor invisível. Agora a regra é a MESMA chave: o CSS só
+ * desenho nenhum — um cursor invisível. Agora a regra é a MESMA chave: o CSS só
  * esconde o cursor nativo enquanto `body.tq-pointer-in` existe (ver
- * `home.css`), então onde não há ponto desenhado há o cursor do sistema, e
+ * `home.css`), então onde não há onda desenhada há o cursor do sistema, e
  * nunca os dois nem nenhum.
  *
  * A segunda: `pointerleave` no `window` não é confiável. Ele não dispara ao
  * passar para a UI do navegador, nem quando a aba perde visibilidade com o
- * ponteiro parado dentro dela — e o ponto ficava congelado na última posição,
- * aceso, para sempre. Por isso a saída é observada por quatro caminhos
- * diferentes (ver `desligar` abaixo), e a volta sempre reposiciona antes de
- * acender, para não piscar no lugar velho.
+ * ponteiro parado dentro dela — e o desenho ficava congelado na última
+ * posição, aceso, para sempre. Por isso a saída é observada por quatro
+ * caminhos diferentes (ver `desligar` abaixo), e a volta sempre reposiciona
+ * antes de acender, para não piscar no lugar velho.
  *
  * ── A regra que não pode ser quebrada ──────────────────────────────────────
  *
- *   - **O ponto não tem atraso.** Ele fica exatamente onde o mouse está. Quem
- *     mira um botão mira pelo ponto; qualquer interpolação ali vira
- *     imprecisão. O atraso é só do anel, que é enfeite e não alvo.
- *   - **Nada disso captura evento.** `pointer-events: none` nas duas camadas.
+ *   - **Nada tem atraso.** A ponta da seta fica exatamente onde o mouse está.
+ *     Quem mira um botão mira pela ponta; qualquer interpolação ali vira
+ *     imprecisão.
+ *   - **Nada disso captura evento.** `pointer-events: none` na camada.
  *   - **Some no toque.** Em `pointer: coarse` não existe cursor para
  *     acompanhar, e um evento de toque desliga a camada.
  *   - **O campo é do sistema.** Sobre `input`, `textarea`, `select` e área
- *     editável o cursor NATIVO volta (I-beam, alça de redimensionar) e o ponto
- *     desenhado sai; o anel fica, menor. Antes `cursor: none` valia também ali,
- *     e o campo de notas perdia o I-beam e a alça de `resize: vertical`.
+ *     editável a onda SAI INTEIRA e volta o I-beam do sistema (ver home.css).
+ *     Uma versão anterior deixava a onda ali, menor, por cima do I-beam e da
+ *     barra de digitação — o clique para digitar perdia a precisão e a barra
+ *     piscava debaixo das barras da onda.
  *
  * ── O brilho verde pertence ao campo de escrita, e a mais nada ─────────────
  *
- * Existe UM sinal verde, e ele acende exclusivamente dentro da área marcada
- * com `data-tq-escrita`. Sobre os outros controles o anel apenas fecha e ganha
- * contraste, sem cor.
+ * Existe UM brilho verde, e ele acende exclusivamente dentro da área marcada
+ * com `data-tq-escrita`. Sobre o que é do Taq (a resposta, a marca,
+ * `data-tq-ia`) o cursor fica no violeta das ideias — só a cor muda.
  *
- * Sobre o que é do Taq (a resposta, a marca, `data-tq-ia`) o anel se abre em
- * dois arcos no violeta das ideias e dá um quarto de volta ao entrar — uma vez,
- * não em laço. É a única reação "de IA", e é contextual.
- *
- * `prefers-reduced-motion` mata o atraso e o giro: o anel passa a colar no
- * ponto. A informação (onde estou, onde escrevo) continua; o movimento sai.
+ * `prefers-reduced-motion` para tudo: a cor fica no degradê fixo, as barras
+ * não falam e o clique não vibra.
  */
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type CSSProperties } from 'react';
 
 interface Props {
-  /** Quando falso, o anel cola no ponto e não gira. */
+  /** Quando falso, o cursor não muda de cor, não fala nem vibra no clique. */
   comMovimento: boolean;
 }
 
-/** Lado do anel em repouso e o teto do crescimento, em px. */
-const ANEL_BASE = 24;
-const ANEL_MAX = 34;
-/** O lado do elemento no CSS; o `scale` é calculado contra ele. */
-const ANEL_CSS = 30;
 /**
- * Constante de tempo da perseguição, em ms. Era 55 — rápido demais para o atraso
- * ser lido como intenção; o anel parecia grudado no ponto. Em 150ms o
- * movimento tem peso e ainda assim se acomoda em poucos décimos ao parar.
+ * A seta, no `viewBox` 24×21: ponta em (1,6; 1,6) — o ponto quente —, as duas
+ * abas e o entalhe com cantos arredondados (`Q`). O contorno branco é traço
+ * com `paint-order: stroke` (home.css), então ele fica por FORA do degradê.
  */
-const PERSEGUICAO_MS = 150;
+const SETA =
+  'M1.6 1.6 L13.6 6.4 Q14.6 6.9 13.6 7.4 L8.6 9.2 Q8.2 9.4 8 9.8 L6.3 14.6 Q5.9 15.6 5.4 14.6 Z';
+
+/**
+ * A onda ao lado da seta: [centro x, altura], centradas em y = 16. Médio,
+ * alto, médio, baixo — a crista do logo em quatro barras.
+ */
+const BARRAS: ReadonlyArray<readonly [number, number]> = [
+  [14.2, 3.2],
+  [16.6, 6.4],
+  [19, 4.4],
+  [21.4, 2.4],
+];
 
 const CONTROLES = 'button, a, summary, [role="button"], [role="tab"], label';
 /** Onde o Taq fala: a resposta, a marca e o que estiver marcado como dele. */
@@ -73,66 +100,44 @@ const AREAS_DO_TAQ = '.tq-turno-agente, .tq-marca, [data-tq-ia]';
 /**
  * Onde se digita. O MESMO conjunto de `home.css`, que devolve o cursor nativo
  * nesses campos — o I-beam e a alça de redimensionar do `textarea` são
- * informação que o ponto desenhado não substitui.
+ * informação que a onda desenhada não substitui.
  */
 const CAMPOS =
   'input:not([type="button"], [type="submit"], [type="reset"], [type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"]), textarea, select, [contenteditable]:not([contenteditable="false"])';
 
 export function PointerLayer({ comMovimento }: Props) {
-  const pontoRef = useRef<HTMLDivElement | null>(null);
-  const anelRef = useRef<HTMLDivElement | null>(null);
-  const rotorRef = useRef<HTMLDivElement | null>(null);
+  const ondaRef = useRef<HTMLDivElement | null>(null);
   const comMovimentoRef = useRef(comMovimento);
   comMovimentoRef.current = comMovimento;
 
   useEffect(() => {
-    const ponto = pontoRef.current;
-    const anel = anelRef.current;
-    const rotor = rotorRef.current;
-    if (!ponto || !anel || !rotor) return;
+    const onda = ondaRef.current;
+    if (!onda) return;
 
     const mouse = { x: -100, y: -100 };
-    const rastro = { x: -100, y: -100 };
     let dentro = false;
     let quadro = 0;
-    let anterior = 0;
-    let giro = 0;
     let ultimoAlvo: Element | null = null;
 
-    const passo = (t: number) => {
+    const posicionar = () => {
+      onda.style.transform = `translate(${mouse.x}px, ${mouse.y}px)`;
+    };
+
+    // Um quadro por vez: o mouse manda mais eventos do que a tela pinta, e
+    // escrever o `transform` a cada um é trabalho jogado.
+    const passo = () => {
       quadro = 0;
-      const dt = Math.min(48, t - (anterior || t - 16));
-      anterior = t;
-
-      const distancia = Math.hypot(mouse.x - rastro.x, mouse.y - rastro.y);
-      // Interpolação exponencial: independe da taxa de quadros, então o atraso
-      // é o mesmo a 60Hz e a 144Hz.
-      const a = comMovimentoRef.current ? 1 - Math.exp(-dt / PERSEGUICAO_MS) : 1;
-      rastro.x += (mouse.x - rastro.x) * a;
-      rastro.y += (mouse.y - rastro.y) * a;
-
-      const lado = comMovimentoRef.current
-        ? Math.min(ANEL_MAX, ANEL_BASE + distancia * 0.14)
-        : ANEL_BASE;
-      anel.style.transform = `translate(${rastro.x}px, ${rastro.y}px) scale(${lado / ANEL_CSS})`;
-      ponto.style.transform = `translate(${mouse.x}px, ${mouse.y}px)`;
-
-      // Meio pixel: abaixo disso o movimento não é mais visível, e continuar
-      // agendando quadros só para perseguir subpixel é CPU a troco de nada.
-      if (dentro && distancia > 0.5) quadro = requestAnimationFrame(passo);
+      posicionar();
     };
 
     const acordar = () => {
-      if (!quadro) {
-        anterior = 0;
-        quadro = requestAnimationFrame(passo);
-      }
+      if (!quadro) quadro = requestAnimationFrame(passo);
     };
 
     /**
      * Apaga a camada e para o laço.
      *
-     * Parar o laço sem apagar é exatamente o "ponto preso na tela": o desenho
+     * Parar o laço sem apagar é exatamente o "desenho preso na tela": ele
      * fica no último lugar, aceso, sem ninguém para movê-lo. E como o CSS
      * amarra `cursor: none` a esta mesma classe, apagá-la devolve o cursor do
      * sistema no mesmo instante.
@@ -144,6 +149,7 @@ export function PointerLayer({ comMovimento }: Props) {
         cancelAnimationFrame(quadro);
         quadro = 0;
       }
+      onda.classList.remove('pressionado');
       document.body.classList.remove('tq-pointer-in');
     };
 
@@ -165,20 +171,17 @@ export function PointerLayer({ comMovimento }: Props) {
       mouse.y = e.clientY;
       if (!dentro) {
         // Reposiciona ANTES de acender: sem isto, voltar para a janela pinta
-        // um quadro no lugar de onde o ponteiro saiu, e o anel atravessa a
-        // tela para alcançar o mouse.
-        rastro.x = mouse.x;
-        rastro.y = mouse.y;
-        anel.style.transform = `translate(${mouse.x}px, ${mouse.y}px) scale(${ANEL_BASE / ANEL_CSS})`;
-        ponto.style.transform = `translate(${mouse.x}px, ${mouse.y}px)`;
+        // um quadro no lugar de onde o ponteiro saiu.
+        posicionar();
         dentro = true;
         document.body.classList.add('tq-pointer-in');
       }
 
       /*
        * Os sinais, em ordem de prioridade: "isto é onde se escreve" (verde),
-       * "isto é clicável" (só a forma), "isto é o Taq" (o anel se abre em dois
-       * arcos violeta). `closest` cobre o alvo ser filho do elemento marcado.
+       * "isto é clicável" (nada muda — e por isso o Taq dentro de um botão
+       * não fica violeta), "isto é o Taq" (violeta). `closest` cobre o alvo
+       * ser filho do elemento marcado.
        *
        * Só recalcula quando o alvo MUDA: o mouse passa dezenas de eventos
        * sobre o mesmo elemento, e subir a árvore a cada um é trabalho jogado.
@@ -189,22 +192,13 @@ export function PointerLayer({ comMovimento }: Props) {
         const naEscrita = !!alvo?.closest?.('[data-tq-escrita]');
         const noControle = !naEscrita && !!alvo?.closest?.(CONTROLES);
         const noTaq = !naEscrita && !noControle && !!alvo?.closest?.(AREAS_DO_TAQ);
-        // Campo de texto: o I-beam do sistema volta (ver home.css) e o ponto
-        // sai, para não haver dois cursores. O anel fica, menor.
+        // Campo de texto: o I-beam volta (ver home.css) e o desenho sai
+        // inteiro, para nada ficar por cima do clique nem da barra de
+        // digitação.
         const noCampo = !!alvo?.closest?.(CAMPOS);
-        anel.classList.toggle('sobre-escrita', naEscrita);
-        anel.classList.toggle('sobre-controle', noControle);
-        anel.classList.toggle('sobre-campo', noCampo);
-        ponto.classList.toggle('sobre-campo', noCampo);
-        if (noTaq !== anel.classList.contains('sobre-taq')) {
-          anel.classList.toggle('sobre-taq', noTaq);
-          // Um quarto de volta ao ENTRAR na resposta do Taq — um gesto, e não
-          // um giro contínuo: parado sobre o texto, o anel fica parado.
-          if (noTaq && comMovimentoRef.current) {
-            giro += 90;
-            rotor.style.transform = `rotate(${giro}deg)`;
-          }
-        }
+        onda.classList.toggle('sobre-escrita', naEscrita);
+        onda.classList.toggle('sobre-campo', noCampo);
+        onda.classList.toggle('sobre-taq', noTaq);
       }
       acordar();
     };
@@ -223,15 +217,14 @@ export function PointerLayer({ comMovimento }: Props) {
       if (document.hidden) desligar();
     };
 
+    // O ÚNICO momento em que a vibração aumenta: enquanto o botão está
+    // apertado. Soltar (ou o navegador cancelar o gesto) devolve a calma.
     const aoPressionar = () => {
       if (!comMovimentoRef.current) return;
-      giro += 90;
-      rotor.style.transform = `rotate(${giro}deg) scale(.86)`;
+      onda.classList.add('pressionado');
     };
     const aoSoltar = () => {
-      if (!comMovimentoRef.current) return;
-      giro += 170;
-      rotor.style.transform = `rotate(${giro}deg)`;
+      onda.classList.remove('pressionado');
     };
 
     window.addEventListener('pointermove', aoMover, { passive: true });
@@ -242,6 +235,7 @@ export function PointerLayer({ comMovimento }: Props) {
     document.addEventListener('visibilitychange', aoPerderVisibilidade);
     window.addEventListener('pointerdown', aoPressionar, { passive: true });
     window.addEventListener('pointerup', aoSoltar, { passive: true });
+    window.addEventListener('pointercancel', aoSoltar, { passive: true });
 
     return () => {
       window.removeEventListener('pointermove', aoMover);
@@ -251,6 +245,7 @@ export function PointerLayer({ comMovimento }: Props) {
       document.removeEventListener('visibilitychange', aoPerderVisibilidade);
       window.removeEventListener('pointerdown', aoPressionar);
       window.removeEventListener('pointerup', aoSoltar);
+      window.removeEventListener('pointercancel', aoSoltar);
       // A classe é global: deixá-la para trás numa desmontagem esconderia o
       // cursor do sistema sem nada no lugar.
       document.body.classList.remove('tq-pointer-in');
@@ -259,11 +254,50 @@ export function PointerLayer({ comMovimento }: Props) {
   }, []);
 
   return (
-    <>
-      <div ref={anelRef} className="tq-halo" aria-hidden="true">
-        <div ref={rotorRef} className="tq-rotor" />
+    // `data-movimento`, e não uma classe: o efeito liga e desliga classes
+    // neste mesmo elemento, e um `className` do React as apagaria a cada
+    // renderização.
+    <div
+      ref={ondaRef}
+      className="tq-halo"
+      data-movimento={comMovimento ? 'sim' : 'nao'}
+      aria-hidden="true"
+    >
+      <div className="tq-rotor">
+        <svg
+          className="tq-cursor-desenho"
+          viewBox="0 0 24 21"
+          shapeRendering="geometricPrecision"
+          focusable="false"
+        >
+          <defs>
+            {/* Ids fixos: só existe uma camada de cursor por página. As duas
+                paradas de `tq-cursor-marca` têm classe porque o CSS as anima
+                (a cor que corre); os valores aqui são o repouso sem movimento. */}
+            <linearGradient id="tq-cursor-marca" gradientUnits="userSpaceOnUse" x1="1" y1="1" x2="22" y2="19">
+              <stop className="tq-cursor-cor-a" offset="0" stopColor="#3ddc2e" />
+              <stop className="tq-cursor-cor-b" offset="1" stopColor="#1a7fea" />
+            </linearGradient>
+            <linearGradient id="tq-cursor-ideia" gradientUnits="userSpaceOnUse" x1="1" y1="1" x2="22" y2="19">
+              <stop offset="0" stopColor="#c4b5ff" />
+              <stop offset="1" stopColor="#7b5cf0" />
+            </linearGradient>
+          </defs>
+          <path className="tq-cursor-seta" d={SETA} />
+          {BARRAS.map(([x, altura], i) => (
+            <rect
+              key={x}
+              className="tq-cursor-barra"
+              x={x - 0.8}
+              y={16 - altura / 2}
+              width={1.6}
+              height={altura}
+              rx={0.8}
+              style={{ '--i': i } as CSSProperties}
+            />
+          ))}
+        </svg>
       </div>
-      <div ref={pontoRef} className="tq-dot" aria-hidden="true" />
-    </>
+    </div>
   );
 }

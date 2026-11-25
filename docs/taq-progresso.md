@@ -15,7 +15,7 @@ Arquitetura e contratos: `docs/taq-agentes.md`; visão geral:
 | 4. Análise e documentos | feito | `meeting_analyst`, `quality_review`, `evidence_verifier`, `documents-v3` |
 | 5. Continuidade do trabalho | feito | `taq:trabalho`, `commitments`, `continuity`, `handoff_analysis` |
 | 6. Comunicação e agenda | feito; com a conta do CITi conectada o Taq **prepara** e-mail e eventos e só o botão do cartão executa (`ferramentasDeIntegracao.ts`); sem a conta, só rascunho e link | `communication-v3`, `scheduling-v3`; `docs/integracoes-google-workspace.md` |
-| 7. Reunião ao vivo | `capture_monitor` e `meeting_copilot` sob pedido; apoio automático e estado dos pontos existem em `features/apoio` e `features/estado` (ver `docs/segundo-cerebro.md`) | validação no navegador com reunião real: não verificada |
+| 7. Reunião ao vivo | `capture_monitor` e `meeting_copilot` sob pedido; o estado dos pontos existe em `features/estado` (o apoio automático saiu em 23/11/2026) (ver `docs/segundo-cerebro.md`) | validação no navegador com reunião real: não verificada |
 | 8. Integração final | parcial | verificação visual feita; validação ao vivo limitada pela cota |
 
 ## Matriz por capacidade
@@ -39,7 +39,7 @@ o provedor de verdade (dados sintéticos).
 | communication | sim (rascunho; prévia de envio com a conta do CITi, executada só pelo botão) | sim | sim | **sim** (rascunho, nada enviado; envio real não validado aqui) | — |
 | scheduling | sim (sugestão; prévia de evento com a conta do CITi, executada só pelo botão) | sim | sim | ver abaixo | — |
 | quality_review | sim (determinístico) | sim | sim | n/a | — |
-| meeting_copilot | sim (sob pedido, `copilot-v2`) | sim | só catálogo | há `copiloto.live.test.ts` | as sugestões proativas são do apoio ao vivo (`features/apoio`), não deste especialista |
+| meeting_copilot | sim (sob pedido, `copilot-v2`) | sim | só catálogo | há `copiloto.live.test.ts` | não há sugestão proativa (o apoio ao vivo saiu em 23/11/2026) |
 | capture_monitor | sim (determinístico) | sim | sim | n/a | — |
 | privacy_review | sim (determinístico) | sim | sim | n/a | detecção por formato, não por contexto |
 
@@ -173,8 +173,8 @@ de agenda sem convidados, nenhum botão "Enviar"/"Agendar".
    `taq-v7` (`modelo.ts`); as onze dos especialistas (`especialistas.ts`:
    `documents-v4`, `app-assistant-v5`, `analyst-v1`, `commitments-v1`,
    `continuity-v1`, `handoff-v1`, `communication-v3`, `scheduling-v3`,
-   `memory-v1`, `context-v1`, `copilot-v2`); e as três dos subsistemas
-   (`intervencao-v1`, `estado-v1`, `acompanhamento-v1`). Os prompts do pipeline
+   `memory-v1`, `context-v1`, `copilot-v2`); as duas dos subsistemas
+   (`estado-v1`, `acompanhamento-v1`); e `transcricao-v1` (revisão da transcrição). Os prompts do pipeline
    de documentos (`redator`, `leitor`, `auditor`) são escolhidos só pelo servidor.
    A extensão deixou de pedir `conducao-v1` com o
    commit `6df3da6`, junto com o novo mapa do Preparar. O servidor ainda mapeia
@@ -187,9 +187,8 @@ de agenda sem convidados, nenhum botão "Enviar"/"Agendar".
    clique (o modelo só prepara; ver `docs/arquitetura/taq-assistente.md`). Sem a
    conta do CITi conectada ou sem os escopos, o Taq cai no rascunho copiável e no
    link do Google Agenda sem convidados.
-4. **Copiloto sob pedido.** O `meeting_copilot` só responde quando chamado. A
-   sugestão automática existe no apoio ao vivo (`features/apoio`), com política e
-   orçamento próprios.
+4. **Copiloto sob pedido.** O `meeting_copilot` só responde quando chamado. Não há
+   sugestão automática: o apoio ao vivo (`features/apoio`) saiu em 23/11/2026.
 5. **Verificador semântico.** O `evidence_verifier` confere existência e
    trecho; "a frase interpreta bem o trecho" não é avaliado.
 6. **Backup.** Não há backup/restauração nesta extensão; `taq:trabalho` segue a

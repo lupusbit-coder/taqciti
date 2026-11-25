@@ -60,7 +60,8 @@ describe('linhasDaConducao', () => {
     expect(texto).toMatch(/preferências dela/);
     expect(texto).toMatch(/não ampliam nem reduzem/);
     expect(texto).toContain('Apoiar o entendimento de necessidades.');
-    expect(texto).toContain('como intervir: Discreto: uma lembrança relevante por vez');
+    // O formato antigo pedia "discreto"; desde 23/11/2026 vale sempre "só quando eu chamar".
+    expect(texto).toContain('como intervir: Só quando eu chamar');
     expect(texto).toContain('- Como intervir: Uma pergunta curta por vez');
   });
 
@@ -147,17 +148,17 @@ describe('linhasDaConducao', () => {
     expect(solta).not.toContain('Decidir o piloto.');
   });
 
-  it('o modo escolhido só para a reunião vale nela, e só com perfil salvo', async () => {
+  // Decisão de 23/11/2026: não há mais modo por reunião. Um briefing guardado
+  // antes, com "participativo", não liga o apoio nela.
+  it('modo por reunião guardado antes não vale mais', async () => {
     await salvarPerfil(PERFIL, 0);
-    await salvarBriefing('m-1', { objetivo: 'A', modo: 'participativo' }, 0);
-    expect(perfilQueValeParaAReuniao(await lerConducao(), 'm-1')!.intervencao.modo).toBe('participativo');
-    // Outra reunião, sem briefing, segue o perfil.
-    expect(perfilQueValeParaAReuniao(await lerConducao(), 'm-2')!.intervencao.modo).toBe('discreto');
-    expect(linhasDaConducao(await lerConducao(), REUNIAO).join('\n')).toContain('Participativo');
-    // Sobre o Padrão do CITi, escolher um modo não liga o apoio.
-    installChromeStorageMock();
-    await salvarBriefing('m-3', { objetivo: 'C', modo: 'participativo' }, 0);
-    expect(perfilQueValeParaAReuniao(await lerConducao(), 'm-3').intervencao.modo).toBe('sob_demanda');
+    await salvarBriefing('m-1', { objetivo: 'A' }, 0);
+    const guardado = await chrome.storage.local.get(null);
+    const [chave, valor] = Object.entries(guardado).find(([, v]) => (v as { briefings?: unknown })?.briefings)!;
+    (valor as { briefings: Array<Record<string, unknown>> }).briefings[0]!.modo = 'participativo';
+    await chrome.storage.local.set({ [chave]: valor });
+    expect(perfilQueValeParaAReuniao(await lerConducao(), 'm-1')!.intervencao.modo).toBe('sob_demanda');
+    expect(linhasDaConducao(await lerConducao(), REUNIAO).join('\n')).not.toContain('Participativo');
   });
 
   it('reunião preparada sem perfil fica com o padrão daquela hora, não com o perfil salvo depois', async () => {

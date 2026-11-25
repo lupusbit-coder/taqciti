@@ -43,8 +43,8 @@ Documentos, Acompanhamento, Conexões.
   botão de brasas do fundo, botão de pausar movimento, menu de conversas
   (`ConversasMenu.tsx`).
 - **Seções** (arquivos): Assistente = `AssistantView.tsx` (+ `WaveField.tsx`, só
-  montada nesta seção); Preparar = `Preparar.tsx` (o mapa de contextos do
-  assistente, `OQueLevar.tsx`, com os ajustes sugeridos e o teste numa reunião passada); Reuniões = `Paginas.tsx` (lista com `BuscaDoAcervo`, `ImportarReuniao` e `Automacoes` no topo, transcrição, `NotasDaReuniao`,
+  montada nesta seção); Preparar = `Preparar.tsx` (a grade de contextos do
+  assistente e os ajustes sob demanda em `OQueLevar.tsx`); Reuniões = `Paginas.tsx` (lista com `BuscaDoAcervo`, `ImportarReuniao` e `Automacoes` no topo, transcrição, `NotasDaReuniao`,
   `PrintsDaReuniao`, `GerarDocumento`); Documentos = `Documentos.tsx` e
   `DocumentoPersonalizado.tsx`; Acompanhamento = `Acompanhamento.tsx` (abas
   Compromissos, Decisões, Achados; mesma fonte `taq:trabalho` dos cartões do Taq);
@@ -86,7 +86,8 @@ inativa usa `visibility: hidden` + `inert` para não perder rascunho nem rolagem
   em `Pergunta.tsx`, abas em `AbasDaReuniao.tsx`: Transcrição, Notas, Prints).
   Pergunta rápida grava numa conversa própria, com a reunião como contexto, e
   "Continuar na conversa" só abre essa conversa.
-- Apoio à condução: `CartaoDeApoio.tsx`, `EstadoDosPontos.tsx`.
+- Apoio à condução: `EstadoDosPontos.tsx` ("O que falta fechar", a pedido). O cartão de
+  sugestão automática (`CartaoDeApoio.tsx`) saiu em 23/11/2026.
 - Conversa: `Conversa.tsx`. `OndaDoPainel.tsx` é o fundo (para sozinho com
   movimento reduzido; a sidebar não tem brasas).
 - "Abrir" reunião/documento na sidebar significa `platform.send({ type:
@@ -113,7 +114,7 @@ cobre mensagens e estado da reunião, não tudo.
 ## 5. Componentes compartilhados (`shared/ui`)
 
 - Marca: `MarcaDoTaq` (onda viva do agente; o `estado` é a `AtividadeDoAgente` de `features/agent/atividade.ts`, e `ouve` é uma propriedade para quando a pessoa digita), `MarcaDaEscuta` (glifo da transcrição),
-  `SinalTaqciti` (SVG), `Wordmark`, `Wave` (legado, 3 barras), `Brasas`, `Sheen` (só a cápsula do Meet o usa), `TextoCinetico` (texto da transcrição ao vivo na sidebar, `Reuniao.tsx`), `BuscaDoAcervo` (busca local por texto e período em Reuniões, Documentos e no menu de conversas; não envia nada à IA).
+  `SinalTaqciti` (SVG), `Wordmark`, `Wave` (legado, 3 barras), `Brasas`, `Sheen` (só a cápsula do Meet o usa), `TextoCinetico` (texto da transcrição ao vivo na sidebar, `Reuniao.tsx`), `BuscaDoAcervo` (busca local num campo só: Reuniões e Documentos só pelo nome, do mais recente para o mais antigo; o menu de conversas por nome e conteúdo; sem filtro de data; não envia nada à IA).
 - Conversa: `RespostaDoTaq` (fontes como botões, documentos criados, em aberto,
   limitações), `CartoesDoTaq` (cartões validados vindos de ferramentas),
   `CartaoDeTela` (captura sob pedido), `TrilhaDaConversa` (barra de rolagem que
@@ -220,20 +221,22 @@ cobre mensagens e estado da reunião, não tudo.
 - Rolagem: quem rola é a página; mensagem nova só puxa a rolagem se a pessoa já
   está no fim (margem 96 px) ou acabou de enviar.
 
-## 9. Importar reunião e Automações (topo da seção Reuniões)
+## 9. Importar reunião e Automações (removidos em 23/11/2026)
 
-Dois blocos novos de `Paginas.tsx` (`PaginaReunioes`), ainda sem commit na hora desta revisão, mas em uso real: o background já trata `ui/history/import` e enfileira as automações (ver `extensao-captura.md`, seção 4.4).
-
-- **`ImportarReuniao.tsx`**: a pessoa escolhe um arquivo, informa nome e data/hora e clica em "Importar". TXT, SRT e VTT (até 1 MB) são lidos localmente por `lerTranscricao`; áudio e vídeo (até 4 MB) são enviados SÓ no clique, por `fetchDeIa`, a `/api/importacao/transcrever` (servidor com chave Groq e `DOCCITI_DATA_POLICY=private`; sem isso responde 503 e a tela mostra o erro). O resultado vai ao background por `ui/history/import` e a tela abre a reunião. Reimportar o mesmo arquivo (mesmo hash) abre o registro que já existe. O áudio não identifica falantes. Está na ajuda do Taq (`features/taq/ajuda.ts`, tópico `importar_reuniao`).
-- **`Automacoes.tsx`**: duas chaves, "resumo" e "compromissos" (próximos passos), desligadas por padrão, e a lista da fila de execuções (`pendente`, `executando`, `concluida`, `falhou`, `cancelada`) com "tentar novamente" para as que falharam. Lê e grava por `features/automacoes/automacoes.ts`. O resumo vira documento comum na seção Documentos (tipo `resumo`, origem `gerado`); os próximos passos entram como compromissos candidatos no Acompanhamento, respeitando o teto de 3 por reunião.
+Os dois blocos do topo da seção Reuniões saíram a pedido do usuário, com o código
+(`ImportarReuniao.tsx`, `Automacoes.tsx`, `features/importacao/`, `features/automacoes/`),
+a mensagem `ui/history/import` e a rota de transcrição do servidor. A aba Reuniões ficou
+com o título, a busca e a lista. Reuniões importadas antes continuam no histórico, com o
+selo "Importada"; na ajuda do Taq os dois viraram "não existe" (`FORA_DO_APP`).
 
 ## 10. Persistência da UI
 
 Tudo em `chrome.storage.local` por `shared/services/storage` (`readLocal`,
 `writeLocal`, `onLocalChange`), chaves em `STORAGE_KEYS` (`shared/config/constants.ts`):
 `taq:history`, `taq:conversations`, `taq:notes`, `taq:marks`, `taq:shots`,
-`taq:documents`, `taq:documentVersions`, `taq:trabalho`, `taq:conducao`, `taq:apoio`,
-`taq:integracoes`, entre outras. Exceção: as automações guardam preferências e fila em `taqciti:automacoes:v1` e `taqciti:automacoes:fila:v1`, fora de `STORAGE_KEYS`. Telas assinam com `observar*`/`onLocalChange` para
+`taq:documents`, `taq:documentVersions`, `taq:trabalho`, `taq:conducao`,
+`taq:integracoes`, entre outras (`taq:apoio` e as chaves das automações saíram em
+23/11/2026; a migração versão 5 as apaga). Telas assinam com `observar*`/`onLocalChange` para
 sincronizar abas. Escritas concorrentes usam `comTravaLocal`/`criarFilaDeGravacao`.
 Rascunhos de conversa, aba aberta e animação pausada são estado de React, perdidos
 ao recarregar. O histórico de reuniões é escrito pelo background/content, não pela UI.
@@ -262,7 +265,7 @@ Relevantes: `home/HomePage.test.tsx`, `rota.test.ts`, `GerarDocumento.test.tsx`,
 `ReuniaoEDocumentos.test.tsx`, `Preparar.test.tsx`, `AssistenteTaq.test.tsx`,
 `conversations.test.ts`, `apagarConversas.test.ts`, `ContaDoCiti.test.tsx`, `Espectro.test.tsx`,
 `PointerLayer.test.tsx`, `Conexoes.test.tsx`, `OQueLevar.test.tsx`, `home.css.test.ts`; sidebar: `Sidebar.test.tsx`,
-`Conversa.test.tsx`, `CartaoDeApoio.test.tsx`, `EstadoDosPontos.test.tsx`,
+`Conversa.test.tsx`, `EstadoDosPontos.test.tsx`,
 `sidepanel.css.test.ts`; shared: `CartoesDoTaq.test.tsx`, `Markdown.test.tsx`, `BuscaDoAcervo.test.ts`,
 `estadoDaCaptura.test.ts`, `platform/extension.test.ts`; documentos:
 `features/documents/store.test.ts`, `personalizado/*.test.ts`,

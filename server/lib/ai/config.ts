@@ -464,6 +464,25 @@ export function activeDataPolicyWarning(): string | null {
 }
 
 /**
+ * O servidor está rodando em produção?
+ *
+ * Até 25/11/2026 só `VERCEL_ENV=production` contava. Em 23/11/2026 a produção
+ * voltou para o Railway, que não define `VERCEL_ENV`: as travas de produção
+ * (política de dados obrigatória, `sintetica` recusado, rotas de diagnóstico
+ * fora do ar) ficaram desligadas sem aviso. O Railway define
+ * `RAILWAY_ENVIRONMENT_NAME` (e o antigo `RAILWAY_ENVIRONMENT`) com o nome do
+ * ambiente, `production` por padrão. As duas plataformas valem; um ambiente do
+ * Railway com outro nome não conta como produção.
+ */
+export function emProducao(env: NodeJS.ProcessEnv = process.env): boolean {
+  return (
+    env.VERCEL_ENV === 'production' ||
+    env.RAILWAY_ENVIRONMENT_NAME === 'production' ||
+    env.RAILWAY_ENVIRONMENT === 'production'
+  );
+}
+
+/**
  * Em produção, a política de dados precisa estar DECLARADA.
  *
  * O padrão silencioso era "private": uma chave free tier subida sem
@@ -473,12 +492,12 @@ export function activeDataPolicyWarning(): string | null {
  * que não é. Fora de produção nada muda.
  */
 export function politicaDeDadosNaoDeclarada(env: NodeJS.ProcessEnv = process.env): string | null {
-  if (env.VERCEL_ENV !== 'production') return null;
+  if (!emProducao(env)) return null;
   const valor = env.DOCCITI_DATA_POLICY?.trim();
   if (valor === 'private' || valor === 'training') return null;
   return (
     'Servidor de produção sem DOCCITI_DATA_POLICY declarada. Defina "private" (chave paga, ' +
-    'sem treinamento) ou "training" nas variáveis da Vercel.'
+    'sem treinamento) ou "training" nas variáveis do host.'
   );
 }
 
@@ -491,7 +510,7 @@ export function politicaDeDadosNaoDeclarada(env: NodeJS.ProcessEnv = process.env
  * treinamento com uma linha no JSON.
  */
 export function aceitaSinteticaDoCliente(env: NodeJS.ProcessEnv = process.env): boolean {
-  return env.VERCEL_ENV !== 'production';
+  return !emProducao(env);
 }
 
 /**

@@ -13,7 +13,6 @@
  * argumento é o MESMO que o descreve, e os dois não têm como divergir.
  */
 import { z } from 'zod/v4';
-import { pesquisaWebSchema } from './pesquisaWeb';
 
 // ---------------------------------------------------------------- escopo
 
@@ -342,7 +341,6 @@ export const cartaoSchema = z.discriminatedUnion('tipo', [
 export type CartaoDaResposta = z.infer<typeof cartaoSchema>;
 
 export const resultadoDoAgenteSchema = z.object({
-  pesquisasWeb: z.array(pesquisaWebSchema).optional(),
   estado: estadoDeExecucaoSchema,
   /** Texto para a pessoa. Ausente quando a execução não chegou a responder. */
   resposta: z.string().optional(),

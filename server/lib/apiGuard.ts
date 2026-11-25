@@ -19,6 +19,7 @@
  */
 import { timingSafeEqual } from 'node:crypto';
 import { NextResponse, type NextRequest } from 'next/server';
+import { emProducao } from './ai/config';
 
 export const SHARED_KEY_HEADER = 'x-docciti-key';
 
@@ -140,7 +141,7 @@ export function corsHeaders(
  * a variável deve voltar a sair logo depois.
  */
 export function diagnosticoForaDoAr(headers: Record<string, string>): NextResponse | null {
-  const producao = process.env.VERCEL_ENV === 'production';
+  const producao = emProducao();
   const liberado = process.env.DOCCITI_DIAGNOSTICO?.trim().toLowerCase() === 'ligado';
   if (producao && !liberado) {
     return NextResponse.json({ error: 'Não encontrado.' }, { status: 404, headers });

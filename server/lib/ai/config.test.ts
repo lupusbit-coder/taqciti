@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest';
 import {
   COMPARISON_MATRIX,
   DEFAULT_AGENT_CONFIG,
+  aceitaSinteticaDoCliente,
   activeDataPolicyWarning,
   agentConfigFor,
   cheapestProductionEntry,
   dataPolicyWarning,
+  emProducao,
   matrixEntryForModel,
   matrixFor,
   parseOverride,
@@ -170,6 +172,23 @@ describe('política de dados', () => {
     expect(politicaDeDadosNaoDeclarada(dev)).toBeNull();
     expect(recusaPorPoliticaDeDados(true, 'aviso', dev)).toBeNull();
     expect(recusaPorPoliticaDeDados(false, 'aviso', dev)?.status).toBe(400);
+  });
+
+  // A produção voltou para o Railway em 23/11/2026, e ele não define
+  // VERCEL_ENV: as travas de produção ficaram desligadas sem ninguém notar.
+  it('o Railway em produção liga as mesmas travas da Vercel', () => {
+    for (const env of [
+      { RAILWAY_ENVIRONMENT_NAME: 'production' },
+      { RAILWAY_ENVIRONMENT: 'production' },
+      { VERCEL_ENV: 'production' },
+    ] as unknown as NodeJS.ProcessEnv[]) {
+      expect(emProducao(env)).toBe(true);
+      expect(politicaDeDadosNaoDeclarada(env)).toContain('DOCCITI_DATA_POLICY');
+      expect(aceitaSinteticaDoCliente(env)).toBe(false);
+    }
+    // Outro ambiente do Railway (e o Preview da Vercel) não é produção.
+    expect(emProducao({ RAILWAY_ENVIRONMENT_NAME: 'staging' } as unknown as NodeJS.ProcessEnv)).toBe(false);
+    expect(emProducao({ VERCEL_ENV: 'preview' } as unknown as NodeJS.ProcessEnv)).toBe(false);
   });
 
   it('matrixEntryForModel encontra a entrada do modelo ativo do Auditor', () => {

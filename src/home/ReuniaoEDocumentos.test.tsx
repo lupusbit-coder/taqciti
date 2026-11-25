@@ -483,14 +483,16 @@ describe('a seção Documentos', () => {
     expect(host.textContent).not.toContain('trabalho pendente');
   });
 
-  it('lista documentos de verdade, com atualização e origem', async () => {
+  // Decisão de 23/11/2026: a linha mostra só o nome (e o tipo na miniatura);
+  // data e reunião de origem saíram da lista e continuam dentro do documento.
+  it('lista documentos de verdade, só com o nome', async () => {
     await montar({ documentos: [DOCUMENTO] });
     await irParaDocumentos();
 
     const item = q('.tq-item');
     expect(item.textContent).toContain('Ata do planning');
     expect(item.textContent).toContain('Ata de Reunião');
-    expect(item.textContent).toContain('Planning da semana');
+    expect(item.textContent).not.toContain('Planning da semana');
   });
 
   it('abrir prioriza o conteúdo editável', async () => {

@@ -178,7 +178,7 @@ export function ConversasMenu({
             Nova conversa
           </button>
 
-          <BuscaDoAcervo busca={busca} rotulo="Buscar conversas" total={filtradas.length} datas={false} />
+          <BuscaDoAcervo busca={busca} rotulo="Buscar conversas" total={filtradas.length} placeholder="Nome ou conteúdo" />
           {conversas.length > 0 && filtradas.length === 0 && <p className="tq-conversas-vazio">Nenhuma conversa encontrada.</p>}
           {conversas.length === 0 ? (
             <p className="tq-conversas-vazio">

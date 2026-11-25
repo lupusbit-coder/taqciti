@@ -29,7 +29,6 @@ it('reconhece a configuração do novo deploy ao voltar à janela, sem chamar o 
       instrucoesVersao: 'taq-v7',
       politicaDeDados: 'private',
       pendencias: [],
-      buscaNaInternet: { disponivel: true, motivo: '' },
     });
   const turno = vi.fn();
   _definirTaq({ adaptador: { estado, turno } });

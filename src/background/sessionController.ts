@@ -27,7 +27,6 @@ import { finalizeStaleRecordings, upsertRecord } from './history';
 import { bumpMetrics } from './metrics';
 import { forgetPanelTab, panelTabs } from './panelTabs';
 import { revisarTranscricao } from '@/features/transcription/revisao';
-import { enfileirarAutomacao } from '@/features/automacoes/automacoes';
 
 let state: MeetingState = IDLE_STATE;
 let lastLiveSaveAt = 0;
@@ -150,7 +149,6 @@ async function runSideEffects(
     const original = buildMeetingRecord(prev.session, 'ready', now);
     await upsertRecord(original);
     void revisarTranscricao(original);
-    await enfileirarAutomacao(original).catch(() => {});
   }
 
   /*
@@ -183,7 +181,6 @@ async function runSideEffects(
     const original = buildMeetingRecord(state.session, 'ready');
     await upsertRecord(original);
     void revisarTranscricao(original);
-    await enfileirarAutomacao(original).catch(() => {});
     if (event.type === 'MEETING_FINISHED') {
       await bumpMetrics({
         meetingsCaptured: 1,

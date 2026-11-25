@@ -39,8 +39,6 @@ export interface ResultadoDaLimpeza {
   analises: number;
   /** O briefing da reunião (o objetivo que a pessoa escreveu para ela). */
   briefings: number;
-  /** As sugestões de condução da reunião (e o feedback sobre elas). */
-  sugestoes: number;
   /** O estado dos pontos da reunião ("o que falta fechar"): leitura derivada da transcrição. */
   estados: number;
 }
@@ -57,7 +55,6 @@ export async function limparVinculosDaReuniao(
     STORAGE_KEYS.documents,
     STORAGE_KEYS.trabalho,
     STORAGE_KEYS.conducao,
-    STORAGE_KEYS.apoio,
     STORAGE_KEYS.estado,
   ].sort();
   const executar = async (): Promise<ResultadoDaLimpeza> => {
@@ -155,35 +152,8 @@ export async function limparVinculosDaReuniao(
         };
       }
     }
-    // As sugestões de condução são derivadas da transcrição que deixou de existir.
-    let sugestoes = 0;
-    const apoio = bruto[STORAGE_KEYS.apoio] as
-      | { sugestoes?: unknown; feedback?: unknown; pausadas?: unknown; medicoes?: unknown }
-      | null
-      | undefined;
-    if (apoio && typeof apoio === 'object') {
-      const deOutras = (x: unknown) =>
-        !x || typeof x !== 'object' || (x as { reuniaoId?: unknown }).reuniaoId !== meetingId;
-      const semEsta = (m: unknown) => {
-        if (!m || typeof m !== 'object' || Array.isArray(m)) return { mapa: {}, tinha: false };
-        const copia = { ...(m as Record<string, unknown>) };
-        const tinha = meetingId in copia;
-        delete copia[meetingId];
-        return { mapa: copia, tinha };
-      };
-      const ficam = Array.isArray(apoio.sugestoes) ? apoio.sugestoes.filter(deOutras) : [];
-      sugestoes = Array.isArray(apoio.sugestoes) ? apoio.sugestoes.length - ficam.length : 0;
-      const pausadas = semEsta(apoio.pausadas);
-      const medicoes = semEsta(apoio.medicoes);
-      if (sugestoes || pausadas.tinha || medicoes.tinha)
-        alteracoes[STORAGE_KEYS.apoio] = {
-          ...apoio,
-          sugestoes: ficam,
-          feedback: Array.isArray(apoio.feedback) ? apoio.feedback.filter(deOutras) : [],
-          pausadas: pausadas.mapa,
-          medicoes: medicoes.mapa,
-        };
-    }
+    // (As sugestões automáticas, `taq:apoio`, saíram em 23/11/2026; a migração
+    // de storage versão 5 apagou o que restava delas.)
     // O estado dos pontos é uma leitura da transcrição que deixou de existir.
     let estados = 0;
     const mapaDeEstados = bruto[STORAGE_KEYS.estado];
@@ -199,11 +169,11 @@ export async function limparVinculosDaReuniao(
       estados = 1;
     }
     if (Object.keys(alteracoes).length) await writeLocalBatch(alteracoes);
-    return { nota, marcas, prints, documentosDesvinculados, analises, briefings, sugestoes, estados };
+    return { nota, marcas, prints, documentosDesvinculados, analises, briefings, estados };
   };
   const travar = (i: number): Promise<ResultadoDaLimpeza> =>
     i === chaves.length ? executar() : comTravaLocal(chaves[i]!, () => travar(i + 1));
-  // A automação também verifica a fonte e cria vínculos. Serializar as duas
-  // operações antes das travas por coleção evita inversão history/documents.
-  return comTravaLocal('automacoes:gravar', () => travar(0));
+  // (Até 23/11/2026 havia uma trava a mais, `automacoes:gravar`, para não
+  // cruzar com as automações após reuniões, que saíram.)
+  return travar(0);
 }

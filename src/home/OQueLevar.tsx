@@ -1,43 +1,9 @@
-/**
- * "O que levar para as reuniões" — a parte do Preparar onde o assistente se
- * monta, ANTES das reuniões, uma vez para todas.
- *
- * ── Por que um mapa ───────────────────────────────────────────────────────
- *
- * O que a pessoa precisa ver é o caminho: a fala da reunião entra, o
- * assistente responde, e entre as duas coisas vai junto o que está LIGADO. Um
- * formulário de campos soltos (a versão até 22/10/2026: missão, o que
- * observar, preferências) escondia exatamente isso — não dava para saber o que
- * ia ao modelo e o que só estava escrito. No mapa, ligado é violeta e sólido;
- * guardado é tracejado e fica de fora.
- *
- * ── As regras que a tela obedece ───────────────────────────────────────────
- *
- * 1. Nada é salvo antes de "Usar este assistente". Até lá, tudo é rascunho
- *    desta aba; a gravação confere a revisão lida e, se outra aba mudou o
- *    assistente, volta como aviso — nunca sobrescreve.
- * 2. O Padrão do CITi é só leitura. Para mudar, a pessoa parte dele: o
- *    Personalizado é uma cópia dela.
- * 3. O centro não é contexto. As regras que não mudam (fidelidade, fala é
- *    dado, apagar e enviar pedem a pessoa) moram lá e não se desligam. O modo
- *    de intervenção e "ler ao encerrar" também: ligam comportamento, não são
- *    texto para o modelo.
- * 4. A reunião em andamento continua com a versão com que começou; a tela diz
- *    isso em vez de deixar a pessoa achar que a mudança valeu na hora.
- *
- * ── Largura ───────────────────────────────────────────────────────────────
- *
- * O mapa é desenhado em 720×600 e encolhe até 72%. Abaixo disso ele vira LISTA
- * (os mesmos botões, em coluna): na prévia ele rolava de lado num celular, e
- * um mapa que só se lê rolando de lado não mostra o caminho a ninguém.
- */
-import { useDisponibilidadeDoTaq } from '@/features/taq/interface';
-import { Fragment, useEffect, useRef, useState, type CSSProperties } from 'react';
+/** Contextos e ajustes do assistente usado nas próximas reuniões. */
+import { useEffect, useRef, useState } from 'react';
 import {
   MAX_CONTEXTOS,
   MAX_NOME_DO_CONTEXTO,
   MAX_TEXTO_DO_CONTEXTO,
-  MODOS_DE_INTERVENCAO,
   ROTULO_DO_MODO,
   conteudoDe,
   conteudoDoPadrao,
@@ -49,12 +15,10 @@ import {
   type Conducao,
   type ContextoDoAssistente,
   type ConteudoDoPerfil,
-  type ModoDeIntervencao,
 } from '@/features/conducao/store';
 import { PADRAO_DO_CITI } from '@/features/conducao/padrao';
 import { BotaoCopiar } from '@/shared/ui/BotaoCopiar';
 import { Icon } from '@/shared/ui/Icon';
-import { MarcaDoTaq } from '@/shared/ui/MarcaDoTaq';
 
 /** A reunião ao vivo, se houver: a tela só precisa do id e do nome. */
 export interface ReuniaoEmAndamento {
@@ -68,8 +32,6 @@ export interface ReuniaoEmAndamento {
 interface Rascunho {
   base: BaseDoPerfil;
   seus: ContextoDoAssistente[] | null;
-  buscaNaInternet: boolean;
-  modo: ModoDeIntervencao;
   ler: boolean;
   padraoVersao: number;
 }
@@ -79,8 +41,6 @@ function rascunhoDe(salvo: ConteudoDoPerfil | null): Rascunho {
   return {
     base: s.base,
     seus: s.base === 'personalizado' ? s.contextos : null,
-    buscaNaInternet: s.base === 'personalizado' && s.buscaNaInternet,
-    modo: s.base === 'personalizado' ? s.intervencao.modo : PADRAO_DO_CITI.modo,
     ler: s.lerAoEncerrar === true,
     padraoVersao: s.padraoVersao,
   };
@@ -93,7 +53,6 @@ function conteudoDoRascunho(r: Rascunho): ConteudoDoPerfil {
       base: 'padrao',
       padraoVersao: PADRAO_DO_CITI.versao,
       contextos: [],
-      buscaNaInternet: false,
       intervencao: { modo: PADRAO_DO_CITI.modo },
       ...ler,
     };
@@ -101,8 +60,7 @@ function conteudoDoRascunho(r: Rascunho): ConteudoDoPerfil {
     base: 'personalizado',
     padraoVersao: r.padraoVersao,
     contextos: r.seus ?? [],
-    buscaNaInternet: r.buscaNaInternet,
-    intervencao: { modo: r.modo },
+    intervencao: { modo: PADRAO_DO_CITI.modo },
     ...ler,
   };
 }
@@ -112,194 +70,7 @@ function copiaDoPadrao(): ContextoDoAssistente[] {
   return PADRAO_DO_CITI.contextos.map((c) => ({ ...c, ligado: true, origem: 'padrao' as const }));
 }
 
-// ---------------------------------------------------------------- o mapa
-
-const LARGURA = 720;
-const ALTURA = 600;
-const CENTRO = { x: 360, y: 300 };
-/** Onde cada vaga fica na elipse em volta do centro (graus). */
-const ANGULOS = [155, 205, 120, 60, 240, 300, 28, 332];
-/** Abaixo desta escala o mapa vira lista. */
-const ESCALA_MINIMA = 0.72;
-
-function posicao(vaga: number) {
-  const r = ((ANGULOS[vaga] ?? 0) * Math.PI) / 180;
-  return { x: Math.round(CENTRO.x + 250 * Math.cos(r)), y: Math.round(CENTRO.y - 190 * Math.sin(r)) };
-}
-
-/** A escala que cabe na caixa; `null` = estreita demais: lista. */
-function useEscala(caixa: React.RefObject<HTMLDivElement | null>): number | null {
-  const [escala, setEscala] = useState<number | null>(1);
-  useEffect(() => {
-    const el = caixa.current;
-    if (!el || typeof ResizeObserver === 'undefined') return;
-    const medir = () => {
-      const largura = el.clientWidth;
-      if (!largura) return;
-      const e = Math.min(1, largura / LARGURA);
-      setEscala(e < ESCALA_MINIMA ? null : e);
-    };
-    medir();
-    const obs = new ResizeObserver(medir);
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, [caixa]);
-  return escala;
-}
-
-type Selecao = 'centro' | 'busca' | string | null;
-
-function Mapa({
-  contextos,
-  personalizado,
-  busca,
-  selecao,
-  versao,
-  aoEscolher,
-  aoAdicionar,
-}: {
-  contextos: readonly ContextoDoAssistente[];
-  personalizado: boolean;
-  busca: boolean;
-  selecao: Selecao;
-  versao: string;
-  aoEscolher: (s: Selecao) => void;
-  aoAdicionar: () => void;
-}) {
-  const caixa = useRef<HTMLDivElement>(null);
-  const escala = useEscala(caixa);
-  const lista = escala === null;
-  const livre = personalizado ? vagaLivre(contextos) : null;
-  const ordenados = [...contextos].sort((a, b) => a.vaga - b.vaga);
-  const no = (vaga: number): CSSProperties => {
-    const p = posicao(vaga);
-    return { left: p.x - 96, top: p.y - 26 };
-  };
-
-  return (
-    <div className={`tq-mapa-caixa${lista ? ' lista' : ''}`} ref={caixa}>
-      <div
-        className="tq-mapa-medida"
-        style={lista ? undefined : { width: LARGURA * escala, height: ALTURA * escala }}
-      >
-        <div className="tq-mapa-palco" style={lista ? undefined : { transform: `scale(${escala})` }}>
-          {!lista && (
-            <>
-              <div className="tq-mapa-brilho" aria-hidden="true" />
-              <svg className="tq-mapa-fios" viewBox={`0 0 ${LARGURA} ${ALTURA}`} aria-hidden="true">
-                <ellipse className="tq-fio-orbita" cx={CENTRO.x} cy={CENTRO.y} rx="250" ry="190" />
-                <line className="tq-fio-fala" x1={CENTRO.x} y1="68" x2={CENTRO.x} y2="220" />
-                <line className="tq-fio-saida" x1={CENTRO.x} y1="380" x2={CENTRO.x} y2="532" />
-                <line
-                  className={`tq-fio-busca${busca ? ' ligado' : ''}${selecao === 'busca' ? ' sel' : ''}`}
-                  x1={CENTRO.x}
-                  y1={CENTRO.y}
-                  x2="520"
-                  y2={CENTRO.y}
-                />
-                {ordenados.map((c) => {
-                  const p = posicao(c.vaga);
-                  return (
-                    <line
-                      key={c.id}
-                      className={`tq-fio${c.ligado ? ' ligado' : ''}${selecao === c.id ? ' sel' : ''}`}
-                      x1={CENTRO.x}
-                      y1={CENTRO.y}
-                      x2={p.x}
-                      y2={p.y}
-                    />
-                  );
-                })}
-                {livre !== null && (
-                  <line className="tq-fio tq-fio-vaga" x1={CENTRO.x} y1={CENTRO.y} x2={posicao(livre).x} y2={posicao(livre).y} />
-                )}
-              </svg>
-              <div className="tq-mapa-anel" aria-hidden="true" />
-            </>
-          )}
-
-          <div className="tq-mapa-entrada">
-            <span className="tq-mapa-vivo" aria-hidden="true" />
-            <span>
-              Fala da reunião <small>ao vivo</small>
-            </span>
-          </div>
-
-          <button
-            type="button"
-            className={`tq-mapa-centro${selecao === 'centro' ? ' sel' : ''}`}
-            aria-pressed={selecao === 'centro'}
-            onClick={() => aoEscolher(selecao === 'centro' ? null : 'centro')}
-          >
-            <MarcaDoTaq estado="repouso" tamanho={lista ? 28 : 40} />
-            <span>
-              <b>Assistente</b>
-              <small>{versao}</small>
-            </span>
-          </button>
-
-          {ordenados.map((c) => (
-            <button
-              key={c.id}
-              type="button"
-              className={`tq-mapa-no${c.ligado ? '' : ' guardado'}${selecao === c.id ? ' sel' : ''}`}
-              style={lista ? undefined : no(c.vaga)}
-              aria-pressed={selecao === c.id}
-              onClick={() => aoEscolher(selecao === c.id ? null : c.id)}
-            >
-              {personalizado ? <span className="tq-mapa-ponto" aria-hidden="true" /> : <Icon name="lock" size={13} />}
-              <span className="tq-mapa-no-txt">
-                <b>{c.nome || 'Sem nome'}</b>
-                <small>
-                  {!personalizado
-                    ? 'Padrão · fixo'
-                    : !c.ligado
-                      ? 'Guardado · fica fora'
-                      : c.origem === 'padrao'
-                        ? 'Do padrão CITi'
-                        : 'Seu contexto'}
-                </small>
-              </span>
-              <span className="sr-only">, {c.ligado ? 'levando' : 'guardado'}</span>
-            </button>
-          ))}
-
-          <button
-            type="button"
-            className={`tq-mapa-busca${busca ? '' : ' desligada'}${selecao === 'busca' ? ' sel' : ''}`}
-            aria-pressed={selecao === 'busca'}
-            onClick={() => aoEscolher(selecao === 'busca' ? null : 'busca')}
-          >
-            <Icon name="globe" size={18} />
-            <span>
-              <b>Busca na internet</b>
-              <small className="tq-mapa-estado">{busca ? 'ligada' : 'desligada'}</small>
-              <small>{busca ? 'Pede o seu ok antes de cada busca' : 'Nada sai do computador'}</small>
-            </span>
-          </button>
-
-          {livre !== null ? (
-            <button type="button" className="tq-mapa-no tq-mapa-vaga" style={lista ? undefined : no(livre)} onClick={aoAdicionar}>
-              <Icon name="plus" size={14} />
-              <span>Adicionar contexto</span>
-            </button>
-          ) : (
-            !personalizado && (
-              <p className="tq-mapa-no tq-mapa-vaga nota" style={lista ? undefined : no(5)}>
-                Seus contextos entram no Personalizado
-              </p>
-            )
-          )}
-
-          <div className="tq-mapa-saida">
-            <Icon name="chats" size={15} />
-            <span>Respostas e lembretes</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
+type Selecao = { id: string } | 'ajustes' | null;
 
 // -------------------------------------------------------------- o painel
 
@@ -331,14 +102,12 @@ function Cabeca({
   violeta,
   cadeado,
   titulo,
-  sub,
   aoFechar,
 }: {
   olho: string;
   violeta?: boolean;
   cadeado?: boolean;
   titulo: string;
-  sub?: string;
   aoFechar?: () => void;
 }) {
   return (
@@ -349,7 +118,6 @@ function Cabeca({
           {olho}
         </p>
         <h3>{titulo}</h3>
-        {sub && <p className="tq-ed-sub">{sub}</p>}
       </div>
       {aoFechar && (
         <button type="button" className="tq-ed-fechar" aria-label="Fechar" onClick={aoFechar}>
@@ -366,46 +134,18 @@ const REGRAS = [
   ['Apagar e enviar pedem você', 'Nada sai nem some sem o seu clique.'],
 ] as const;
 
-function PainelDoCentro({
-  r,
-  mudar,
-  aoFechar,
-}: {
-  r: Rascunho;
-  mudar: (p: Partial<Rascunho>) => void;
-  aoFechar: () => void;
-}) {
-  const personalizado = r.base === 'personalizado';
+/** O miolo do bloco "Personalização": o que liga comportamento e as regras fixas. */
+function AjustesDoAssistente({ r, mudar }: { r: Rascunho; mudar: (p: Partial<Rascunho>) => void }) {
   return (
     <>
-      <Cabeca
-        olho="Sempre ativo"
-        violeta
-        titulo="Regras que não mudam"
-        aoFechar={aoFechar}
-      />
-      <div className="tq-ed-corpo">
-        <ul className="tq-ed-regras">
-          {REGRAS.map(([t, d]) => (
-            <li key={t}>
-              <b>
-                <Icon name="lock" size={12} />
-                {t}
-              </b>
-              <span>{d}</span>
-            </li>
-          ))}
-        </ul>
-        <fieldset className="tq-ed-modos" disabled={!personalizado}>
-          <legend>Como o assistente intervém</legend>
-          {MODOS_DE_INTERVENCAO.map((m) => (
-            <label key={m}>
-              <input type="radio" name="tq-ed-modo" checked={r.modo === m} onChange={() => mudar({ modo: m })} />
-              {ROTULO_DO_MODO[m]}
-            </label>
-          ))}
-          {!personalizado && <small>Fixo no Padrão do CITi.</small>}
-        </fieldset>
+      <div className="tq-pers-ajustes">
+        <p className="tq-ed-modo-fixo">
+          <b>Como o assistente intervém</b>
+          <span>
+            {ROTULO_DO_MODO[PADRAO_DO_CITI.modo]}. Ele não sugere nada sozinho durante a reunião e não busca na
+            internet.
+          </span>
+        </p>
         <Interruptor
           titulo="Ler ao encerrar a reunião"
           explica="Envia a transcrição ao provedor de IA."
@@ -413,41 +153,19 @@ function PainelDoCentro({
           aoMudar={(ler) => mudar({ ler })}
         />
       </div>
-    </>
-  );
-}
-
-function PainelDaBusca({
-  r,
-  mudar,
-  aoFechar,
-}: {
-  r: Rascunho;
-  mudar: (p: Partial<Rascunho>) => void;
-  aoFechar: () => void;
-}) {
-  const [estado] = useDisponibilidadeDoTaq();
-  const busca = estado.fase === 'pronto' ? estado.buscaNaInternet : undefined;
-  const aviso = estado.fase === 'verificando' ? 'Verificando a disponibilidade…'
-    : estado.fase === 'inalcancavel' ? 'Não foi possível consultar o servidor. Sua preferência continua salva.'
-    : estado.fase === 'pendente' ? estado.motivos.join(' ')
-    : busca?.disponivel ? 'Disponível nas conversas com o Taq. As respostas pesquisadas mostram links das fontes.'
-    : busca?.motivo || 'A busca aguarda atualização e liberação no servidor.';
-  return (
-    <>
-      <Cabeca olho="Fora do computador" titulo="Busca na internet" aoFechar={aoFechar} />
-      <div className="tq-ed-corpo">
-        {r.base === 'personalizado' ? (
-          <Interruptor
-            titulo="Permitir quando estiver disponível"
-            ligado={r.buscaNaInternet}
-            aoMudar={(buscaNaInternet) => mudar({ buscaNaInternet })}
-          />
-        ) : (
-          <p className="tq-ed-citacao">Desligada no Padrão do CITi.</p>
-        )}
-        <p className="tq-ed-aviso" role="status">{aviso}</p>
-        <p className="tq-ed-aviso">A permissão vale para perguntas ao Taq. A busca pode ter cobrança do provedor quando liberada no servidor.</p>
+      <div className="tq-pers-regras">
+        <h3>
+          <Icon name="lock" size={13} />
+          Regras que não mudam
+        </h3>
+        <ul className="tq-ed-regras">
+          {REGRAS.map(([t, d]) => (
+            <li key={t}>
+              <b>{t}</b>
+              <span>{d}</span>
+            </li>
+          ))}
+        </ul>
       </div>
     </>
   );
@@ -539,34 +257,14 @@ function PainelDoPadrao({
   c,
   aoFechar,
 }: {
-  c: ContextoDoAssistente | null;
+  c: ContextoDoAssistente;
   aoFechar: () => void;
 }) {
-  if (c)
-    return (
-      <>
-        <Cabeca olho="Padrão do CITi" violeta cadeado titulo={c.nome} aoFechar={aoFechar} />
-        <div className="tq-ed-corpo">
-          <p className="tq-ed-citacao">{c.texto}</p>
-        </div>
-      </>
-    );
   return (
     <>
-      <Cabeca
-        olho="Padrão do CITi"
-        violeta
-        titulo="Igual para todo mundo"
-      />
+      <Cabeca olho="Padrão do CITi" violeta cadeado titulo={c.nome} aoFechar={aoFechar} />
       <div className="tq-ed-corpo">
-        <ul className="tq-ed-regras">
-          {PADRAO_DO_CITI.contextos.map((x) => (
-            <li key={x.id}>
-              <b>{x.nome}</b>
-              <span>{x.texto}</span>
-            </li>
-          ))}
-        </ul>
+        <p className="tq-ed-citacao">{c.texto}</p>
       </div>
     </>
   );
@@ -604,6 +302,23 @@ export function OQueLevar({ conducao, emAndamento }: { conducao: Conducao; emAnd
   const [salvou, setSalvou] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const painel = useRef<HTMLElement>(null);
+  const acionador = useRef<HTMLButtonElement | null>(null);
+  const botaoAdicionar = useRef<HTMLButtonElement>(null);
+  const botaoAjustes = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    const detalhe = painel.current;
+    if (!detalhe) return;
+    if (!detalhe.contains(document.activeElement)) detalhe.focus({ preventScroll: true });
+    detalhe.scrollIntoView?.({ block: 'nearest' });
+  }, [selecao]);
+
+  const fechar = () => {
+    setSelecao(null);
+    const botao = acionador.current;
+    if (botao?.isConnected && !botao.disabled) botao.focus();
+    else botaoAjustes.current?.focus();
+  };
 
   // Salvo em outra aba (ou depois de salvar): a tela segue o que está guardado,
   // a menos que a pessoa esteja no meio de uma edição.
@@ -630,19 +345,13 @@ export function OQueLevar({ conducao, emAndamento }: { conducao: Conducao; emAnd
     setAviso('');
   };
   const escolherBase = (base: BaseDoPerfil) => {
-    setSelecao(null);
     // A primeira vez no Personalizado parte do padrão: a pessoa recebe uma cópia.
     mudar(base === 'personalizado' && r.seus === null ? { base, seus: copiaDoPadrao() } : { base });
   };
   const mudarContexto = (id: string, p: Partial<ContextoDoAssistente>) =>
     mudar({ seus: (r.seus ?? []).map((c) => (c.id === id ? { ...c, ...p } : c)) });
-  const escolher = (s: Selecao) => {
-    setSelecao(s);
-    // Em lista, o painel fica embaixo: leva a pessoa até ele.
-    if (s) requestAnimationFrame(() => painel.current?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' }));
-  };
   const adicionar = () => {
-    const seus = r.seus ?? [];
+    const seus = r.seus ?? (personalizado ? [] : copiaDoPadrao());
     const vaga = vagaLivre(seus);
     if (vaga === null || seus.length >= MAX_CONTEXTOS) return;
     const novo: ContextoDoAssistente = {
@@ -653,12 +362,14 @@ export function OQueLevar({ conducao, emAndamento }: { conducao: Conducao; emAnd
       origem: 'seu',
       vaga,
     };
-    mudar({ seus: [...seus, novo] });
-    escolher(novo.id);
+    mudar({ base: 'personalizado', seus: [...seus, novo] });
+    acionador.current = botaoAdicionar.current;
+    setSelecao({ id: novo.id });
   };
   const remover = (id: string) => {
     mudar({ seus: (r.seus ?? []).filter((c) => c.id !== id) });
-    setSelecao(null);
+    acionador.current = botaoAdicionar.current;
+    fechar();
   };
 
   const usar = async () => {
@@ -677,47 +388,17 @@ export function OQueLevar({ conducao, emAndamento }: { conducao: Conducao; emAnd
     }
   };
 
-  const ligados = contextos.filter((c) => c.ligado).length;
-  // "3 de 8" sozinho não dizia de quê: são as vagas do mapa, levados e
-  // guardados juntos. Cada parte é um bloco que não quebra por dentro: em 390 px
-  // a linha quebrava entre "3 de 8" e "vagas". Quebra só entre as partes.
-  const partes = personalizado
-    ? [
-        `${ligados} ${ligados === 1 ? 'contexto levado' : 'contextos levados'}`,
-        `${contextos.length - ligados} ${contextos.length - ligados === 1 ? 'guardado' : 'guardados'}`,
-        `busca ${r.buscaNaInternet ? 'permitida quando disponível' : 'desligada'}`,
-        `${contextos.length} de ${MAX_CONTEXTOS} vagas`,
-      ]
-    : [`${contextos.length} contextos`, 'definido pelo CITi'];
-  // O separador fica FORA do bloco: é nos espaços dele que a linha pode quebrar.
-  const contagem = partes.map((p, i) => (
-    <Fragment key={p}>
-      {i > 0 && ' · '}
-      <span className="tq-sem-quebra">{p}</span>
-    </Fragment>
-  ));
-
   const emUso = emAndamento ? perfilEmUsoDaReuniao(conducao, emAndamento.reuniaoId) : null;
-  const escolhido = personalizado ? (r.seus ?? []).find((c) => c.id === selecao) ?? null : null;
-  const doPadrao = !personalizado ? contextos.find((c) => c.id === selecao) ?? null : null;
+  const ajustes = selecao === 'ajustes';
+  const contexto = selecao && selecao !== 'ajustes'
+    ? contextos.find((c) => c.id === selecao.id)
+    : undefined;
+  const cheio = (r.seus?.length ?? contextos.length) >= MAX_CONTEXTOS;
   const v1 = conducao.perfilV1 && !conducao.perfilV1.coubeInteiro ? textoDoPerfilV1(conducao.perfilV1.original) : '';
 
   return (
-    <section className="tq-prep-bloco tq-levar" aria-labelledby="tq-prep-perfil">
-      <div className="tq-levar-cab">
-        <h2 id="tq-prep-perfil">O que levar para as reuniões</h2>
-        <div className="tq-levar-modos" role="group" aria-label="Qual assistente usar">
-          <button type="button" aria-pressed={!personalizado} onClick={() => escolherBase('padrao')}>
-            <Icon name="lock" size={14} />
-            Padrão do CITi<small>v{PADRAO_DO_CITI.versao}</small>
-          </button>
-          <button type="button" aria-pressed={personalizado} onClick={() => escolherBase('personalizado')}>
-            <Icon name="sliders" size={14} />
-            Personalizado
-            <small className="seu">{salvo?.base === 'personalizado' ? `v${perfil!.revisao} · seu` : 'seu'}</small>
-          </button>
-        </div>
-      </div>
+    <section className="tq-levar" aria-labelledby="tq-prep-perfil">
+      <h2 id="tq-prep-perfil" className="sr-only">Contexto</h2>
 
       {emAndamento && (
         <p className="tq-aviso tq-levar-aviso" role="status">
@@ -735,72 +416,117 @@ export function OQueLevar({ conducao, emAndamento }: { conducao: Conducao; emAnd
         </details>
       )}
 
-      <div className="tq-levar-corpo">
-        <section className="tq-mapa" aria-labelledby="tq-mapa-titulo">
-          <div className="tq-mapa-cab">
-            <h3 id="tq-mapa-titulo">O que vai para a reunião</h3>
-            <p>{contagem}</p>
-          </div>
-          <Mapa
-            contextos={contextos}
-            personalizado={personalizado}
-            busca={personalizado && r.buscaNaInternet}
-            selecao={selecao}
-            versao={versao}
-            aoEscolher={escolher}
-            aoAdicionar={adicionar}
-          />
-        </section>
+      <div className="tq-contextos-palco">
+        <div className="tq-contextos-grade">
+          <button
+            ref={botaoAdicionar}
+            type="button"
+            className="tq-contexto-botao tq-contexto-adicionar"
+            disabled={cheio}
+            onClick={adicionar}
+          >
+            <Icon name="plus" size={19} />
+            {cheio ? 'Limite de contextos atingido' : 'Adicionar contexto'}
+          </button>
+          {contextos.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              className={`tq-contexto-botao${c.ligado ? '' : ' guardado'}`}
+              aria-expanded={contexto?.id === c.id}
+              onClick={(e) => {
+                if (contexto?.id === c.id) fechar();
+                else {
+                  acionador.current = e.currentTarget;
+                  setSelecao({ id: c.id });
+                }
+              }}
+            >
+              <Icon name={!personalizado ? 'lock' : c.ligado ? 'check' : 'doc'} size={15} />
+              <span>{c.nome || 'Sem nome'}</span>
+              {!c.ligado && <span className="sr-only"> · Guardado</span>}
+            </button>
+          ))}
+        </div>
+        <button
+          ref={botaoAjustes}
+          type="button"
+          className="tq-contextos-ajustes"
+          aria-label="Ajustes do assistente"
+          title="Ajustes do assistente"
+          aria-expanded={ajustes}
+          onClick={(e) => {
+            if (ajustes) fechar();
+            else {
+              acionador.current = e.currentTarget;
+              setSelecao('ajustes');
+            }
+          }}
+        >
+          <Icon name="sliders" size={17} />
+        </button>
+      </div>
 
-        <aside className="tq-ed" aria-label="Detalhe do item" ref={painel}>
-          {selecao === 'centro' ? (
-            <PainelDoCentro r={r} mudar={mudar} aoFechar={() => setSelecao(null)} />
-          ) : selecao === 'busca' ? (
-            <PainelDaBusca r={r} mudar={mudar} aoFechar={() => setSelecao(null)} />
-          ) : escolhido ? (
-            <PainelDoContexto
-              c={escolhido}
-              mudar={(p) => mudarContexto(escolhido.id, p)}
-              remover={() => remover(escolhido.id)}
-              aoFechar={() => setSelecao(null)}
-            />
-          ) : !personalizado ? (
-            <PainelDoPadrao c={doPadrao} aoFechar={() => setSelecao(null)} />
-          ) : (
-            <p className="tq-ed-vazio">Escolha um item do mapa.</p>
+      {(contexto || ajustes) && (
+        <aside
+          ref={painel}
+          className="tq-ed"
+          tabIndex={-1}
+          aria-label={ajustes ? 'Ajustes do assistente' : 'Detalhe do contexto'}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') {
+              e.stopPropagation();
+              fechar();
+            }
+          }}
+        >
+          {ajustes ? (
+            <>
+              <Cabeca olho={versao} titulo="Personalização" aoFechar={fechar} />
+              <div className="tq-ed-corpo">
+                <div className="tq-levar-modos" role="group" aria-label="Qual assistente usar">
+                  <button type="button" aria-pressed={!personalizado} onClick={() => escolherBase('padrao')}>
+                    Padrão do CITi
+                  </button>
+                  <button type="button" aria-pressed={personalizado} onClick={() => escolherBase('personalizado')}>
+                    Personalizado
+                  </button>
+                </div>
+                <div className="tq-pers-corpo">
+                  <AjustesDoAssistente r={r} mudar={mudar} />
+                </div>
+              </div>
+            </>
+          ) : contexto && (
+            personalizado ? (
+              <PainelDoContexto
+                key={contexto.id}
+                c={contexto}
+                mudar={(p) => mudarContexto(contexto.id, p)}
+                remover={() => remover(contexto.id)}
+                aoFechar={fechar}
+              />
+            ) : (
+              <PainelDoPadrao c={contexto} aoFechar={fechar} />
+            )
           )}
         </aside>
-      </div>
-
-      {aviso && (
-        <p className="tq-aviso" role="alert">
-          {aviso}
-        </p>
       )}
-      <div className="tq-levar-rodape">
-        {mudou || personalizado ? (
-          <button type="button" className="tq-prep-usar" disabled={salvando || !mudou} onClick={() => void usar()}>
-            <Icon name="check" size={15} />
-            {salvando ? 'Salvando…' : 'Usar este assistente'}
-          </button>
-        ) : (
-          // O único "Personalizar a partir deste". Havia outro no rodapé do
-          // painel, e a tela larga mostrava os dois ao mesmo tempo. Fica o
-          // daqui: está à vista com qualquer item escolhido no mapa, no mesmo
-          // lugar e com o mesmo peso do "Usar este assistente".
-          <button type="button" className="tq-prep-usar" onClick={() => escolherBase('personalizado')}>
-            <Icon name="sliders" size={15} />
-            Personalizar a partir deste
-          </button>
-        )}
-        <span className={`tq-levar-status${mudou ? ' pendente' : ''}`} role="status">
-          {mudou
-            ? 'Mudanças não salvas.'
-            : salvou
-              ? `Salvo: ${versao}.`
-              : `Em uso: ${versao}.`}
-        </span>
-      </div>
+
+      {aviso && <p className="tq-aviso" role="alert">{aviso}</p>}
+      {(mudou || salvou) && (
+        <div className="tq-levar-rodape">
+          {mudou && (
+            <button type="button" className="tq-prep-usar" disabled={salvando} onClick={() => void usar()}>
+              <Icon name="check" size={15} />
+              {salvando ? 'Salvando…' : 'Usar este assistente'}
+            </button>
+          )}
+          <span className={`tq-levar-status${mudou ? ' pendente' : ''}`} role="status">
+            {mudou ? 'Mudanças não salvas.' : `Salvo: ${versao}.`}
+          </span>
+        </div>
+      )}
     </section>
   );
 }

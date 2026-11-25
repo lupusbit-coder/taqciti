@@ -187,20 +187,16 @@ Todos moram no navegador; o modelo, quando usado, passa pelo mesmo `POST
   oferecidos, sem passar das vagas nem repetir. Sem julgamento válido, ninguém é
   escolhido (nunca "os três primeiros"). `suggest_commitments` e
   `register_commitments` passam pelo juiz; `registrarCompromissos` reforça o teto.
-- **Apoio ao vivo** (`features/apoio/`, `intervencao-v1`): sugestões privadas durante
-  a reunião. `gerar.ts` faz uma chamada por avaliação (até 40 falas
-  consolidadas; cita falas por número, trecho copiado da transcrição); `politica.ts`
-  decide se aparece: no máximo uma na tela, validade em falas, sem repetir ponto,
-  intervalo e limite por hora por modo (`discreto`: 150 s e 4/h; `participativo`:
-  75 s e 12/h; `sob_demanda` nunca age sozinho), mínimo de 6 falas e 80 palavras para
-  avaliar. `laco.ts` junta tudo; as 2 últimas falas esperam consolidar. Em
-  `sob_demanda` (o modo do Padrão do CITi, e de quem não escolheu outro), o modelo não é
-  chamado sozinho.
-- **Calibração** (`features/calibracao/`): `propostas.ts` transforma o feedback da
-  pessoa em propostas de ajuste (antes e depois) com limiar mínimo de retornos
-  (janela de 10); nada muda sem aprovação. `historico.ts` reproduz uma reunião
-  passada por cortes de tempo (passo de 60 s, até 12 avaliações) em id próprio
-  `teste:<id>`, sem gravar nada na reunião real.
+- **Só quando a pessoa chama (23/11/2026, decisão do usuário):** o perfil é sempre
+  `sob_demanda` (o único modo que sobrou) e não há busca na internet. Saíram, com o
+  código: o apoio ao vivo (`features/apoio/`, o cartão `CartaoDeApoio.tsx` e o prompt
+  `intervencao-v1`), a calibração (`features/calibracao/`), a busca (`pesquisaWeb`,
+  `taq-v8`, grounding do Gemini, `TAQ_BUSCA_NA_INTERNET`), a importação de reuniões e as
+  automações após reuniões (`features/importacao/`, `features/automacoes/`,
+  `automacoes-v1`, `/api/importacao/transcrever`). A migração de storage versão 5 apaga
+  `taq:apoio` e as chaves das automações. `falasConsolidadas`, que "O que falta fechar"
+  usa, mora agora em `features/estado/consolidadas.ts`. O Preparar tem dois blocos:
+  "Contexto" (o mapa) e "Personalização" (`src/home/OQueLevar.tsx`).
 - **Condução** (`features/conducao/`): o assistente é um mapa de até 8 contextos, cada um
   ligado (vai ao modelo) ou guardado (não vai); versionado, com conflito por revisão.
   `padrao.ts` é o Padrão do CITi, usado sem nada configurado (só leitura; quem personaliza
@@ -216,8 +212,7 @@ Todos moram no navegador; o modelo, quando usado, passa pelo mesmo `POST
   60 falas consolidadas). `sintese.ts` monta o fechamento sem chamar modelo;
   `registrar.ts` registra um ponto como acompanhamento (`decidido` ou `a_confirmar`)
   ou como decisão (só `decidido`), por clique, respeitando o teto de 3.
-- **Automações pós-reunião** (`features/automacoes/automacoes.ts`, `automacoes-v1`; em uso, ainda sem commit na hora desta revisão): ao gravar um registro `ready` com falas (fim de captura ou importação de arquivo), uma fila local durável (`taqciti:automacoes:fila:v1`) guarda uma execução se a pessoa ligou "resumo" e/ou "compromissos" em Reuniões (ambas desligadas por padrão). `processarAutomacoes` faz UMA chamada ao modelo por execução (`POST /api/taq/turno`, sem ferramentas, 4096 tokens de saída, prazo de 25 s, no máximo 150 mil caracteres de contexto) e exige JSON com `resumo` e até 3 `compromissos`, cada um com índice de fala e trecho copiado. O código confere o trecho contra a fala; responsável só entra se é quem falou ou aparece no trecho, prazo só se aparece no trecho. O resumo vira documento (`guardarDocumentoUnico`, idempotente pela execução, tipo `resumo`); os compromissos entram como `candidato` em `registrarCompromissos`, sob o teto de 3 por reunião. Não há efeito externo nem repetição automática: falha vira `falhou` com "tentar novamente" na tela; fonte alterada ou automação desligada no meio vira `cancelada`; execução que estava `executando` quando o worker caiu vira `falhou`. O worker retoma pendências por `chrome.alarms` (a cada minuto) e nunca roda com o navegador fechado.
-- **Segundo cérebro** é o nome do conjunto condução + apoio + estado + calibração
+- **Segundo cérebro** é o nome do conjunto condução + estado (o apoio e a calibração saíram em 23/11/2026)
   (ver `docs/segundo-cerebro.md`).
 - Outros: `features/agent/` (atividade do agente para a UI e barramento de escuta),
   `features/annotations/` (notas, marcações, prints, aviso no chat; `vinculos.ts`
@@ -271,10 +266,9 @@ desconhecida".
 | app_assistant | `app-assistant-v5` | v1 a v4 |
 | communication / scheduling | `communication-v3` / `scheduling-v3` | v1, v2 |
 | Revisão da transcrição (`features/transcription/revisao.ts`, fora do Taq) | `transcricao-v1` | — |
-| Automações pós-reunião (`features/automacoes/automacoes.ts`, fora do Taq) | `automacoes-v1` | — |
 | meeting_copilot | `copilot-v2` | v1 |
 | analyst, commitments, continuity, handoff, memory, context | `analyst-v1`, `commitments-v1`, `continuity-v1`, `handoff-v1`, `memory-v1`, `context-v1` | — |
-| Subsistemas | `intervencao-v1`, `estado-v1`, `acompanhamento-v1`; `conducao-v1` (só o servidor mapeia; a extensão não pede desde `6df3da6`) | — |
+| Subsistemas | `estado-v1`, `acompanhamento-v1`; `conducao-v1` (só o servidor mapeia; a extensão não pede desde `6df3da6`) | — |
 
 **Regra de publicação**: ao subir versão nova de instruções, publicar o servidor
 **antes** da extensão. O deploy é manual; o estado atual da publicação: não

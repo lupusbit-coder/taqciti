@@ -57,7 +57,7 @@ tocou. O CI roda os dois projetos a cada push (`.github/workflows/ci.yml`).
   `src/features/meeting/`. Doc: `docs/arquitetura/extensao-captura.md`.
 - **Telas** (Home, sidebar, página do documento) → `src/home/`, `src/sidepanel/`,
   `src/document/`, `src/shared/ui/`. Doc: `docs/arquitetura/extensao-interface.md`.
-- **O assistente Taq** → `src/features/taq/` (+ `acompanhamento`, `apoio`, `calibracao`,
+- **O assistente Taq** → `src/features/taq/` (+ `acompanhamento`, `apoio`,
   `conducao`, `estado`, `trabalho`) e `server/lib/taq/`. Doc: `docs/arquitetura/taq-assistente.md`.
 - **Geração de documentos** → `server/lib/` (`generateDocument`, `agents/`, `templates/`,
   `documentos/`, `render/`, `ai/`, `prompts/`). Doc: `docs/arquitetura/servidor-documentos.md`.

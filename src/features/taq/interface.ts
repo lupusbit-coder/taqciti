@@ -35,7 +35,7 @@ import { registrosUsados } from './memoria';
 import type { RegistroSelecionado } from './contratos';
 import { armazenamentoLocal } from './armazenamento';
 import { restaurarDaLixeira } from './lixeira';
-import { criarAdaptadorHttp, ErroDoModelo, type AdaptadorHttp, type EstadoDoTaq } from './modelo';
+import { criarAdaptadorHttp, ErroDoModelo, type AdaptadorHttp } from './modelo';
 import {
   criarOrquestrador,
   type ExecucaoDoTaq,
@@ -48,7 +48,7 @@ import type { AcoesDaInterface, EventoDeExecucao } from './tipos';
 
 export type DisponibilidadeDoTaq =
   | { fase: 'verificando' }
-  | { fase: 'pronto'; provedor: string; modelo: string; buscaNaInternet?: EstadoDoTaq['buscaNaInternet'] }
+  | { fase: 'pronto'; provedor: string; modelo: string }
   | { fase: 'pendente'; motivos: string[] }
   | { fase: 'inalcancavel'; motivo: string };
 
@@ -101,7 +101,7 @@ export async function verificarTaq(sinal?: AbortSignal): Promise<Disponibilidade
         ],
       };
     }
-    return { fase: 'pronto', provedor: estado.provedor, modelo: estado.modelo, ...(estado.buscaNaInternet ? { buscaNaInternet: estado.buscaNaInternet } : {}) };
+    return { fase: 'pronto', provedor: estado.provedor, modelo: estado.modelo };
   } catch (e) {
     if (e instanceof ErroDoModelo && e.codigo === 'nao_autorizado') {
       return {
@@ -410,7 +410,6 @@ export async function perguntarAoTaq(p: PerguntaAoTaq): Promise<ExecucaoDoTaq | 
         ...comum,
         text: r.resposta,
         fontes: fontesDe(r),
-        ...(r.pesquisasWeb?.length ? { pesquisasWeb: r.pesquisasWeb } : {}),
         desfecho: r.estado,
         ...(r.pergunta
           ? { pergunta: { motivo: r.pergunta.motivo, opcoes: r.pergunta.opcoes } }

@@ -122,6 +122,18 @@ const CONVERSA = {
     args: [`--disable-extensions-except=${extensao}`, `--load-extension=${extensao}`],
     viewport: { width: 1440, height: 1000 },
   });
+  // Gerar documento pede a identidade do Google antes de chamar o servidor
+  // (`fetchDeIa` → `identidadeParaIa`), e isso abre a janela de login. No perfil
+  // isolado ninguém responde, e a geração ficava em "Gerando…" para sempre
+  // (visto em 23/11/2026). Aqui a janela é FECHADA, como faria quem recusa o
+  // login: a geração segue pela ponte do segredo. Mesmo tratamento do
+  // `verify-ao-vivo.cjs`.
+  context.on('page', async (p) => {
+    try {
+      await p.waitForLoadState('domcontentloaded', { timeout: 10000 }).catch(() => {});
+      if (/accounts\.google\.com|oauth/i.test(p.url())) await p.close();
+    } catch { /* a página pode já ter fechado */ }
+  });
   const falhas = [];
   const tentar = async (etapa, fn) => {
     try {
@@ -346,52 +358,19 @@ const CONVERSA = {
     });
 
     // --------------------------------------------------------- Preparar
-    // Dados [TESTE] no storage, sem IA. O clique em "Reproduzir" não é feito
-    // (envia trechos ao provedor): só se vê o botão com uma reunião escolhida.
-    // O que ficar sem a tela aqui continua `verificacao: 'codigo'` na referência.
+    // Configuração local com dados de teste, sem chamada à IA.
     await tentar('HOME: Preparar', async () => {
-      const abrir = async () => {
-        await page.goto(`${base}/src/home/index.html?secao=preparar`);
-        await page.getByRole('heading', { name: 'O que levar para as reuniões' }).waitFor({ timeout: 10000 });
-        await page.waitForTimeout(500);
-      };
-      await abrir();
+      await page.goto(`${base}/src/home/index.html?secao=preparar`);
+      await page.getByRole('heading', { name: 'Contexto', exact: true }).waitFor({ timeout: 10000 });
+      await page.waitForTimeout(500);
       await colher(page, 'HOME · Preparar (Padrão do CITi)');
-      await page.locator('.tq-mapa-centro').click();
-      await colher(page, 'HOME · Preparar (regras que não mudam)');
-      await clicar(page, 'Personalizar a partir deste');
+      await clicar(page, 'Ajustes do assistente');
+      await colher(page, 'HOME · Preparar (ajustes)');
+      await clicar(page, 'Personalizado');
       await colher(page, 'HOME · Preparar (personalizado)');
       await clicar(page, 'Usar este assistente');
       await page.waitForTimeout(600);
-      const apoio = (tipo, n) => ({
-        versao: 1,
-        sugestoes: [],
-        feedback: Array.from({ length: n }, (_, i) => ({
-          id: `fb-ajuda-${tipo}-${i}`,
-          sugestaoId: `sug-ajuda-${i}`,
-          reuniaoId: REUNIAO.id,
-          em: Date.now() - 1000 * (n - i),
-          tipo,
-          alcance: 'agora',
-        })),
-        pausadas: {},
-        medicoes: {},
-        ajustes: {},
-      });
-      await page.evaluate(async (a) => chrome.storage.local.set({ 'taq:apoio': a }), apoio('ja_respondido', 2));
-      await abrir();
-      await page.getByRole('heading', { name: 'Ajustes sugeridos' }).waitFor({ timeout: 10000 });
-      await colher(page, 'HOME · Preparar (ajustes sugeridos)');
-      await clicar(page, 'Aplicar ao meu assistente');
-      await page.getByText('Ajuste aplicado: o assistente tem uma nova versão.').waitFor({ timeout: 10000 });
-      await page.evaluate(async (a) => chrome.storage.local.set({ 'taq:apoio': a }), apoio('tarde_demais', 2));
-      await abrir();
-      await page.getByRole('button', { name: 'Agora não', exact: true }).waitFor({ timeout: 10000 });
-      await colher(page, 'HOME · Preparar (nova proposta)');
-      await clicar(page, 'Agora não');
-      await page.getByRole('heading', { name: 'Testar o assistente numa reunião passada' }).waitFor({ timeout: 10000 });
-      await page.getByLabel('Reunião para reproduzir').selectOption(REUNIAO.id);
-      await colher(page, 'HOME · Preparar (testar numa reunião passada)');
+      await colher(page, 'HOME · Preparar (salvo)');
       // Limpa: as etapas seguintes não dependem de um assistente salvo.
       await page.evaluate(async () => chrome.storage.local.remove(['taq:conducao', 'taq:apoio']));
     });

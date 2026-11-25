@@ -136,7 +136,6 @@ export interface PedidoDeDelegacao {
 }
 
 export interface AmbienteDeExecucao {
-  buscaNaInternet?: boolean;
   modelo: AdaptadorDeModelo;
   armazenamento: ArmazenamentoDoTaq;
   livro: LivroDeEvidencias;

@@ -118,7 +118,7 @@ export interface LiveSegment extends TranscriptSegment {
   captionId: string;
 }
 
-/** Idioma da legenda, estimado por heurística de stopwords — nunca automatiza o menu do Meet. */
+/** Idioma da legenda, estimado por heurística de stopwords — só alimenta o aviso; quem põe o menu do Meet em português é o provider. */
 export type CaptionLanguage = 'pt' | 'en' | 'unknown';
 
 export interface MeetingSessionState {

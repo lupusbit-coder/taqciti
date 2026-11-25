@@ -93,13 +93,6 @@ export async function atenderTurno(
     );
   }
 
-  if (pedido.buscaNaInternet && !config.buscaNaInternet.disponivel) {
-    return erro(503, 'configuracao_pendente', config.buscaNaInternet.motivo);
-  }
-  if (pedido.buscaNaInternet && pedido.instrucoes !== 'taq-v8') {
-    return erro(400, 'pedido_invalido', 'Busca na internet exige as instruções taq-v8.');
-  }
-
   const tamanho =
     pedido.contexto.length +
     JSON.stringify(pedido.mensagens).length +
@@ -115,7 +108,6 @@ export async function atenderTurno(
       config.modelo,
       {
         sistema: instrucoesDoTaq(pedido.instrucoes),
-        ...(pedido.buscaNaInternet ? { buscaNaInternet: true } : {}),
         contexto: pedido.contexto,
         mensagens: pedido.mensagens,
         ferramentas: pedido.ferramentas,

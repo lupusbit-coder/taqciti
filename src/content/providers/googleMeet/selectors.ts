@@ -40,8 +40,57 @@ export const CAPTIONS_TOGGLE_SELECTORS = [
   'button[aria-label*="turn off captions" i]',
   'button[aria-label*="enable captions" i]',
   'button[aria-label*="disable captions" i]',
+  // Layout de 11/2026: o liga/desliga mora DENTRO do painel "Legendas e
+  // tradução" ("Ativar legendas" / "Desativar legenda instantânea").
+  'button[aria-label*="legenda instantânea" i]',
+  'button[aria-label*="live captions" i]',
+  '[jsname="RrG0hf"]',
   '[jsname="r8qRAd"]',
 ];
+
+/**
+ * Layout de 11/2026 (visto ao vivo em 24/11/2026): a barra da chamada não tem
+ * mais o liga/desliga das legendas, só "Legendas e tradução", que abre um
+ * painel (`aria-haspopup="dialog"`). O botão de ligar só existe com o painel
+ * aberto, e `queryCaptionsToggle` recusa `aria-haspopup` de propósito — então
+ * a extensão não achava o que clicar e as legendas nunca ligavam sozinhas.
+ * O `aria-pressed` deste botão acompanha a legenda: `true` = ligada.
+ */
+const CAPTIONS_MENU_SELECTORS = [
+  'button[aria-haspopup="dialog"][aria-label*="legenda" i]',
+  'button[aria-haspopup="dialog"][aria-label*="caption" i]',
+];
+
+export function queryCaptionsMenu(): HTMLElement | null {
+  for (const selector of CAPTIONS_MENU_SELECTORS) {
+    for (const el of document.querySelectorAll<HTMLElement>(selector)) {
+      // "Abrir configurações de legenda" também abre um dialog.
+      if (/idioma|language|settings|configura/i.test(el.getAttribute('aria-label') ?? '')) continue;
+      if (typeof el.checkVisibility === 'function' && !el.checkVisibility()) continue;
+      return el;
+    }
+  }
+  return null;
+}
+
+/**
+ * "Idioma da reunião": o idioma em que o Meet ESCREVE a legenda. Só aparece
+ * com a legenda ligada, junto da região de legenda. É um combobox cujas opções
+ * (`li[role=option]`) carregam o código no `data-value` (`pt-BR`, `en-US`…) e
+ * ficam no DOM mesmo com a lista fechada.
+ */
+export const MEETING_LANGUAGE_COMBOBOX_SELECTORS = [
+  '[role="combobox"][aria-label*="idioma" i]',
+  '[role="combobox"][aria-label*="language" i]',
+  '[role="combobox"][jsname="oYxtQd"]',
+];
+export const MEETING_LANGUAGE_LISTBOX_SELECTORS = [
+  '[role="listbox"][aria-label*="idioma" i]',
+  '[role="listbox"][aria-label*="language" i]',
+  '[role="listbox"][jsname="rymPhb"]',
+];
+/** O idioma que a extensão escolhe para a legenda (decisão do usuário, 24/11/2026). */
+export const IDIOMA_DA_LEGENDA = 'pt-BR';
 
 /** O Meet pode conservar botões de um layout anterior, escondidos. */
 export function queryCaptionsToggle(): HTMLElement | null {

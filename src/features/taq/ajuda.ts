@@ -44,7 +44,7 @@
 import { termosDe } from './busca';
 
 /** Sobe quando o conteúdo muda — vai no resultado da consulta. */
-export const VERSAO_DA_REFERENCIA = '2026-11-13';
+export const VERSAO_DA_REFERENCIA = '2026-11-23';
 
 export const ASSUNTOS = [
   'captura',
@@ -138,33 +138,15 @@ const CARTAO_DE_TELA = 'src/shared/ui/CartaoDeTela.tsx';
 
 export const FUNCIONALIDADES: readonly Funcionalidade[] = [
   {
-    id: 'importar_reuniao', assunto: 'reunioes', titulo: 'Importar uma transcrição ou gravação',
-    oQueFaz: 'Importa TXT, SRT e VTT localmente ou transcreve áudio e vídeo pelo servidor, guardando uma reunião individual.',
-    onde: 'Home → Reuniões → Importar reunião',
-    passos: ['Abra Importar reunião, escolha o arquivo, informe nome, data e hora e clique em Importar.'],
-    preRequisitos: ['Mídia exige login e serviço de transcrição configurado no servidor.'],
-    limitacoes: ['Texto UTF-8: até 1 MB, 200 mil caracteres e 10 mil trechos. Mídia: até 4 MB. Não identifica nomes de falantes no áudio. Reimportar o mesmo arquivo abre o registro existente.'],
-    rotulos: ['Importar reunião', 'Arquivo', 'Nome da reunião', 'Data e hora da reunião'],
-    implementacao: ['src/home/ImportarReuniao.tsx'], verificacao: 'codigo',
-    palavras: ['importar', 'importacao', 'transcricao externa', 'arquivo de audio', 'srt', 'vtt', 'mp3', 'mp4'],
-  },
-  {
-    id: 'automatizar_reuniao', assunto: 'reunioes', titulo: 'Preparar resumo e próximos passos automaticamente',
-    oQueFaz: 'Após encerrar ou importar uma reunião, pode salvar um resumo e sugerir até três próximos passos como candidatos em Acompanhamento.',
-    onde: 'Home → Reuniões → Automações após reuniões',
-    passos: ['Abra Automações após reuniões e marque os resultados desejados. Confira o estado das últimas execuções no mesmo lugar.'],
-    preRequisitos: ['IA disponível. Preferências ativadas antes de encerrar ou importar.'],
-    limitacoes: ['Exige navegador aberto. Não envia mensagens. Falhas não bloqueiam a reunião e só são repetidas ao clicar em Tentar novamente. Não processa reuniões antigas retroativamente.'],
-    rotulos: ['Automações após reuniões', 'Tentar novamente'], implementacao: ['src/home/Automacoes.tsx'], verificacao: 'codigo',
-    palavras: ['automacao', 'automatizar', 'automaticamente', 'pos reuniao', 'resumo automatico'],
-  },
-  {
     id: 'buscar_acervo', assunto: 'reunioes', titulo: 'Buscar e filtrar reuniões, documentos e conversas',
-    oQueFaz: 'Busca local por nome e conteúdo, sem gastar IA. Reuniões também filtram participantes e datas; documentos filtram pela última alteração.',
+    oQueFaz: 'Busca local, sem gastar IA, filtrando enquanto se digita. Reuniões e documentos são buscados só pelo nome e listados do mais recente para o mais antigo; conversas buscam por nome e conteúdo. Não há filtro de data.',
     onde: 'Home → Reuniões, Documentos ou menu Conversas',
-    passos: ['Preencha Buscar reuniões, Buscar documentos ou Buscar conversas. Use De e Até nas listas de reuniões e documentos.'],
-    rotulos: ['Buscar reuniões', 'Buscar documentos', 'Buscar conversas'],
-    implementacao: [PAGINAS, DOCUMENTOS, CONVERSAS_MENU], verificacao: 'codigo',
+    passos: [
+      'Em Reuniões, escreva em Buscar pelo nome da reunião; em Documentos, em Buscar pelo nome do documento; nas conversas, em Buscar conversas.',
+      'Esc ou Limpar busca desfazem a busca.',
+    ],
+    rotulos: ['Buscar pelo nome da reunião', 'Buscar pelo nome do documento', 'Limpar busca', 'Buscar conversas'],
+    implementacao: [PAGINAS, 'src/shared/ui/BuscaDoAcervo.tsx', DOCUMENTOS, CONVERSAS_MENU], verificacao: 'codigo',
     palavras: ['buscar', 'filtrar', 'filtro', 'busca', 'pesquisar', 'participante'],
   },
   {
@@ -1123,58 +1105,34 @@ export const FUNCIONALIDADES: readonly Funcionalidade[] = [
     assunto: 'navegacao',
     titulo: 'Montar o assistente que vai para todas as reuniões',
     oQueFaz:
-      'Guarda, neste computador, o que o Taq leva para todas as reuniões: o Padrão do CITi, ou até 8 contextos seus, cada um ligado ou guardado. Vale igual para todas as reuniões; não há preparação de uma reunião específica.',
+      'Guarda, neste computador, o que o Taq leva para todas as reuniões quando você o chama: o Padrão do CITi, ou até 8 contextos seus, cada um ligado ou guardado. Vale igual para todas as reuniões; não há preparação de uma reunião específica.',
     onde: 'HOME → Preparar',
     passos: [
       'Na HOME, abra “Preparar”.',
-      'Em “O que levar para as reuniões”, fique no “Padrão do CITi” ou clique em “Personalizar a partir deste” para receber uma cópia sua.',
-      'No mapa, clique num contexto para ligar, desligar, mudar o nome ou o texto (até 200 caracteres); “Adicionar contexto” ocupa a próxima vaga. Clique no centro para ver as regras que não mudam e escolher como o Taq intervém. Nada vale até você clicar em “Usar este assistente”.',
+      'Clique em “Adicionar contexto”, preencha o nome e o texto (até 200 caracteres). Se estiver no Padrão do CITi, será criada uma cópia para você editar.',
+      'Clique em um contexto da grade para abri-lo. No Personalizado, você pode ligar, desligar, editar ou remover contextos. Clique em “Usar este assistente” para guardar as mudanças.',
+      'Em “Ajustes do assistente”, você pode trocar de perfil, escolher “Ler ao encerrar a reunião” e consultar as regras fixas.',
     ],
     limitacoes: [
       'O Padrão do CITi é igual para todos e não se edita; para mudar, personalize.',
+      'O assistente é sempre “Só quando eu chamar”, também no Personalizado: não sugere nada sozinho durante a reunião e não busca na internet.',
       'Só os contextos ligados vão junto quando o Taq consulta a IA; os guardados ficam só neste computador.',
-      '“Busca na internet” permite pesquisas nas conversas com o Taq quando a chave, o modelo e a liberação no servidor forem compatíveis. O painel mostra a disponibilidade; a permissão sozinha não ativa a busca nem a cobrança.',
       'Cada reunião começa com a versão do assistente em uso e fica com ela até o fim: o que você mudar durante uma reunião vale a partir da próxima.',
-      'Se você der vários retornos do mesmo tipo sobre as sugestões (descartar, “tarde demais”, “já foi resolvido”), aparecem “Ajustes sugeridos”, com o que mudaria. Nada muda sozinho: “Aplicar ao meu assistente” grava uma nova versão do perfil; “Agora não” recusa, e a proposta só volta com retorno novo.',
     ],
     rotulos: [
       'Preparar',
-      'O que levar para as reuniões',
+      'Contexto',
+      'Personalização',
+      'Ajustes do assistente',
       'Padrão do CITi',
-      'Personalizar a partir deste',
+      'Ler ao encerrar a reunião',
       'Adicionar contexto',
       'Regras que não mudam',
       'Usar este assistente',
-      'Ajustes sugeridos',
-      'Aplicar ao meu assistente',
-      'Agora não',
     ],
     implementacao: ['src/home/Preparar.tsx', 'src/home/OQueLevar.tsx', NAV],
     verificacao: 'interface',
     palavras: ['preparar', 'perfil', 'contexto', 'contextos', 'conduzir', 'assistente', 'padrao do citi', 'personalizado', 'como quero ser ajudado'],
-  },
-  {
-    // Separada de `preparar_assistente` (11/11/2026): a volta na tela viu o
-    // bloco e o botão, mas não clicou (o clique envia trechos ao provedor de
-    // IA). O que acontece depois do clique está conferido só nos testes de
-    // `Preparar.test.tsx`, então esta entrada fica `codigo`.
-    id: 'reproduzir_reuniao_passada',
-    assunto: 'navegacao',
-    titulo: 'Testar o assistente numa reunião passada',
-    oQueFaz:
-      'Mostra o que o seu assistente teria feito numa reunião já guardada: a reunião é reproduzida por cortes de tempo, e a cada ponto só existe o que já tinha sido dito.',
-    onde: 'HOME → Preparar → Testar o assistente numa reunião passada',
-    passos: [
-      'Na HOME, abra “Preparar”.',
-      'Em “Testar o assistente numa reunião passada”, escolha a reunião e clique em “Reproduzir”.',
-    ],
-    limitacoes: [
-      '“Reproduzir” envia trechos da reunião ao provedor de IA e usa algumas chamadas (há um teto); só roda quando você clica e não grava nada na reunião.',
-    ],
-    rotulos: ['Preparar', 'Testar o assistente numa reunião passada', 'Reproduzir'],
-    implementacao: ['src/home/Preparar.tsx', NAV],
-    verificacao: 'codigo',
-    palavras: ['reproduzir', 'testar assistente', 'reuniao passada', 'simular', 'calibrar'],
   },
   {
     id: 'perguntas_prontas_da_reuniao',
@@ -1239,42 +1197,6 @@ export const FUNCIONALIDADES: readonly Funcionalidade[] = [
     ],
     verificacao: 'codigo',
     palavras: ['o que falta fechar', 'estado dos pontos', 'a esclarecer', 'a confirmar', 'decidido', 'adiado', 'responsavel e prazo', 'ponto da reuniao'],
-  },
-  {
-    id: 'apoio_a_conducao',
-    assunto: 'reunioes',
-    titulo: 'Sugestões privadas durante a reunião (apoio discreto ou participativo)',
-    oQueFaz:
-      'Com o assistente conectado e um perfil que escolha o modo “Discreto” ou “Participativo”, a sidebar mostra, no máximo uma por vez, uma sugestão privada para quem conduz: um ponto que merece atenção, uma pergunta que você poderia fazer, um lembrete. Cada uma traz o motivo e as falas que a sustentam.',
-    onde: 'Sidebar → Reunião (aparece sozinho, sob as ações da reunião)',
-    passos: [
-      'Em “Preparar” na HOME, use o assistente personalizado, clique no centro do mapa, escolha o modo “Discreto: uma lembrança relevante por vez” ou “Participativo: perguntas e encaminhamentos com mais frequência” e clique em “Usar este assistente”.',
-      'Na reunião, a sugestão aparece na sidebar. Use “Usei esta pergunta”, “Isso já foi resolvido”, “Guardar para depois” ou “Descartar”; “Ver fonte” mostra as falas.',
-      'Para silenciar nesta reunião, use “Pausar sugestões”; “Retomar sugestões” liga de novo. A captura e as perguntas manuais continuam.',
-    ],
-    preRequisitos: ['O assistente conectado.', 'Um perfil salvo em “Preparar” com o modo “Discreto” ou “Participativo”.'],
-    limitacoes: [
-      'No Padrão do CITi, ou com o modo “Só quando eu chamar”, nada aparece sozinho.',
-      'A pergunta sugerida é uma sugestão do Taq, não uma fala registrada; “Usei esta pergunta” não envia nada à reunião nem prova que ela foi respondida.',
-      'Aparece no máximo uma sugestão por vez, com intervalo mínimo entre elas; muitas vezes não aparece nenhuma.',
-      'Só funciona com a sidebar aberta na reunião; as falas mais recentes ainda podem ser revisadas e esperam.',
-    ],
-    rotulos: [
-      'Preparar',
-      'Usar este assistente',
-      'Discreto: uma lembrança relevante por vez',
-      'Participativo: perguntas e encaminhamentos com mais frequência',
-      'Usei esta pergunta',
-      'Isso já foi resolvido',
-      'Guardar para depois',
-      'Descartar',
-      'Ver fonte',
-      'Pausar sugestões',
-      'Retomar sugestões',
-    ],
-    implementacao: ['src/sidepanel/CartaoDeApoio.tsx', 'src/home/Preparar.tsx', 'src/home/OQueLevar.tsx', 'src/features/conducao/store.ts'],
-    verificacao: 'codigo',
-    palavras: ['sugestao', 'sugestoes', 'apoio', 'pausar sugestoes', 'discreto', 'participativo', 'durante a reuniao', 'lembrete', 'pergunta sugerida'],
   },
   {
     id: 'comparar_fontes',
@@ -1568,6 +1490,48 @@ export const FUNCIONALIDADES: readonly Funcionalidade[] = [
 
 /** O que o TaqCiti NÃO faz, ou ainda não faz — para dizer isso em vez de inventar. */
 export const FORA_DO_APP: readonly ForaDoApp[] = [
+  // As duas abaixo existiram até 23/11/2026 e saíram por decisão do usuário
+  // (topo de `features/conducao/store.ts`).
+  {
+    id: 'sugestoes_sozinhas',
+    titulo: 'Sugestões automáticas durante a reunião (modo discreto ou participativo)',
+    situacao: 'indisponivel',
+    resposta:
+      'O Taq só age quando você chama: ele não sugere nada sozinho durante a reunião, e não há como escolher outro modo no Preparar. Para ajuda na hora, use a “Pergunta rápida” na sidebar ou pergunte ao Taq.',
+    palavras: ['sugestao automatica', 'sugestoes sozinhas', 'apoio', 'discreto', 'participativo', 'modo de intervencao', 'intervir sozinho', 'lembrete automatico'],
+  },
+  {
+    id: 'importar_reuniao',
+    titulo: 'Importar uma transcrição ou gravação de reunião',
+    situacao: 'indisponivel',
+    resposta:
+      'O TaqCiti não importa arquivos de reunião (TXT, SRT, VTT, áudio ou vídeo): as reuniões entram pela captura das legendas do Google Meet. As que já tinham sido importadas continuam em Reuniões.',
+    palavras: ['importar', 'importacao', 'transcricao externa', 'arquivo de audio', 'srt', 'vtt', 'mp3', 'mp4'],
+  },
+  {
+    id: 'automatizar_reuniao',
+    titulo: 'Resumo e próximos passos automáticos depois da reunião',
+    situacao: 'indisponivel',
+    resposta:
+      'Não há automação depois da reunião: o resumo e os próximos passos saem quando você pede, criando um documento na reunião ou perguntando ao Taq.',
+    palavras: ['automacao', 'automatizar', 'automaticamente', 'pos reuniao', 'resumo automatico'],
+  },
+  {
+    id: 'ajustes_e_teste_do_assistente',
+    titulo: 'Ajustes sugeridos ou testar o assistente numa reunião passada',
+    situacao: 'indisponivel',
+    resposta:
+      'O Preparar não tem mais “Ajustes sugeridos” nem “Testar o assistente numa reunião passada”: os dois dependiam das sugestões automáticas, que não existem mais. Para mudar o assistente, edite os contextos em “Preparar”.',
+    palavras: ['ajustes sugeridos', 'reproduzir', 'testar assistente', 'reuniao passada', 'simular', 'calibrar', 'calibracao'],
+  },
+  {
+    id: 'busca_na_internet',
+    titulo: 'Buscar na internet',
+    situacao: 'indisponivel',
+    resposta:
+      'O Taq não busca na internet: ele responde a partir das suas reuniões, documentos e conversas guardados neste computador.',
+    palavras: ['internet', 'web', 'google', 'pesquisar na internet', 'buscar na web', 'busca online', 'fonte externa'],
+  },
   {
     id: 'audio_video',
     titulo: 'Gravar áudio ou vídeo',

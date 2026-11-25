@@ -129,55 +129,109 @@ describe('o cursor responde ao que está embaixo dele', () => {
     );
   }
 
-  /* No campo o I-beam do sistema volta (home.css): o ponto desenhado sai para
-     não haver dois cursores, e o anel fica. */
-  it('sobre um campo de texto o ponto sai e o anel fica menor', async () => {
+  /* No campo o I-beam do sistema volta e a onda sai inteira (home.css), para
+     nada ficar por cima do clique nem da barra de digitação. */
+  it('sobre um campo de texto a onda marca que deve sair', async () => {
     await montar();
     const campo = document.createElement('textarea');
     document.body.append(campo);
     await act(async () => moverSobre(campo));
-    expect(host.querySelector('.tq-dot')!.classList.contains('sobre-campo')).toBe(true);
     expect(host.querySelector('.tq-halo')!.classList.contains('sobre-campo')).toBe(true);
     campo.remove();
   });
 
-  /* A reação de IA é contextual: só sobre o que é do Taq, e um quarto de volta
-     ao entrar — não um giro contínuo. */
-  it('sobre a resposta do Taq o anel se abre, e gira uma vez só', async () => {
+  /* A reação de IA é contextual: só sobre o que é do Taq (a onda fica
+     violeta no CSS), e sai ao sair dele. */
+  it('sobre a resposta do Taq a onda muda de estado, e volta ao sair', async () => {
     await montar();
     const resposta = document.createElement('div');
     resposta.className = 'tq-turno-agente';
     const p = document.createElement('p');
     resposta.append(p);
-    document.body.append(resposta);
+    const fora = document.createElement('div');
+    document.body.append(resposta, fora);
     const anel = host.querySelector<HTMLElement>('.tq-halo')!;
-    const rotor = host.querySelector<HTMLElement>('.tq-rotor')!;
 
     await act(async () => moverSobre(p));
     expect(anel.classList.contains('sobre-taq')).toBe(true);
-    const depoisDeEntrar = rotor.style.transform;
-    expect(depoisDeEntrar).toBe('rotate(90deg)');
 
-    await act(async () => moverSobre(resposta));
-    expect(rotor.style.transform).toBe(depoisDeEntrar);
+    await act(async () => moverSobre(fora));
+    expect(anel.classList.contains('sobre-taq')).toBe(false);
     resposta.remove();
+    fora.remove();
   });
 });
 
-describe('o ponto não tem atraso; o anel tem', () => {
-  it('o ponto vai para a posição exata do mouse', async () => {
+/*
+ * Desde 23/11/2026 o cursor é o logo do TaqCiti: a onda de barras, sem a
+ * bolinha. Sem movimento (`prefers-reduced-motion`) ela fica parada no
+ * desenho do logo — o CSS só anima com `data-movimento="sim"`.
+ */
+describe('o cursor tem a forma do logo', () => {
+  /* Uma seta (a silhueta que se reconhece como cursor) e a onda mínima do
+     logo ao lado. Só barras, sem seta, se lia como "play" em tamanho real. */
+  it('desenha a seta e a onda de quatro barras', async () => {
+    await montar();
+    expect(host.querySelectorAll('.tq-cursor-seta')).toHaveLength(1);
+    expect(host.querySelectorAll('.tq-cursor-barra')).toHaveLength(4);
+  });
+
+  /* A cor que muda é a das paradas do degradê; o CSS as anima pela classe. */
+  it('o degradê tem as paradas que o CSS anima', async () => {
+    await montar();
+    expect(host.querySelector('#tq-cursor-marca .tq-cursor-cor-a')).not.toBeNull();
+    expect(host.querySelector('#tq-cursor-marca .tq-cursor-cor-b')).not.toBeNull();
+  });
+
+  it('não desenha mais a bolinha', async () => {
+    await montar();
+    expect(host.querySelector('.tq-dot')).toBeNull();
+  });
+
+  /* A vibração só aumenta no clique, enquanto o botão está apertado. */
+  it('o clique aumenta a vibração, e soltar a devolve ao repouso', async () => {
+    await montar();
+    const onda = host.querySelector('.tq-halo')!;
+    await act(async () => mover());
+    await act(async () => window.dispatchEvent(new PointerEvent('pointerdown')));
+    expect(onda.classList.contains('pressionado')).toBe(true);
+    await act(async () => window.dispatchEvent(new PointerEvent('pointerup')));
+    expect(onda.classList.contains('pressionado')).toBe(false);
+  });
+
+  it('sem movimento, o clique não vibra', async () => {
+    await act(async () => {
+      root.render(<PointerLayer comMovimento={false} />);
+    });
+    await act(async () => window.dispatchEvent(new PointerEvent('pointerdown')));
+    expect(host.querySelector('.tq-halo')!.classList.contains('pressionado')).toBe(false);
+  });
+
+  it('a fala da onda segue a preferência de movimento', async () => {
+    await montar();
+    expect(host.querySelector('.tq-halo')!.getAttribute('data-movimento')).toBe('sim');
+    await act(async () => {
+      root.render(<PointerLayer comMovimento={false} />);
+    });
+    expect(host.querySelector('.tq-halo')!.getAttribute('data-movimento')).toBe('nao');
+  });
+});
+
+describe('a onda não tem atraso', () => {
+  /* A ponta da onda é o alvo: qualquer interpolação ali vira imprecisão. */
+  it('a ponta vai para a posição exata do mouse', async () => {
     await montar();
     await act(async () => mover(200, 150));
 
-    const ponto = host.querySelector<HTMLElement>('.tq-dot');
-    expect(ponto?.style.transform).toBe('translate(200px, 150px)');
+    const onda = host.querySelector<HTMLElement>('.tq-halo');
+    expect(onda?.style.transform).toBe('translate(200px, 150px)');
   });
 
   /*
-   * Na primeira entrada o anel é reposicionado junto: sem isso ele nasceria na
-   * posição de onde o ponteiro saiu da última vez e atravessaria a tela.
+   * Na primeira entrada a onda é reposicionada antes de acender: sem isso ela
+   * nasceria na posição de onde o ponteiro saiu da última vez.
    */
-  it('o anel não atravessa a tela ao reentrar', async () => {
+  it('a onda não atravessa a tela ao reentrar', async () => {
     await montar();
     await act(async () => mover(200, 150));
     await act(async () => window.dispatchEvent(new Event('blur')));

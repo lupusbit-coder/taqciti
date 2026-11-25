@@ -1,10 +1,11 @@
 /**
  * Heurística de idioma da legenda — pura, sem dependências externas.
  *
- * O Google Meet transcreve no idioma configurado no MENU DE LEGENDAS dele, que
- * a extensão não automatiza (fora de escopo por decisão de produto: os
- * seletores desse menu são ofuscados e não mapeados, e clicar neles às cegas é
- * arriscado demais). Esta função só serve para AVISAR: conta palavras
+ * O Google Meet transcreve no idioma configurado no MENU DE LEGENDAS dele.
+ * Desde 24/11/2026 a extensão põe esse menu em português (Brasil) ao entrar na
+ * sala (`GoogleMeetProvider.ajustarIdiomaDaLegenda`), uma vez por sala — se
+ * alguém trocar depois, ou se o Meet mudar o menu e o ajuste não pegar, é esta
+ * heurística que percebe. Esta função só serve para AVISAR: conta palavras
  * funcionais (stopwords) de cada idioma numa janela recente do texto captado.
  * Não é detecção de idioma de verdade (não troca com precisão diante de nomes
  * próprios, números, jargão) — é um sinal barato o bastante para acionar um

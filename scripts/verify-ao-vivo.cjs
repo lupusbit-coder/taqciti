@@ -4,8 +4,10 @@
 // servidor deixa o Taq "pendente" de propósito: o "Ler a reunião" fica
 // desabilitado e o trecho do "O que falta fechar" não roda.
 //
-// A reunião AO VIVO contra a extensão RODANDO: captura de legendas, cartão de
-// apoio e "O que falta fechar", com o servidor e o modelo de verdade.
+// A reunião AO VIVO contra a extensão RODANDO: captura de legendas e "O que
+// falta fechar", com o servidor e o modelo de verdade. Desde 23/11/2026 o
+// assistente é sempre "Só quando eu chamar": o cartão de sugestão automática
+// saiu, e a volta confere que nenhum aparece.
 //
 // O Meet é uma página SINTÉTICA servida em https://meet.google.com/abc-defg-hij
 // (Playwright `route`), com o contrato de DOM de
@@ -100,15 +102,12 @@ const falhas = [];
     const raiz = `chrome-extension://${new URL(worker.url()).host}`;
     const erros = [];
 
-    await tentar('Preparar: assistente personalizado no modo Discreto', async () => {
+    await tentar('Preparar: assistente personalizado (sempre "Só quando eu chamar")', async () => {
       const home = await context.newPage();
       home.on('pageerror', (e) => erros.push(`home: ${e.message}`));
       await home.goto(`${raiz}/src/home/index.html?secao=preparar`);
-      await home.getByRole('heading', { name: 'O que levar para as reuniões' }).waitFor({ timeout: 15000 });
+      await home.getByRole('heading', { name: 'Contexto', exact: true }).waitFor({ timeout: 15000 });
       await home.getByRole('button', { name: /Personalizado/ }).click();
-      await home.locator('.tq-mapa-centro').click();
-      const discreto = home.getByText(/^Discreto/).first();
-      await discreto.click();
       await home.getByRole('button', { name: 'Usar este assistente' }).click();
       await home.waitForTimeout(600);
       const c = await home.evaluate(async () => (await chrome.storage.local.get('taq:conducao'))['taq:conducao']);
@@ -238,14 +237,12 @@ const falhas = [];
       await painel.screenshot({ path: path.join(saida, 'ao-vivo-4-falta-fechar.png'), fullPage: true });
     });
 
-    await tentar('Cartão de apoio: aparece no modo Discreto', async () => {
-      await painel.getByText(/Apoio discreto/i).first().waitFor({ timeout: 20000 });
-      verificacoes.cartao_de_apoio = true;
-      // A sugestão só aparece quando o modelo acha um ponto que vale: esperar um pouco, sem exigir.
-      await painel.waitForTimeout(60000);
+    await tentar('Sem sugestão automática: o Taq só age quando chamado', async () => {
+      // Dá tempo de sobra para um apoio automático, se ainda existisse, aparecer.
+      await painel.waitForTimeout(20000);
       const texto = await painel.locator('body').innerText();
-      verificacoes.apoio_trecho = texto.slice(texto.search(/Apoio discreto/i), texto.search(/Apoio discreto/i) + 500);
-      await painel.screenshot({ path: path.join(saida, 'ao-vivo-5-apoio.png'), fullPage: true });
+      verificacoes.sem_cartao_de_apoio = !/Apoio discreto|Apoio participativo|Pausar sugestões/i.test(texto);
+      await painel.screenshot({ path: path.join(saida, 'ao-vivo-5-sem-apoio.png'), fullPage: true });
     });
 
     await tentar('Meet: sair da chamada encerra e salva a reunião', async () => {

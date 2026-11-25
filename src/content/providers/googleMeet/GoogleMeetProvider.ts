@@ -11,6 +11,11 @@
  *    dizer "gravando" sem capturar nada é o pior estado possível.
  * 3. Se a captura parar, alguém precisa notar: o watchdog reata o observer e
  *    religa as legendas sozinho, e avisa a UI quando não consegue.
+ *
+ * Desde 24/11/2026 (decisão do usuário) a legenda é ligada e posta em
+ * português (Brasil) assim que a pessoa ENTRA na sala, antes de qualquer
+ * decisão de gravar — ver `prepararLegendasDaSala`. Isso só mexe no Meet: nada
+ * é capturado nem enviado antes do "sim" (a barreira está no controller).
  */
 import type { MeetingProvider, MeetingSession } from '@/features/meeting/provider';
 import type {
@@ -22,6 +27,7 @@ import type {
 import {
   CAPTURE_STALL_TIMEOUT_MS,
   CAPTION_SCAN_INTERVAL_MS,
+  LEGENDAS_NA_ENTRADA_MAX_POLLS,
   MEET_END_CONFIRM_POLLS,
   MEET_POLL_INTERVAL_MS,
 } from '@/shared/config/constants';
@@ -40,6 +46,10 @@ import { readMeetAccountContext } from './accountContext';
 import {
   CALL_ENDED_BUTTON_TEXT,
   CAPTION_REGION_SELECTORS,
+  IDIOMA_DA_LEGENDA,
+  MEETING_LANGUAGE_COMBOBOX_SELECTORS,
+  MEETING_LANGUAGE_LISTBOX_SELECTORS,
+  queryCaptionsMenu,
   queryCaptionsToggle,
   LEAVE_CALL_SELECTORS,
   PARTICIPANT_NAME_SELECTORS,
@@ -146,6 +156,14 @@ export class GoogleMeetProvider implements MeetingProvider {
   private captureStalled = false;
   private healthDegraded = false;
 
+  /** Polls gastos, nesta sala, tentando ligar a legenda / pô-la em português. */
+  private pollsLigandoNaEntrada = 0;
+  private pollsAjustandoIdioma = 0;
+  private legendaDaEntradaResolvida = false;
+  private idiomaResolvido = false;
+  /** O painel "Legendas e tradução" foi aberto por nós e ainda não fechou. */
+  private abrindoPainel = false;
+
   private readonly startCbs: Callbacks<MeetingSession> = new Set();
   private readonly endCbs: Callbacks<MeetingSession> = new Set();
   private readonly chunkCbs: Callbacks<CaptionChunk> = new Set();
@@ -229,7 +247,7 @@ export class GoogleMeetProvider implements MeetingProvider {
   areCaptionsAvailable(): boolean {
     return safely(
       'busca do botão de legendas',
-      () => queryCaptionsToggle() !== null,
+      () => queryCaptionsToggle() !== null || queryCaptionsMenu() !== null,
       false,
     );
   }
@@ -257,6 +275,11 @@ export class GoogleMeetProvider implements MeetingProvider {
         const label = toggle?.getAttribute('aria-label') ?? '';
         if (/desativar|turn off|disable/i.test(label)) return true;
         if (/ativar|turn on|enable/i.test(label)) return false;
+
+        // Layout com o painel "Legendas e tradução": o botão do painel diz.
+        const menuPressed = queryCaptionsMenu()?.getAttribute('aria-pressed');
+        if (menuPressed === 'true') return true;
+        if (menuPressed === 'false') return false;
 
         const region = queryFirst(document, CAPTION_REGION_SELECTORS);
         return (region?.textContent ?? '').trim().length > 0;
@@ -301,10 +324,119 @@ export class GoogleMeetProvider implements MeetingProvider {
           toggle.click();
           return true;
         }
+        const menu = queryCaptionsMenu();
+        if (menu) {
+          this.ligarPeloPainel(menu);
+          return true;
+        }
         return false;
       },
       false,
     );
+  }
+
+  /**
+   * Abre "Legendas e tradução", clica "Ativar legendas" quando ele aparecer e
+   * fecha o painel de novo — a pessoa não deve ficar com um painel aberto que
+   * não pediu. O painel monta de forma assíncrona (dezenas de ms), daí a
+   * espera curta. Testado ao vivo com clique sintético em 24/11/2026.
+   */
+  private ligarPeloPainel(menu: HTMLElement): void {
+    if (this.abrindoPainel) return;
+    this.abrindoPainel = true;
+    menu.click();
+    let esperas = 0;
+    const tentar = () => {
+      safely(
+        'ligar a legenda pelo painel',
+        () => {
+          const toggle = queryCaptionsToggle();
+          if (!toggle && esperas < 20) {
+            esperas += 1;
+            setTimeout(tentar, 100);
+            return;
+          }
+          this.abrindoPainel = false;
+          if (!toggle) return; // o painel não abriu: nada a fechar
+          const label = toggle.getAttribute('aria-label') ?? '';
+          if (!/desativar|turn off|disable/i.test(label)) toggle.click();
+          // Fecha o painel se ele continuou aberto depois do clique.
+          setTimeout(() => {
+            safely(
+              'fechar o painel de legendas',
+              () => {
+                if (queryCaptionsToggle()) queryCaptionsMenu()?.click();
+              },
+              undefined,
+            );
+          }, 300);
+        },
+        undefined,
+      );
+    };
+    setTimeout(tentar, 100);
+  }
+
+  /**
+   * Põe a legenda em português (Brasil) pelo combobox "Idioma da reunião".
+   *
+   * Antes isto estava fora de escopo (ver `languageHeuristic.ts`): o menu não
+   * estava mapeado. Mapeado ao vivo em 24/11/2026: as opções carregam o código
+   * no `data-value` e aceitam clique sintético. A heurística de idioma continua
+   * de pé como aviso, para quando este ajuste não pegar.
+   *
+   * `pronto` = já está em pt-BR; `trocando` = clicou, o próximo poll confere;
+   * `sem-controle` = o combobox ou a opção ainda não estão na tela.
+   */
+  ajustarIdiomaDaLegenda(): 'pronto' | 'trocando' | 'sem-controle' {
+    return safely(
+      'ajuste do idioma da legenda',
+      () => {
+        const combo = queryFirst(document, MEETING_LANGUAGE_COMBOBOX_SELECTORS);
+        if (!(combo instanceof HTMLElement)) return 'sem-controle' as const;
+        const lista = queryFirst(document, MEETING_LANGUAGE_LISTBOX_SELECTORS);
+        const atual = lista
+          ?.querySelector('[role="option"][aria-selected="true"]')
+          ?.getAttribute('data-value');
+        if (atual === IDIOMA_DA_LEGENDA) return 'pronto' as const;
+        if (!atual && /portugu[eê]s \(brasil\)|portuguese \(brazil\)/i.test(combo.textContent ?? '')) {
+          return 'pronto' as const;
+        }
+        const opcao = lista?.querySelector<HTMLElement>(
+          `[role="option"][data-value="${IDIOMA_DA_LEGENDA}"]`,
+        );
+        if (!opcao) return 'sem-controle' as const;
+        // Abre a lista como a pessoa faria e escolhe a opção no quadro seguinte.
+        combo.click();
+        setTimeout(() => safely('escolha do idioma', () => opcao.click(), undefined), 300);
+        return 'trocando' as const;
+      },
+      'sem-controle' as const,
+    );
+  }
+
+  /**
+   * Ao entrar na sala: liga a legenda e põe em português. Uma vez por sala, com
+   * prazo (`LEGENDAS_NA_ENTRADA_MAX_POLLS`): depois disso a extensão larga, e
+   * quem desligar a legenda ou trocar o idioma de propósito não é contrariado.
+   * (Durante a GRAVAÇÃO quem religa a legenda é o vigia do controller.)
+   */
+  private prepararLegendasDaSala(captionsOn: boolean): void {
+    if (!this.legendaDaEntradaResolvida) {
+      if (captionsOn || this.pollsLigandoNaEntrada >= LEGENDAS_NA_ENTRADA_MAX_POLLS) {
+        this.legendaDaEntradaResolvida = true;
+      } else {
+        this.pollsLigandoNaEntrada += 1;
+        this.requestEnableCaptions();
+      }
+    }
+
+    if (this.idiomaResolvido || !captionsOn) return;
+    const resultado = this.ajustarIdiomaDaLegenda();
+    this.pollsAjustandoIdioma += 1;
+    if (resultado === 'pronto' || this.pollsAjustandoIdioma >= LEGENDAS_NA_ENTRADA_MAX_POLLS) {
+      this.idiomaResolvido = true;
+    }
   }
 
   /**
@@ -510,6 +642,11 @@ export class GoogleMeetProvider implements MeetingProvider {
       this.inMeeting = true;
       this.endConfirmCount = 0;
       this.currentSession = session;
+      // Cada entrada na sala prepara a legenda de novo (ligar + português).
+      this.pollsLigandoNaEntrada = 0;
+      this.pollsAjustandoIdioma = 0;
+      this.legendaDaEntradaResolvida = false;
+      this.idiomaResolvido = false;
       this.startCbs.forEach((cb) => cb(session));
     } else if (!session && this.inMeeting) {
       // Confirmação dupla evita falso fim durante re-render do Meet.
@@ -530,6 +667,7 @@ export class GoogleMeetProvider implements MeetingProvider {
       this.captureExpectedSince = captionsNow ? Date.now() : 0;
       this.captionStateCbs.forEach((cb) => cb(captionsNow));
     }
+    this.prepararLegendasDaSala(captionsNow);
     this.ensureCaptionObserver();
     this.refreshSelfName();
     this.flushRenames();

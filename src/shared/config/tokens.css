@@ -174,7 +174,6 @@
   --font-texto: 'TaqCiti DM Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-titulo: var(--font-texto);
   --font-marca: 'Barlow', 'Segoe UI', system-ui, sans-serif;
-  --font-taq: 'TaqCiti Manrope', var(--font-texto);
   --c-taq-acento: 185 157 255;
   --c-taq-texto: 224 211 255;
   --c-taq-enfase: 246 239 255;

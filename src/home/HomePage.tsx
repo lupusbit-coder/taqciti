@@ -546,7 +546,7 @@ export function HomePage() {
       />
 
       <main
-        className={`tq-main${secao === 'reunioes' && reuniaoAberta ? ' tq-main-reuniao' : ''}`}
+        className={`tq-main${secao === 'assistente' ? ' tq-main-assistente' : ''}${secao === 'reunioes' && reuniaoAberta ? ' tq-main-reuniao' : ''}`}
       >
         {erroNavegacao && (
           <p className="tq-aviso" role="alert">
@@ -599,7 +599,7 @@ export function HomePage() {
           />
         )}
 
-        {secao === 'preparar' && <PaginaPreparar registros={records} reuniao={meeting} />}
+        {secao === 'preparar' && <PaginaPreparar reuniao={meeting} />}
 
         {secao === 'reunioes' && (
           <PaginaReunioes

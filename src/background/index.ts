@@ -17,9 +17,7 @@ import {
   hydrate,
   recoverInterruptedMeetings,
 } from './sessionController';
-import { listHistory, patchRecord, upsertRecord, importarRegistro } from './history';
-import { registroImportado } from '@/features/importacao/transcricao';
-import { enfileirarAutomacao, ligarAutomacoes } from '@/features/automacoes/automacoes';
+import { listHistory, patchRecord, upsertRecord } from './history';
 import type { MeetingRecord } from '@/shared/types/domain';
 import { bumpMetrics } from './metrics';
 import { migrateLocalStorage } from './storageMigrations';
@@ -112,7 +110,6 @@ chrome.runtime.onInstalled.addListener(() => {
  * `features/sync/sincronizacao.ts`.
  */
 ligarSincronizacaoAutomatica();
-ligarAutomacoes(ready);
 
 /*
  * Rede de segurança do clique no ícone.
@@ -461,12 +458,6 @@ onMessage((message, sender) => {
         return dispatch({ type: 'LANGUAGE_WARNING_DISMISSED' });
 
       // ---- Histórico ----
-      case 'ui/history/import': {
-        const registro = registroImportado(message.dados);
-        const resultado = await importarRegistro(registro);
-        if (!resultado.existente) await enfileirarAutomacao(registro).catch(() => {});
-        return { ok: true, ...resultado };
-      }
       case 'ui/history/delete': {
         const current = getState();
         if (

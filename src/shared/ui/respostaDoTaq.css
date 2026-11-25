@@ -548,10 +548,3 @@
 .tq-voce-acoes .tq-copiar.copiado {
   color: rgb(170 226 190);
 }
-.tq-resp-web {
-  margin-block: 16px;
-  font-size: 0.875rem;
-}
-.tq-resp-web h3 { font-size: inherit; }
-.tq-resp-web a { color: var(--color-primary, #6941c6); text-decoration: underline; }
-.tq-resp-web iframe { width: 100%; height: 180px; border: 0; }

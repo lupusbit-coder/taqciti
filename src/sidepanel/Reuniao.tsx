@@ -73,9 +73,7 @@ import {
 import { papelDoFalante } from '@/features/integracoes/colegas';
 import { BotaoCopiar } from '@/shared/ui/BotaoCopiar';
 import { useColegasDoCiti } from '@/shared/ui/useColegasDoCiti';
-import { useApoioAoVivo } from '@/features/apoio/useApoio';
 import { AcoesDaReuniao, FinalizarReuniao } from './AcoesDaReuniao';
-import { CartaoDeApoio } from './CartaoDeApoio';
 import { EstadoDosPontos } from './EstadoDosPontos';
 import { useEstadoDosPontos } from '@/features/estado/useEstado';
 import { registrarPontoComoAcompanhamento, registrarPontoComoDecisao } from '@/features/estado/registrar';
@@ -149,8 +147,7 @@ export function Reuniao({
 
   const meetingId = sessao?.meetingId ?? null;
 
-  // Apoio à condução: sugestões privadas, no máximo uma por vez, só com perfil e assistente.
-  const apoio = useApoioAoVivo(state, taqPronto);
+  // (O cartão de sugestões automáticas saiu em 23/11/2026: o Taq só age quando chamado.)
   // O que falta fechar, ponto a ponto: lido pelo Taq a pedido, conferido em código.
   const estadoDosPontos = useEstadoDosPontos(state, taqPronto);
   const [estadoAberto, setEstadoAberto] = useState(false);
@@ -250,8 +247,6 @@ export function Reuniao({
         }
         onRapida={() => setRapidaAberta((v) => !v)}
       />
-
-      <CartaoDeApoio meetingId={sessao.meetingId} apoio={apoio} />
 
       <EstadoDosPontos
         meetingId={sessao.meetingId}

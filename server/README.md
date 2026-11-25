@@ -40,7 +40,7 @@ dados em prosa); o porquê de cada corte está em `lib/agents/leitor.ts`.
 > free tier do Gemini manda o conteúdo para treinamento em qualquer modelo —
 > trocar de modelo não protege nada. Defina `DOCCITI_DATA_POLICY=training`
 > quando a chave for de free tier: as rotas passam a exigir `"sintetica": true`
-> e todo relatório carrega o aviso. **Em produção** (`VERCEL_ENV=production`) a variável
+> e todo relatório carrega o aviso. **Em produção** (`RAILWAY_ENVIRONMENT_NAME=production` ou `VERCEL_ENV=production`) a variável
 > é OBRIGATÓRIA — `private` (chave paga) ou `training` — e sem ela as rotas de geração
 > respondem 503; lá o `"sintetica": true` do cliente **não** fura a trava de uma chave
 > `training` (só em desenvolvimento). Ver `docs/arquitetura/servidor-documentos.md`, seção 8.

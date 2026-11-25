@@ -28,9 +28,7 @@ import {
   type Content,
   type GenerateContentConfig,
   type Part,
-  type GroundingMetadata,
 } from '@google/genai';
-import { fontesDaBusca } from './busca';
 import { asOverloaded, asRateLimit } from '@/lib/ai/providers/google';
 import { ProviderError } from '@/lib/ai/types';
 import type {
@@ -41,7 +39,6 @@ import type {
 } from './contrato';
 
 export interface PedidoAoAdaptador {
-  buscaNaInternet?: boolean;
   sistema: string;
   contexto: string;
   mensagens: MensagemDoTurno[];
@@ -64,7 +61,7 @@ export interface ClienteGemini {
       contents: Content[];
       config: GenerateContentConfig;
     }): Promise<{
-      candidates?: Array<{ content?: { parts?: Part[] }; finishReason?: string; groundingMetadata?: GroundingMetadata }>;
+      candidates?: Array<{ content?: { parts?: Part[] }; finishReason?: string }>;
       usageMetadata?: {
         promptTokenCount?: number;
         candidatesTokenCount?: number;
@@ -189,10 +186,6 @@ export function criarAdaptadorGemini(cliente: () => ClienteGemini): AdaptadorDeT
         ...(sinal ? { abortSignal: sinal } : {}),
       };
 
-      if (pedido.buscaNaInternet) {
-        config.tools = [...(config.tools ?? []), { googleSearch: {} }];
-      }
-
       let resposta;
       try {
         resposta = await cliente().models.generateContent({
@@ -247,11 +240,10 @@ export function criarAdaptadorGemini(cliente: () => ClienteGemini): AdaptadorDeT
         })
         .filter((p) => Object.keys(p).length > 0);
 
-      const busca = pedido.buscaNaInternet ? fontesDaBusca(texto, candidato?.groundingMetadata, partes) : { texto };
       const uso = resposta.usageMetadata;
       return {
         tipo: chamadas.length ? 'ferramentas' : motivo === 'MAX_TOKENS' ? 'truncado' : 'final',
-        ...busca,
+        texto,
         chamadas,
         ...(paraVoltar.length ? { continuacao: JSON.stringify(paraVoltar) } : {}),
         uso: {

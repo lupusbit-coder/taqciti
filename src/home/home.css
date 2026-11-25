@@ -120,21 +120,7 @@ html {
   border-radius: 6px;
 }
 
-/*
- * O compositor é a exceção — e é a exceção mais importante desta tela.
- *
- * `:focus-visible` casa num campo de texto SEMPRE que ele recebe foco,
- * inclusive por clique. Então bastava clicar para escrever e um retângulo
- * verde de 2px envolvia o campo: exatamente a caixa que este compositor existe
- * para não ter, e a mancha de verde mais visível da tela. Era invisível na
- * leitura do CSS porque a regra mora lá em cima, genérica, e o defeito só
- * aparece no estado focado.
- *
- * O foco continua anunciado, por três sinais que não são moldura: o caret
- * aparece, o enviar e a dica de teclas saem da transparência
- * (`:focus-within`, abaixo) e a onda sobe. Para um campo de texto, o caret
- * visível é o indicador de foco que o próprio sistema usa.
- */
+/* O compositor sinaliza o foco com o traço abaixo do campo. */
 .tq-campo textarea:focus-visible {
   outline: none;
 }
@@ -629,6 +615,11 @@ html {
   padding: 4px 0 32px;
 }
 
+.tq-main-assistente {
+  display: flex;
+  flex-direction: column;
+}
+
 /* ---------------------------------------------------------------- o fundo */
 
 /*
@@ -669,51 +660,99 @@ html {
  * lá embaixo.
  */
 .tq-palco {
+  --fs-conversa: calc(var(--fs-leitura) + 1px);
   position: relative;
   z-index: 1;
   display: flex;
   flex-direction: column;
-  min-height: calc(100vh - 130px);
+  flex: 1;
+  width: min(100%, 42rem);
+  margin-inline: auto;
+  padding-block: var(--space-6) clamp(4rem, 14vh, 7.5rem);
+  gap: var(--space-6);
 }
 
 .tq-conversa {
-  flex: 1;
+  flex: 1 0 auto;
+}
+
+.tq-palco-vazio {
+  justify-content: center;
+  padding-bottom: clamp(2rem, 7vh, 4.5rem);
+}
+
+.tq-palco-vazio .tq-conversa {
+  flex: 0 0 auto;
 }
 
 .tq-abertura {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-3);
   text-align: center;
-  margin: 12vh 0 32px;
 }
 
-.tq-abertura h1 {
-  font-family: var(--font-titulo);
-  font-size: 22px;
-  font-weight: 600;
-  letter-spacing: -0.2px;
-  color: rgb(226 228 230);
+.tq-slogan {
   margin: 0;
+  font-family: var(--font-titulo);
+  font-size: clamp(1.5rem, 1.15rem + 1.5vw, 2.25rem);
+  font-weight: var(--peso-enfase);
+  line-height: var(--lh-titulo);
+  letter-spacing: -0.03em;
+  color: var(--e-texto);
+  text-wrap: balance;
 }
 
-.tq-abertura p {
-  font-size: 12.5px;
-  color: rgb(163 166 169);
-  margin: 10px 0 0;
+.tq-primeiro-uso {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.tq-primeiro-uso p {
+  margin: 0;
+  font-size: var(--fs-leitura);
+  line-height: var(--lh-corpo);
+  color: var(--e-cinza);
+  text-wrap: balance;
+}
+
+.tq-sugestoes {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--sp-2);
+}
+
+.tq-sugestoes button {
+  min-height: var(--alt-controle);
+  padding: var(--sp-1) var(--sp-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  background: var(--e-placa);
+  color: var(--e-texto-2);
+  font-size: var(--fs-corpo);
+  line-height: var(--lh-rotulo);
+  cursor: pointer;
+  transition: background var(--dur-fast), color var(--dur-fast);
+}
+
+.tq-sugestoes button:is(:hover, :focus-visible) {
+  background: var(--e-placa-forte);
+  color: var(--ideia-clara);
 }
 
 .tq-turnos {
   list-style: none;
+  display: grid;
+  gap: var(--space-6);
   margin: 0;
-  /* Coluna de leitura confortável: o texto não se espalha até as bordas da
-     tela numa janela larga. */
-  padding: 16px 0 0;
-  max-width: 700px;
-  margin-inline: auto;
+  padding: 0;
 }
 
 .tq-turno {
   display: flex;
   flex-direction: column;
-  margin-bottom: 24px;
+  min-width: 0;
 }
 
 /* Quem escreve fica à DIREITA. Sem balão e sem caixa: o que diferencia os
@@ -723,9 +762,9 @@ html {
   max-width: 76%;
   margin: 0;
   text-align: left;
-  font-size: var(--fs-leitura);
-  line-height: 1.65;
-  color: rgb(197 200 203);
+  font-size: var(--fs-conversa);
+  line-height: var(--lh-leitura);
+  color: var(--e-texto);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -733,8 +772,8 @@ html {
 .tq-anexos-msg {
   align-self: flex-end;
   max-width: 76%;
-  font-size: 11px;
-  color: rgb(139 142 146);
+  font-size: var(--fs-meta);
+  color: var(--e-cinza);
   margin: 6px 0 0;
 }
 
@@ -742,9 +781,12 @@ html {
 .tq-turno-agente {
   display: flex;
   align-items: flex-start;
-  gap: 12px;
-  max-width: 88%;
-  margin: 14px auto 0 0;
+  gap: var(--sp-3);
+  max-width: 100%;
+}
+
+.tq-turno-voce .tq-turno-agente {
+  margin-top: var(--sp-3);
 }
 
 .tq-resposta-texto {
@@ -754,24 +796,24 @@ html {
 /* O nome do Taq sobre a resposta — uma regra só (havia uma base de 10px em
    cinza e uma segunda, de 12px em violeta, que sempre a vencia). */
 .tq-agente-nome {
-  font-family: var(--font-taq);
-  font-size: 13px;
-  font-weight: 700;
+  font-size: var(--fs-corpo);
+  font-weight: var(--peso-enfase);
   line-height: var(--lh-rotulo);
   color: var(--ideia);
-  margin-bottom: 8px;
+  margin-bottom: var(--sp-1);
 }
 
+.tq-palco .tq-resp-texto,
 .tq-indisponivel {
-  font-size: var(--fs-leitura);
-  line-height: 1.7;
-  color: rgb(207 210 213);
+  font-size: var(--fs-conversa);
+  line-height: var(--lh-leitura);
+  color: var(--ideia-clara);
   margin: 0;
   overflow-wrap: anywhere;
 }
 
 .tq-falhou {
-  color: rgb(240 205 160);
+  color: var(--e-atencao);
 }
 
 /* --------------------------------------------- a marca da resposta da IA */
@@ -784,27 +826,25 @@ html {
 
 /* ------------------------------------------------------- campo de escrita */
 
-/*
- * Escrita direto sobre o ambiente: sem barra, sem caixa, sem linha divisória,
- * sem fundo retangular. O que delimita a área de interação é o próprio bloco
- * do campo — previsível, e não "a página inteira vira campo".
- */
 .tq-escrita {
-  position: relative;
-  z-index: 1;
-  margin: 20px auto 0;
-  width: 100%;
-  max-width: 700px;
-  /* O respiro que põe a escrita sobre a onda e ainda a mantém longe da borda
-     de baixo. */
-  padding-bottom: 88px;
+  display: grid;
+  justify-items: start;
+  gap: var(--sp-2);
 }
 
 .tq-campo {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: end;
-  gap: 8px;
+  gap: var(--sp-2);
+  width: 100%;
+  padding-bottom: var(--sp-1);
+  border-bottom: 1px solid var(--color-border);
+  transition: border-color var(--dur-fast);
+}
+
+.tq-campo:focus-within {
+  border-color: var(--ideia);
 }
 
 .tq-campo textarea {
@@ -813,34 +853,26 @@ html {
   background: none;
   border: 0;
   resize: none;
-  min-height: 34px;
+  min-height: var(--alt-controle-principal);
   /* Cresce até aqui e passa a rolar por dentro: um texto longo não pode
      empurrar a conversa inteira para fora da tela. */
   max-height: 168px;
   overflow-y: auto;
-  padding: 4px 0;
+  padding: var(--sp-1) 0;
   font: inherit;
-  font-size: var(--fs-leitura);
-  line-height: 1.6;
-  color: rgb(240 242 244);
-  /* Um dos poucos verdes que sobraram, e o mais justificado: é o ponto exato
-     onde a sua voz entra na tela. */
-  caret-color: rgb(var(--c-glow));
+  font-size: clamp(1rem, 0.95rem + 0.35vw, 1.125rem);
+  line-height: var(--lh-corpo);
+  color: var(--e-texto);
+  caret-color: var(--ideia);
 }
 
 .tq-campo textarea::placeholder {
-  color: rgb(131 134 138);
+  color: var(--e-cinza);
 }
 
-/* Os controles saem da penumbra quando o campo é a atenção da tela. É metade
-   do sinal de foco que substituiu a moldura verde. */
 .tq-campo-acoes {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding-bottom: 2px;
-  opacity: 0.5;
-  transition: opacity 0.3s;
+  opacity: 0.8;
+  transition: opacity var(--dur-fast);
 }
 
 .tq-escrita:focus-within .tq-campo-acoes,
@@ -851,56 +883,26 @@ html {
 .tq-enviar {
   display: grid;
   place-items: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  color: rgb(162 165 169);
+  width: var(--alt-controle-principal);
+  height: var(--alt-controle-principal);
+  border-radius: var(--radius-full);
+  background: rgb(var(--c-taq-acento) / 0.14);
+  color: var(--ideia-clara);
   cursor: pointer;
   transition:
-    background 0.3s,
-    color 0.3s,
-    transform 0.3s,
-    opacity 0.3s;
+    background var(--dur-fast),
+    color var(--dur-fast);
 }
 
-/* Enviar é a ação principal desta tela — o hover dela é um dos estados
-   pontuais que ficaram com verde. */
-.tq-enviar:not(:disabled):hover {
-  background: rgb(var(--c-primary) / 0.14);
-  color: rgb(var(--c-glow));
+.tq-enviar:not(:disabled):is(:hover, :focus-visible) {
+  background: rgb(var(--c-taq-acento) / 0.26);
+  color: rgb(var(--c-taq-enfase));
 }
 
 .tq-enviar:disabled {
-  opacity: 0.32;
+  background: var(--e-placa);
+  color: var(--e-cinza);
   cursor: default;
-}
-
-.tq-dica-teclas {
-  margin: 10px 0 0;
-  font-size: 10px;
-  color: rgb(126 129 133);
-  opacity: 0;
-  transition: opacity 0.3s;
-}
-
-.tq-escrita:focus-within .tq-dica-teclas,
-.tq-escrita:hover .tq-dica-teclas {
-  opacity: 1;
-}
-
-/*
- * O estado da IA. Fica SEMPRE visível — ao contrário da dica de teclas, que é
- * conveniência e some. Isto é informação sobre o que o produto faz, e esconder
- * até o hover seria esconder de quem está prestes a escrever.
- *
- * Âmbar discreto: não é erro, é uma parte que ainda não existe; e não é verde,
- * para não se confundir com "conectado".
- */
-.tq-sem-ia {
-  margin: 12px 0 0;
-  font-size: 10.5px;
-  line-height: 1.6;
-  color: rgb(196 176 152);
 }
 
 .tq-linkish {
@@ -1858,70 +1860,149 @@ input.tq-titulo-editavel {
 
 /* -------------------------------------------------------------- cursor */
 
-.tq-dot,
+/*
+ * O cursor: uma seta no degradê da marca e a onda mínima do logo ao lado
+ * (ver PointerLayer.tsx, que conta as tentativas que levaram a este desenho).
+ * O `.tq-halo` é só o ponto quente, sem tamanho — o JS o põe exatamente no
+ * mouse.
+ */
 .tq-halo {
   position: fixed;
   left: 0;
   top: 0;
+  width: 0;
+  height: 0;
+  /* nunca captura clique, nem atrás de overlays */
   pointer-events: none;
   z-index: 60;
   opacity: 0;
-  /* nunca captura clique, nem atrás de overlays */
   transition: opacity 0.18s;
 }
 
-body.tq-pointer-in .tq-dot,
 body.tq-pointer-in .tq-halo {
   opacity: 1;
 }
 
-/* O alvo: exatamente onde o mouse está, sem atraso. Branco frio e uma orla
-   escura, para não desaparecer sobre a onda clara nem sobre o grafite. */
-.tq-dot {
-  width: 5px;
-  height: 5px;
-  margin: -2.5px;
-  border-radius: 50%;
-  background: rgb(246 248 250);
-  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.35);
-}
-
 /*
- * O anel que persegue. 30px de lado; o `scale` do JS o move entre 24 e 34px —
- * peso suficiente para o atraso ser perceptível, pequeno o bastante para não
- * cobrir palavra nenhuma. Não há rastro: é um anel só, e ele alcança o ponto.
- */
-.tq-halo {
-  width: 30px;
-  height: 30px;
-  margin: -15px;
-}
-
-/*
- * Um CONTORNO, e não mais um gradiente cônico esmaecido.
- *
- * O cônico ia de 7% a 50% de opacidade ao longo da volta: sobre o grafite ele
- * praticamente sumia, e o que restava era um borrão sem forma. Uma borda
- * neutra de 1,5px tem a mesma discrição e se lê em qualquer fundo — que é o
- * que se pede de um cursor.
+ * O desenho em 24×21px, na escala 1:1 do `viewBox` — sem reescala, cada
+ * unidade é um pixel e o contorno sai nítido. Deslocado 1,6px para cima e
+ * para a esquerda: é onde está a ponta da seta, que tem de cair no mouse.
+ * A sombra curta dá ao cursor o peso de um cursor de sistema.
  */
 .tq-rotor {
   position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  border: 1.5px solid rgb(228 232 236 / 0.62);
-  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.22);
-  transition:
-    transform 0.4s,
-    scale 0.25s,
-    opacity 0.25s,
-    border-color 0.25s,
-    box-shadow 0.25s;
+  left: -1.6px;
+  top: -1.6px;
+  width: 24px;
+  height: 21px;
+  filter: drop-shadow(0 1px 1.5px rgb(0 0 0 / 0.45));
+  transition: filter 0.25s;
 }
 
-/* Sobre um controle: só a forma reage, sem cor. O verde é reservado. */
-.tq-halo.sobre-controle .tq-rotor {
-  border-color: rgb(246 249 252 / 0.9);
+.tq-cursor-desenho {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+/*
+ * A seta: degradê por dentro e um contorno branco por FORA (`paint-order`
+ * pinta o traço antes do preenchimento, e o degradê cobre a metade de dentro
+ * dele). É o contorno que a faz legível sobre o grafite e sobre o papel.
+ * O ponto fixo do afundar do clique é a ponta, para o alvo não se mexer.
+ */
+.tq-cursor-seta {
+  fill: url(#tq-cursor-marca);
+  stroke: #fff;
+  stroke-width: 1.3;
+  stroke-linejoin: round;
+  paint-order: stroke;
+  transform-origin: 1.6px 1.6px;
+  transition:
+    fill 0.25s,
+    transform 0.12s ease-out;
+}
+
+.tq-cursor-barra {
+  fill: url(#tq-cursor-marca);
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: fill 0.25s;
+}
+
+/*
+ * A cor que corre: as duas paradas do degradê percorrem o caminho da marca
+ * (verde → ciano → azul → violeta → verde), defasadas um terço do ciclo, e o
+ * cursor muda de cor devagar, sem nunca ficar de uma cor só.
+ */
+.tq-halo[data-movimento='sim'] .tq-cursor-cor-a {
+  animation: tq-cursor-cor 7s linear infinite;
+}
+
+.tq-halo[data-movimento='sim'] .tq-cursor-cor-b {
+  animation: tq-cursor-cor 7s linear infinite;
+  animation-delay: -2.3s;
+}
+
+@keyframes tq-cursor-cor {
+  0%,
+  100% {
+    stop-color: #3ddc2e;
+  }
+  25% {
+    stop-color: #05c4b0;
+  }
+  50% {
+    stop-color: #1a7fea;
+  }
+  75% {
+    stop-color: #7a4cf0;
+  }
+}
+
+/*
+ * A fala: cada barra sobe e desce, defasada da vizinha (`--i` é o índice). Em
+ * repouso é DISCRETA — 86% a 100% da altura, devagar —, porque está sempre à
+ * vista. Passar sobre botões ou sobre o Taq não a acelera: uma versão
+ * acelerava, e o cursor vivia agitado.
+ */
+.tq-halo[data-movimento='sim'] .tq-cursor-barra {
+  animation: tq-cursor-falar 1.8s ease-in-out infinite alternate;
+  animation-delay: calc(var(--i) * -0.3s);
+}
+
+/*
+ * O clique é o ÚNICO momento em que a vibração aumenta: enquanto o botão está
+ * apertado, a fala fica rápida e larga, e a seta afunda em direção à ponta.
+ * Trocar o NOME da animação (e não só a duração) a reinicia do começo, sem o
+ * salto de fase que mudar a duração no meio do laço causa.
+ */
+.tq-halo[data-movimento='sim'].pressionado .tq-cursor-barra {
+  animation: tq-cursor-vibrar 0.22s ease-in-out infinite alternate;
+  animation-delay: calc(var(--i) * -0.06s);
+}
+
+.tq-halo[data-movimento='sim'].pressionado .tq-cursor-seta {
+  transform: scale(0.86);
+}
+
+@keyframes tq-cursor-falar {
+  from {
+    transform: scaleY(0.86);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
+@keyframes tq-cursor-vibrar {
+  from {
+    transform: scaleY(0.45);
+  }
+  to {
+    transform: scaleY(1.1);
+  }
 }
 
 /*
@@ -1930,35 +2011,29 @@ body.tq-pointer-in .tq-halo {
  * acender no texto da conversa, no fundo, na navegação ou nos botões.
  */
 .tq-halo.sobre-escrita .tq-rotor {
-  border-color: rgb(var(--c-glow) / 0.9);
-  box-shadow:
-    0 0 0 1px rgb(0 0 0 / 0.22),
-    0 0 10px rgb(var(--c-primary) / 0.4);
+  filter: drop-shadow(0 1px 1.5px rgb(0 0 0 / 0.45)) drop-shadow(0 0 4px rgb(var(--c-primary) / 0.8));
 }
 
 /*
- * Sobre o que é do Taq: o anel se abre em dois arcos, no violeta das ideias
- * (o mesmo `--ideia` do nome "Taq" na conversa). O giro de entrada é o
- * `transition: transform` do rotor; parado sobre a resposta, ele fica parado.
+ * Sobre o que é do Taq: o cursor fica no violeta das ideias (o mesmo `--ideia`
+ * do nome "Taq" na conversa), parado nele. Só a cor muda; o ritmo é o do
+ * repouso.
  */
-.tq-halo.sobre-taq .tq-rotor {
-  border-color: rgb(155 130 245 / 0.85);
-  border-top-color: transparent;
-  border-bottom-color: transparent;
+.tq-halo.sobre-taq .tq-cursor-seta,
+.tq-halo.sobre-taq .tq-cursor-barra {
+  fill: url(#tq-cursor-ideia);
 }
 
 /*
- * Sobre um campo, o cursor do sistema volta (regra abaixo): o ponto sai e o
- * anel encolhe, para o I-beam ser o protagonista e não haver dois cursores.
- * O `scale` do anel já vem do JS no `transform` do halo — aqui é o rotor.
+ * Sobre um campo, o cursor do sistema volta (regra abaixo) e o desenho sai
+ * INTEIRO. Uma versão anterior o deixava ali, menor, por cima do I-beam e da
+ * barra de digitação: o clique para digitar ficava impreciso e a barra
+ * piscava atrás do desenho. Sem transição: some no mesmo quadro em que o
+ * I-beam aparece, para não haver um instante com os dois.
  */
-body.tq-pointer-in .tq-dot.sobre-campo {
+body.tq-pointer-in .tq-halo.sobre-campo {
   opacity: 0;
-}
-
-.tq-halo.sobre-campo .tq-rotor {
-  scale: 0.72;
-  opacity: 0.7;
+  transition: none;
 }
 
 /*
@@ -1967,11 +2042,11 @@ body.tq-pointer-in .tq-dot.sobre-campo {
  * Esta é a correção do cursor aparecendo (e sumindo) onde não devia. Antes a
  * regra era incondicional, e a camada desenhada era ligada por JavaScript: as
  * duas podiam discordar. Sair da janela pela borda, ir até a barra do
- * navegador ou trocar de aba deixava a página com `cursor: none` e sem ponto —
- * um cursor invisível, ou um ponto congelado por cima do nativo.
+ * navegador ou trocar de aba deixava a página com `cursor: none` e sem desenho
+ * — um cursor invisível, ou um desenho congelado por cima do nativo.
  *
- * Amarradas à mesma classe, os dois estados são impossíveis: ou há o ponto
- * desenhado, ou há o cursor do sistema.
+ * Amarradas à mesma classe, os dois estados são impossíveis: ou há a onda
+ * desenhada, ou há o cursor do sistema.
  *
  * `.tq-home *` é deliberado. Sem o descendente, qualquer componente com
  * `cursor: pointer` próprio (e o kit tem vários) reacende o cursor nativo
@@ -1987,7 +2062,7 @@ body.tq-pointer-in .tq-dot.sobre-campo {
    * Onde se digita o cursor é do SISTEMA: o I-beam diz onde o texto entra, e
    * a alça de `resize: vertical` dos campos de nota precisa da seta dupla.
    * `auto` deixa o navegador escolher cada um. O conjunto é o mesmo de
-   * `CAMPOS` em PointerLayer.tsx, que apaga o ponto desenhado nesses campos.
+   * `CAMPOS` em PointerLayer.tsx, que apaga o cursor desenhado nesses campos.
    */
   body.tq-pointer-in .tq-home
     :is(
@@ -2021,11 +2096,11 @@ body .tq-home [role='dialog'] button {
 }
 
 @media (pointer: coarse) {
-  .tq-dot,
   .tq-halo {
     display: none;
   }
   .tq-enviar,
+  .tq-sugestoes button,
   .tq-motion,
   .tq-conversas-botao {
     min-width: 44px;
@@ -2056,13 +2131,6 @@ body .tq-home [role='dialog'] button {
   .tq-bolha,
   .tq-anexos-msg {
     max-width: 90%;
-  }
-  .tq-turno-agente {
-    max-width: 100%;
-    gap: 10px;
-  }
-  .tq-escrita {
-    padding-bottom: 76px;
   }
   .tq-conversas-lista {
     width: min(280px, calc(100vw - 32px));
@@ -2227,14 +2295,6 @@ body .tq-home [role='dialog'] button {
   }
 }
 
-/* O Taq conectado: informação, não alerta — cinza, não âmbar nem verde. */
-.tq-com-ia {
-  margin: 12px 0 0;
-  font-size: 10.5px;
-  line-height: 1.6;
-  color: rgb(150 153 157);
-}
-
 .tq-selo-demo {
   color: rgb(196 176 152);
 }
@@ -2366,103 +2426,12 @@ body .tq-home [role='dialog'] button {
   }
 }
 
-/* ---------------------------------------------- o assistente: o slogan */
-.tq-abertura {
-  display: grid;
-  justify-items: start;
-  gap: 14px;
-  text-align: left;
-  margin: 22vh 0 32px;
-}
-
-.tq-slogan {
-  margin: 0;
-  font-family: var(--font-taq);
-  font-size: 17px;
-  font-weight: 500;
-  letter-spacing: 0.2px;
-  color: var(--ideia-clara);
-}
-
-/* Primeiro uso (sem reunião guardada): discreto, abaixo do slogan, e some
-   assim que existir a primeira reunião. */
-.tq-primeiro-uso {
-  display: grid;
-  gap: 10px;
-  margin-top: 6px;
-}
-
-.tq-primeiro-uso p {
-  margin: 0;
-  font-size: 12px;
-  line-height: 1.6;
-  color: rgb(140 143 147);
-}
-
-.tq-sugestoes {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.tq-sugestoes button {
-  font-size: 12px;
-  padding: 5px 12px;
-  border-radius: 999px;
-  border: 1px solid rgb(var(--c-taq-acento) / 0.22);
-  color: var(--ideia-clara);
-  background: rgb(var(--c-taq-acento) / 0.04);
-  cursor: pointer;
-  transition:
-    border-color 0.3s,
-    color 0.3s;
-}
-
-.tq-sugestoes button:hover,
-.tq-sugestoes button:focus-visible {
-  border-color: rgb(var(--c-taq-acento) / 0.6);
-  color: rgb(var(--c-taq-enfase));
-}
-
-/* Quem fala, no chat: a sua mensagem em branco, texto solto à direita — sem
-   placa, sem cor e sem borda; a resposta em lilás, também solta. */
-.tq-turno-voce .tq-bolha {
-  color: var(--e-texto);
-  font-size: 15px;
-  line-height: var(--lh-corpo);
-}
-
-/* Manrope e violeta luminoso distinguem a voz do Taq. O corpo conserva
-   contraste; títulos, links e marcadores carregam a maior saturação. */
-.tq-turno-agente .tq-resp-texto,
-.tq-turno-agente .tq-indisponivel {
-  font-family: var(--font-taq);
-  color: rgb(var(--c-taq-texto));
-  font-size: 16px;
-  font-weight: 450;
-  line-height: 1.8;
-  letter-spacing: 0.005em;
-}
-
+/* ----------------------------------------------- a voz do assistente */
 .tq-home .tq-turno-agente .tq-md {
   --tq-md-enfase: rgb(var(--c-taq-enfase));
   --tq-md-sub: rgb(var(--c-taq-texto));
   --tq-md-marcador: rgb(var(--c-taq-acento));
   --tq-md-traco: rgb(var(--c-taq-acento) / 0.35);
-}
-
-.tq-home .tq-turno-agente .tq-md :is(h3, h4) {
-  letter-spacing: -0.025em;
-  font-weight: 700;
-}
-
-.tq-home .tq-turno-agente .tq-falhou {
-  color: var(--e-atencao);
-}
-
-/* Perguntas, espera e ações continuam com a mesma voz da resposta. */
-.tq-home .tq-resposta-texto {
-  font-family: var(--font-taq);
 }
 
 .tq-home .tq-exec-etapa {
@@ -2486,71 +2455,28 @@ body .tq-home [role='dialog'] button {
   outline-color: var(--ideia);
 }
 
-/*
- * O compositor: o texto nasce direto na página, grande, na Manrope. Sem placa e
- * sem botão de enviar à vista — Enter envia. O botão continua no DOM, só para
- * leitor de tela e teclado. (O "+" de anexar saiu; anexar não existe nesta
- * versão — ver a entrada `anexar_arquivo` da ajuda.)
- */
-.tq-campo textarea {
-  font-family: var(--font-taq);
-  font-size: 24px;
-  line-height: 1.35;
-  min-height: 44px;
-  max-height: 200px;
-  caret-color: var(--ideia);
-}
-
-.tq-campo textarea::placeholder {
-  color: rgb(var(--c-taq-texto) / 0.6);
-}
-
-.tq-escrita .tq-enviar {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  padding: 0;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
-
-.tq-escrita-pe {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 4px 16px;
-  margin-top: 10px;
-}
-
-.tq-escrita-pe .tq-dica-teclas {
-  margin: 0;
-  font-size: 11px;
-  color: var(--e-cinza);
-}
-
 /* A linha mora logo acima da crista da onda: sem um fundo próprio, os pontos
    da onda passavam por trás das letras e o aviso ficava ilegível. O fundo é a
    cor da página, meio transparente, com desfoque — a onda continua visível em
    volta. */
 .tq-status-ia {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
+  display: inline-grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: baseline;
+  gap: var(--sp-2);
   margin: 0;
-  padding: 2px 10px;
-  border-radius: 10px;
+  padding: var(--sp-1) var(--space-3);
+  border-radius: var(--radius-xs);
   background: rgb(17 18 19 / 0.78);
-  backdrop-filter: blur(6px);
-  font-size: 11.5px;
+  backdrop-filter: blur(var(--blur-sm));
+  font-size: var(--fs-ui);
+  line-height: var(--lh-rotulo);
   color: var(--e-cinza);
+  overflow-wrap: anywhere;
 }
 
 .tq-status-ia::before {
   content: '';
-  flex: 0 0 auto;
   width: 6px;
   height: 6px;
   border-radius: 50%;
@@ -2570,11 +2496,15 @@ body .tq-home [role='dialog'] button {
 }
 
 .tq-status-ia .tq-linkish {
-  flex: 0 0 auto;
-  white-space: nowrap;
-  font-size: 11.5px;
+  padding: 0;
+  font-size: inherit;
+  color: inherit;
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+
+.tq-status-ia .tq-linkish:hover {
+  color: var(--e-texto);
 }
 
 @keyframes tq-piscar {
@@ -2602,6 +2532,15 @@ body .tq-home [role='dialog'] button {
   gap: 4px 20px;
   align-items: baseline;
   padding: 16px 12px;
+}
+
+/* Na lista de Reuniões o hover da linha é VERDE (pedido do usuário,
+   23/11/2026); a lixeira fica com o vermelho de apagar, e as outras listas
+   seguem com o hover por luz. */
+.tq-item.tq-linha-reuniao:hover {
+  background: rgb(var(--c-primary) / 0.14);
+  border-color: rgb(var(--c-primary) / 0.5);
+  color: rgb(var(--c-primary));
 }
 
 .tq-linha-reuniao strong {
@@ -3398,43 +3337,157 @@ body .tq-home [role='dialog'] button {
 
 /* -------------------------------------------------------------- preparar */
 
+.tq-main:has(> .tq-prep) {
+  display: flex;
+  flex-direction: column;
+}
+
 .tq-prep {
-  max-width: 720px;
+  width: min(100%, 42rem);
+  margin: auto;
+  padding-block: clamp(2rem, 8vh, 5rem);
 }
 
-.tq-prep-bloco {
-  margin-bottom: 32px;
+.tq-prep-topo {
+  display: grid;
+  justify-items: center;
+  gap: var(--sp-2);
+  margin-bottom: var(--space-5);
 }
 
-.tq-prep-bloco h2 {
-  font-family: var(--font-titulo);
-  font-size: 17px;
-  font-weight: 600;
-  margin: 0 0 8px;
-}
-
-.tq-prep-bloco h3 {
-  font-size: var(--fs-ui);
-  font-weight: 600;
-  margin: 20px 0 0;
+.tq-prep .tq-prep-topo h1 {
+  margin: 0;
+  font-size: clamp(1.5rem, 1.15rem + 1.5vw, 2.25rem);
+  line-height: var(--lh-titulo);
+  letter-spacing: -0.03em;
 }
 
 .tq-prep-dica {
-  font-size: var(--fs-meta);
-  color: rgb(166 169 173);
-  margin: 4px 0 0;
+  margin: 0;
+  color: var(--e-cinza);
+  text-align: center;
 }
 
-.tq-prep-comentario {
-  font-size: var(--fs-ui);
-  color: rgb(214 218 222);
-  margin: 8px 0 0;
+.tq-contextos-palco {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  justify-items: center;
+  gap: var(--sp-3);
+  padding-block: var(--space-6) var(--sp-3);
+}
+
+.tq-contextos-palco::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: -1.5rem -1rem -1rem;
+  background: radial-gradient(circle, rgb(var(--c-taq-acento) / 0.24) 1px, transparent 1.4px)
+    center / 18px 18px;
+  mask-image: radial-gradient(ellipse, #000 24%, transparent 74%);
+  pointer-events: none;
+}
+
+.tq-contextos-grade {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--sp-3);
+  width: 100%;
+}
+
+.tq-contexto-botao {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: 60px;
+  padding: var(--sp-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--glass-chrome);
+  box-shadow: var(--shadow-md);
+  color: var(--e-texto);
+  text-align: left;
+  font-size: var(--fs-leitura);
+  font-weight: var(--peso-enfase);
+  line-height: var(--lh-rotulo);
+  overflow-wrap: anywhere;
+  cursor: pointer;
+  transition: transform var(--dur-base) var(--motion-flow), border-color var(--dur-fast);
+}
+
+.tq-contexto-botao svg {
+  color: var(--ideia);
+  flex: none;
+}
+
+.tq-contexto-adicionar {
+  border-color: rgb(var(--c-taq-acento) / 0.4);
+  background: linear-gradient(rgb(var(--c-taq-acento) / 0.12), rgb(var(--c-taq-acento) / 0.04)),
+    var(--glass-chrome);
+  color: var(--ideia-clara);
+}
+
+.tq-contexto-botao:not(:disabled):is(:hover, [aria-expanded='true']) {
+  border-color: var(--ideia);
+}
+
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .tq-contexto-botao:not(:disabled):hover {
+    transform: translateY(-3px);
+  }
+}
+
+.tq-contexto-botao.guardado,
+.tq-contexto-botao:disabled {
+  border-style: dashed;
+  color: var(--e-cinza);
+}
+
+.tq-contexto-botao.guardado svg,
+.tq-contexto-botao:disabled svg {
+  color: inherit;
+}
+
+.tq-contexto-botao:disabled {
+  cursor: default;
+}
+
+.tq-contextos-ajustes {
+  display: grid;
+  place-items: center;
+  width: var(--alt-controle-principal);
+  min-height: var(--alt-controle-principal);
+  border-radius: var(--radius-full);
+  color: var(--e-cinza);
+  cursor: pointer;
+}
+
+.tq-contextos-ajustes:is(:hover, [aria-expanded='true']) {
+  background: var(--e-placa);
+  color: var(--ideia-clara);
+}
+
+@media (max-width: 540px) {
+  .tq-contextos-grade {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .tq-contexto-adicionar {
+    grid-column: span 2;
+    justify-content: center;
+  }
+}
+
+@media (pointer: coarse) {
+  .tq-contextos-ajustes {
+    width: 44px;
+    min-height: 44px;
+  }
 }
 
 /* O select da HOME. O "Onde alterar" do documento personalizado era o select
    cru do navegador (fundo claro numa tela escura); usa este mesmo. O
    `color-scheme` deixa a lista aberta escura também. */
-.tq-prep .tq-c-campo select,
 .tq-personalizado-alterar select {
   width: 100%;
   min-height: var(--alt-controle);
@@ -3459,37 +3512,6 @@ body .tq-home [role='dialog'] button {
 /* A grade estica os filhos; o botão fica do tamanho do texto, à esquerda. */
 .tq-personalizado-alterar .tq-acao {
   justify-self: start;
-}
-
-.tq-prep .tq-c-acoes {
-  margin-top: 10px;
-  align-items: center;
-}
-
-/*
- * "O que levar para as reuniões" (OQueLevar.tsx). Espectro: violeta é o
- * assistente e o que vai junto com ele; verde é só a fala da reunião entrando;
- * âmbar é o que espera a pessoa (mudança não salva, texto no limite). Todas as
- * cores vêm de tokens.css (`--c-ideia`, `--c-atencao`, `--c-text`...).
- */
-.tq-prep:has(.tq-levar) {
-  max-width: 1060px;
-}
-
-/* O mapa e o painel lado a lado pedem a coluna larga, como a reunião aberta. */
-@media (min-width: 900px) {
-  .tq-main:has(.tq-levar) {
-    width: min(1060px, calc(100% - 96px));
-  }
-}
-
-.tq-levar-cab {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 14px 32px;
-  margin-bottom: 18px;
 }
 
 .tq-levar .tq-levar-modos {
@@ -3528,15 +3550,6 @@ body .tq-home [role='dialog'] button {
   box-shadow: var(--shadow-sm);
 }
 
-.tq-levar .tq-levar-modos small {
-  font-size: var(--fs-meta);
-  font-weight: 400;
-}
-
-.tq-levar .tq-levar-modos button[aria-pressed='true'] small.seu {
-  color: rgb(var(--c-ideia-clara));
-}
-
 .tq-levar-aviso {
   max-width: none;
   margin-bottom: 14px;
@@ -3552,470 +3565,14 @@ body .tq-home [role='dialog'] button {
   user-select: text;
 }
 
-.tq-levar-corpo {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  gap: 18px;
-}
-
-/* ------------------------------------------------------------------ o mapa */
-
-.tq-mapa {
-  flex: 999 1 560px;
-  min-width: 0;
-  border: 1px solid rgb(var(--c-text) / 0.07);
-  border-radius: var(--radius-md);
-}
-
-.tq-mapa-cab {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--sp-1) var(--sp-4);
-  padding: 18px 22px 0;
-}
-
-.tq-mapa-cab h3 {
-  margin: 0;
-  font: 600 var(--fs-titulo) / 1.3 var(--font-titulo);
-}
-
-.tq-mapa-cab p {
-  margin: 0;
-  font-size: var(--fs-meta);
-  color: rgb(var(--c-muted));
-  font-variant-numeric: tabular-nums;
-}
-
-/* Cada parte da contagem ("3 de 8 vagas") inteira numa linha: a quebra
-   acontece entre as partes, nunca deixando "vagas" sozinho. */
-.tq-mapa-cab .tq-sem-quebra {
-  white-space: nowrap;
-}
-
-.tq-levar .tq-mapa-caixa {
-  padding: var(--sp-2) var(--sp-2) 0;
-}
-
-.tq-mapa-medida {
-  position: relative;
-  margin: 0 auto;
-}
-
-.tq-mapa-palco {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 720px;
-  height: 600px;
-  transform-origin: 0 0;
-}
-
-.tq-mapa-brilho {
-  position: absolute;
-  left: 160px;
-  top: 100px;
-  width: 400px;
-  height: 400px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgb(var(--c-ideia) / 0.11), rgb(var(--c-ideia) / 0) 62%);
-  pointer-events: none;
-}
-
-.tq-mapa-anel {
-  position: absolute;
-  left: 266px;
-  top: 206px;
-  width: 188px;
-  height: 188px;
-  border-radius: 50%;
-  border: 1px solid rgb(var(--c-ideia) / 0.18);
-  pointer-events: none;
-}
-
-.tq-mapa-fios {
-  position: absolute;
-  inset: 0;
-  width: 720px;
-  height: 600px;
-  overflow: visible;
-  fill: none;
-  pointer-events: none;
-}
-
-.tq-mapa-fios line,
-.tq-mapa-fios ellipse {
-  stroke-width: 1.25;
-}
-
-.tq-fio-orbita {
-  stroke: rgb(var(--c-text) / 0.05);
-  stroke-dasharray: 2 6;
-}
-
-/* A fala entra pela linha verde tracejada, andando: é a única coisa viva aqui. */
-.tq-fio-fala {
-  stroke: rgb(var(--c-primary) / 0.65);
-  stroke-dasharray: 4 6;
-  animation: tq-fala-entra 1.6s linear infinite;
-}
-
-@keyframes tq-fala-entra {
-  to {
-    stroke-dashoffset: -20;
-  }
-}
-
-.tq-fio-saida {
-  stroke: rgb(var(--c-text) / 0.18);
-}
-
-.tq-fio,
-.tq-fio-busca {
-  stroke: rgb(var(--c-text) / 0.16);
-  stroke-dasharray: 3 5;
-}
-
-.tq-fio.ligado {
-  stroke: rgb(var(--c-ideia) / 0.45);
-  stroke-dasharray: none;
-}
-
-.tq-fio.ligado.sel {
-  stroke: rgb(var(--c-ideia) / 0.95);
-  stroke-width: 1.6;
-}
-
-.tq-fio-vaga {
-  stroke: rgb(var(--c-text) / 0.1);
-}
-
-.tq-fio-busca.ligado {
-  stroke: rgb(var(--c-text) / 0.4);
-  stroke-dasharray: none;
-  stroke-width: 1.5;
-}
-
-.tq-fio-busca.ligado.sel {
-  stroke: rgb(var(--c-text) / 0.75);
-}
-
-/* Os nós: ligado é placa com borda violeta e ponto cheio; guardado é tracejado e apagado. */
-.tq-levar .tq-mapa-no {
-  position: absolute;
-  width: 192px;
-  height: 52px;
-  margin: 0;
-  padding: 0 var(--sp-3);
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  background: rgb(var(--c-elevated));
-  border: 1px solid rgb(var(--c-ideia) / 0.35);
-  border-radius: var(--sp-3);
-  color: rgb(var(--c-text));
-  text-align: left;
-  transition:
-    border-color var(--dur-base),
-    background var(--dur-base),
-    box-shadow var(--dur-base);
-}
-
-.tq-levar button.tq-mapa-no:hover {
-  border-color: rgb(var(--c-ideia) / 0.7);
-}
-
-.tq-levar .tq-mapa-no svg {
-  flex: none;
-  color: rgb(var(--c-ideia));
-}
-
-.tq-mapa-ponto {
-  width: 8px;
-  height: 8px;
-  flex: none;
-  border-radius: 50%;
-  background: rgb(var(--c-ideia));
-}
-
-.tq-levar .tq-mapa-no-txt {
-  min-width: 0;
-  font-size: var(--fs-corpo);
-  line-height: 17px;
-}
-
-.tq-levar .tq-mapa-no b,
-.tq-levar .tq-mapa-no small {
-  display: block;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 150px;
-}
-
-.tq-levar .tq-mapa-no b {
-  font-weight: 500;
-}
-
-.tq-levar .tq-mapa-no small {
-  font-size: var(--fs-meta);
-  color: rgb(var(--c-muted));
-}
-
-.tq-levar .tq-mapa-no.sel {
-  /* Opaco: o fio que chega ao nó não pode atravessar o texto. */
-  background: linear-gradient(rgb(var(--c-ideia) / 0.1), rgb(var(--c-ideia) / 0.1)), rgb(var(--c-elevated));
-  border: 1.5px solid rgb(var(--c-ideia));
-  box-shadow: 0 0 0 4px rgb(var(--c-ideia) / 0.1);
-}
-
-.tq-levar .tq-mapa-no.sel small {
-  color: rgb(var(--c-ideia-clara));
-}
-
-.tq-levar .tq-mapa-no.guardado {
-  background: rgb(var(--c-surface));
-  border: 1px dashed rgb(var(--c-text) / 0.22);
-  color: rgb(var(--c-muted));
-}
-
-.tq-levar .tq-mapa-no.guardado .tq-mapa-ponto {
-  background: transparent;
-  border: 1.5px solid rgb(var(--c-muted));
-}
-
-.tq-levar .tq-mapa-no.guardado.sel {
-  border: 1.5px dashed rgb(var(--c-ideia));
-}
-
-.tq-levar .tq-mapa-vaga {
-  justify-content: center;
-  background: transparent;
-  border: 1px dashed rgb(var(--c-text) / 0.18);
-  color: rgb(var(--c-muted));
-}
-
-.tq-levar .tq-mapa-vaga svg {
-  color: currentColor;
-}
-
-.tq-levar button.tq-mapa-vaga:hover {
-  border-color: rgb(var(--c-text) / 0.4);
-  color: rgb(var(--c-text));
-}
-
-.tq-levar .tq-mapa-vaga.nota {
-  font-size: var(--fs-meta);
-  line-height: 15px;
-  text-align: center;
-  border-color: rgb(var(--c-text) / 0.14);
-}
-
-.tq-mapa-entrada,
-.tq-mapa-saida {
-  position: absolute;
-  height: 44px;
-  padding: 0 var(--sp-4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--sp-2);
-  border-radius: 22px;
-  font-size: var(--fs-corpo);
-}
-
-.tq-mapa-entrada {
-  left: 260px;
-  top: 24px;
-  width: 200px;
-  background: rgb(var(--c-primary) / 0.06);
-  border: 1px solid rgb(var(--c-primary) / 0.45);
-}
-
-.tq-mapa-entrada small {
-  font-size: var(--fs-meta);
-  color: rgb(var(--c-glow));
-}
-
-.tq-mapa-vivo {
-  width: 7px;
-  height: 7px;
-  flex: none;
-  border-radius: 50%;
-  background: rgb(var(--c-primary));
-}
-
-.tq-mapa-saida {
-  left: 250px;
-  top: 532px;
-  width: 220px;
-  background: rgb(var(--c-elevated));
-  border: 1px solid rgb(var(--c-text) / 0.1);
-  color: rgb(var(--c-muted));
-}
-
-.tq-levar .tq-mapa-centro {
-  position: absolute;
-  left: 280px;
-  top: 220px;
-  width: 160px;
-  height: 160px;
-  border-radius: 50%;
-  background: rgb(var(--c-ideia) / 0.08);
-  border: 1px solid rgb(var(--c-ideia) / 0.6);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--sp-2);
-  text-align: center;
-  color: rgb(var(--c-text));
-  transition:
-    box-shadow var(--dur-base),
-    border-color var(--dur-base);
-}
-
-.tq-levar .tq-mapa-centro:hover,
-.tq-levar .tq-mapa-centro.sel {
-  border-color: rgb(var(--c-ideia));
-  box-shadow: 0 0 0 5px rgb(var(--c-ideia) / 0.1);
-}
-
-.tq-levar .tq-mapa-centro b {
-  display: block;
-  font: 700 20px / 1.2 var(--font-titulo);
-}
-
-.tq-levar .tq-mapa-centro small {
-  font-size: var(--fs-meta);
-  color: rgb(var(--c-ideia-clara));
-}
-
-/* A busca é a única parte que sairia do computador: placa neutra, não violeta. */
-.tq-levar .tq-mapa-busca {
-  position: absolute;
-  left: 520px;
-  top: 254px;
-  width: 192px;
-  height: 92px;
-  padding: 11px var(--sp-3);
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  background: rgb(var(--c-elevated));
-  border: 1px solid rgb(var(--c-text) / 0.3);
-  border-radius: var(--radius-sm);
-  color: rgb(var(--c-text));
-  text-align: left;
-  transition:
-    border-color var(--dur-base),
-    box-shadow var(--dur-base),
-    opacity var(--dur-base);
-}
-
-.tq-levar .tq-mapa-busca:hover {
-  border-color: rgb(var(--c-text) / 0.55);
-}
-
-.tq-levar .tq-mapa-busca.sel {
-  border: 1.5px solid rgb(var(--c-text));
-  box-shadow: 0 0 0 4px rgb(var(--c-text) / 0.08);
-}
-
-.tq-levar .tq-mapa-busca.desligada {
-  border-style: dashed;
-  opacity: 0.7;
-}
-
-.tq-levar .tq-mapa-busca svg {
-  flex: none;
-  margin-top: 1px;
-}
-
-.tq-levar .tq-mapa-busca > span {
-  font-size: var(--fs-corpo);
-  line-height: 17px;
-}
-
-.tq-levar .tq-mapa-busca b {
-  font-weight: 500;
-}
-
-.tq-levar .tq-mapa-busca small {
-  display: block;
-  font-size: var(--fs-meta);
-  color: rgb(var(--c-muted));
-}
-
-.tq-levar .tq-mapa-busca small.tq-mapa-estado {
-  color: rgb(var(--c-text) / 0.75);
-}
-
-/*
- * Estreito demais para o mapa (menos de 72% de 720 px): os mesmos botões em
- * coluna, na ordem do caminho — a fala entra, o assistente, o que vai junto, a
- * busca, a resposta sai.
- */
-.tq-levar .tq-mapa-caixa.lista .tq-mapa-palco {
-  position: static;
-  width: auto;
-  height: auto;
-  display: grid;
-  gap: var(--sp-2);
-  padding: var(--sp-2) var(--sp-3) 0;
-}
-
-.tq-levar .tq-mapa-caixa.lista .tq-mapa-no,
-.tq-levar .tq-mapa-caixa.lista .tq-mapa-entrada,
-.tq-levar .tq-mapa-caixa.lista .tq-mapa-saida,
-.tq-levar .tq-mapa-caixa.lista .tq-mapa-centro,
-.tq-levar .tq-mapa-caixa.lista .tq-mapa-busca {
-  position: static;
-  width: 100%;
-  height: auto;
-  min-height: 48px;
-}
-
-.tq-levar .tq-mapa-caixa.lista .tq-mapa-no b,
-.tq-levar .tq-mapa-caixa.lista .tq-mapa-no small {
-  max-width: none;
-}
-
-.tq-levar .tq-mapa-caixa.lista .tq-mapa-centro {
-  flex-direction: row;
-  justify-content: flex-start;
-  gap: var(--sp-3);
-  padding: 10px var(--sp-3);
-  border-radius: var(--radius-sm);
-  text-align: left;
-}
-
-.tq-levar .tq-mapa-caixa.lista .tq-mapa-centro b {
-  font-size: var(--fs-titulo);
-}
-
-.tq-levar .tq-mapa-caixa.lista .tq-mapa-entrada,
-.tq-levar .tq-mapa-caixa.lista .tq-mapa-saida {
-  justify-content: flex-start;
-  border-radius: var(--radius-sm);
-}
-
-.tq-levar .tq-mapa-caixa.lista .tq-mapa-no {
-  padding-block: var(--sp-2);
-}
-
 /* --------------------------------------------------------------- o painel */
 
 .tq-ed {
-  flex: 1 1 300px;
-  max-width: 380px;
-  min-width: 0;
   display: flex;
   flex-direction: column;
-  min-height: 520px;
-  border: 1px solid rgb(var(--c-text) / 0.08);
+  min-width: 0;
+  margin-top: var(--sp-3);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: rgb(var(--c-text) / 0.03);
   scroll-margin: var(--sp-4);
@@ -4054,13 +3611,6 @@ body .tq-home [role='dialog'] button {
   color: rgb(var(--c-ideia-clara));
 }
 
-.tq-ed-sub {
-  margin: 6px 0 0;
-  font-size: var(--fs-ui);
-  line-height: 1.6;
-  color: rgb(var(--c-muted));
-}
-
 .tq-levar .tq-ed-fechar {
   width: 36px;
   height: 36px;
@@ -4090,13 +3640,6 @@ body .tq-home [role='dialog'] button {
   margin-top: auto;
   padding: 14px 20px 18px;
   border-top: 1px solid rgb(var(--c-text) / 0.06);
-}
-
-.tq-ed-vazio {
-  margin: 0;
-  padding: 24px 20px;
-  font-size: var(--fs-corpo);
-  color: rgb(var(--c-muted));
 }
 
 .tq-ed-regras {
@@ -4155,43 +3698,58 @@ body .tq-home [role='dialog'] button {
   color: rgb(var(--c-muted));
 }
 
-.tq-ed-modos {
+/*
+ * O bloco "Personalização" (23/11/2026): à esquerda o que liga comportamento
+ * (modo fixo, "ler ao encerrar"), à direita as regras que não mudam. Em tela
+ * estreita, um embaixo do outro. A moldura é a mesma do painel do mapa.
+ */
+.tq-pers-corpo {
   display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--sp-4);
+  padding: var(--sp-4);
+  border: 1px solid rgb(var(--c-text) / 0.08);
+  border-radius: var(--radius-sm);
+  background: rgb(var(--c-text) / 0.02);
+}
+
+.tq-pers-ajustes {
+  display: grid;
+  align-content: start;
+  gap: var(--sp-4);
+}
+
+.tq-pers-regras h3 {
+  display: flex;
+  align-items: center;
   gap: 6px;
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-ui);
+  font-weight: 500;
+  color: rgb(var(--c-ideia-clara));
+}
+
+@media (max-width: 760px) {
+  .tq-pers-corpo {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* O modo é fixo desde 23/11/2026: uma linha de leitura no lugar dos rádios. */
+.tq-ed-modo-fixo {
+  display: grid;
+  gap: 4px;
   margin: 0;
-  padding: 0;
-  border: 0;
-  min-width: 0;
   font-size: var(--fs-corpo);
 }
 
-.tq-ed-modos legend {
-  padding: 0;
-  margin-bottom: var(--sp-2);
+.tq-ed-modo-fixo b {
   font-size: var(--fs-ui);
+  font-weight: 500;
   color: rgb(var(--c-text) / 0.8);
 }
 
-.tq-ed-modos label {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 30px;
-  cursor: pointer;
-}
-
-.tq-ed-modos input {
-  margin: 0;
-  accent-color: rgb(var(--c-ideia));
-}
-
-.tq-ed-modos:disabled label {
-  cursor: default;
-  opacity: 0.6;
-}
-
-.tq-ed-modos small {
-  font-size: var(--fs-meta);
+.tq-ed-modo-fixo span {
   color: rgb(var(--c-muted));
 }
 
@@ -4389,23 +3947,6 @@ body .tq-home [role='dialog'] button {
   color: rgb(var(--c-atencao));
 }
 
-/* Em coluna o painel vem embaixo do mapa: vazio, não reserva altura. */
-@media (max-width: 760px) {
-  .tq-ed {
-    min-height: 0;
-  }
-}
-
-.tq-levar .tq-mapa-caixa.lista {
-  padding-bottom: var(--sp-4);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .tq-fio-fala {
-    animation: none;
-  }
-}
-
 /* ------------------------------------------- documento personalizado */
 
 .tq-personalizado-previa {
@@ -4501,22 +4042,17 @@ body .tq-home [role='dialog'] button {
 
 /* Controles do acervo seguem os campos e ações já usados em Conexões. */
 .tq-busca-acervo { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; margin: 18px 0 10px; }
-.tq-busca-acervo label, .tq-filtro-participante, .tq-opcoes-acervo form > label,
+.tq-busca-acervo label,
 .tq-conversas-confirma label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; min-width: 0; }
 .tq-busca-acervo label:first-child { flex: 1 1 180px; }
-.tq-busca-acervo input, .tq-filtro-participante input, .tq-opcoes-acervo form input,
+.tq-busca-acervo input,
 .tq-conversas-confirma input {
   box-sizing: border-box; max-width: 100%; min-width: 0; padding: 9px 13px; border-radius: 11px;
   border: 1px solid rgb(255 255 255 / 0.1); background: rgb(20 21 23 / 0.75); color: rgb(214 217 221);
   font: inherit;
 }
-.tq-filtro-participante { max-width: 340px; margin-bottom: 20px; }
-.tq-opcoes-acervo { margin: 12px 0; font-size: 13px; line-height: 1.6; }
-.tq-opcoes-acervo summary { cursor: pointer; width: fit-content; }
-.tq-opcoes-acervo form { display: flex; flex-direction: column; gap: 12px; max-width: 560px; }
-.tq-opcoes-acervo form > button { align-self: flex-start; }
-.tq-opcoes-acervo p { margin: 10px 0; }
-.tq-opcoes-acervo li { margin: 8px 0; overflow-wrap: anywhere; }
+/* Placeholder com cor explícita: o cinza padrão no grafite ficava abaixo de 4,5:1. */
+.tq-busca-acervo input::placeholder { color: #a3a8ae; opacity: 1; }
 .tq-conversas-lista li button.tq-conversas-renomear {
   flex: 0 0 auto; width: auto; padding: 0 6px; color: rgb(168 171 175); font-size: 11px;
 }

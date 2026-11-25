@@ -20,8 +20,12 @@ import { join } from 'node:path';
 /** A versão padrão do orquestrador. */
 export const VERSAO_DAS_INSTRUCOES = 'taq-v7';
 
+/*
+ * Saíram em 23/11/2026, com os recursos que as pediam (nenhuma release os
+ * usou): `taq-v8` (busca na internet), `intervencao-v1` (sugestões automáticas
+ * durante a reunião) e `automacoes-v1` (resumo e próximos passos automáticos).
+ */
 const ARQUIVO_POR_VERSAO: Record<string, string> = {
-  'automacoes-v1': 'automacoes-v1.md',
   'transcricao-v1': 'transcricao-v1.md',
   'taq-v1': 'v1.md',
   /** v2: o fluxo de documentos pelo catálogo e os pedidos fora dele. */
@@ -45,7 +49,6 @@ const ARQUIVO_POR_VERSAO: Record<string, string> = {
   'app-assistant-v5': 'app-assistant-v5.md',
   /** v7: os especialistas de trabalho (análise, compromissos, continuidade, passagem, comunicação…). */
   'taq-v7': 'v7.md',
-  'taq-v8': 'v8.md',
   /** v3: revisar com check_document; refazer cria documento novo, sem sobrescrever a edição humana. */
   'documents-v3': 'documents-v3.md',
   /** v4: pedido fora do catálogo vira documento personalizado (create_document não é forçado); formato que o TaqCiti não gera segue para o Claude. */
@@ -67,8 +70,6 @@ const ARQUIVO_POR_VERSAO: Record<string, string> = {
   'copilot-v1': 'copilot-v1.md',
   /** v2: acompanha o que falta fechar pela preparação da reunião (a esclarecer, discutido, a confirmar, decidido, adiado) e ajuda a fechar. */
   'copilot-v2': 'copilot-v2.md',
-  /** Acompanha a reunião em silêncio e propõe, no máximo, UMA sugestão privada de condução por chamada (`avaliar`). */
-  'intervencao-v1': 'intervencao-v1.md',
   /** Estado de cada ponto da reunião (a esclarecer, discutido, a confirmar, decidido, adiado), com fala citada (`atualizar_pontos`). */
   'estado-v1': 'estado-v1.md',
   /** Julga quais candidatos a acompanhamento merecem as vagas da reunião (`escolher_acompanhamentos`); só escolhe entre os ids recebidos. */

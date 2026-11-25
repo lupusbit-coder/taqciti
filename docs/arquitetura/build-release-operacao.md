@@ -178,7 +178,7 @@ provedor: nunca gravação real).
 
 | Arquivo | Habilita com | Exige |
 | --- | --- | --- |
-| `src/features/{taq/{taq,copiloto,trabalho},apoio,acompanhamento/juiz,estado,calibracao/historico}.live.test.ts` | `TAQ_LIVE_URL` + `TAQ_LIVE_KEY` | `cd server; npx next build; npx next start -p 3100` em outro terminal; `TAQ_LIVE_KEY` = o `DOCCITI_SHARED_KEY` do servidor. `trabalho` aceita `TAQ_LIVE_PAUSA_MS`. |
+| `src/features/{taq/{taq,copiloto,trabalho},apoio,acompanhamento/juiz,estado}.live.test.ts` | `TAQ_LIVE_URL` + `TAQ_LIVE_KEY` | `cd server; npx next build; npx next start -p 3100` em outro terminal; `TAQ_LIVE_KEY` = o `DOCCITI_SHARED_KEY` do servidor. `trabalho` aceita `TAQ_LIVE_PAUSA_MS`. |
 | `src/features/sync/sync.e2e.live.test.ts` | `TAQCITI_E2E_SERVER` (e `TAQCITI_E2E_COTA=1` para o servidor de cota) | Postgres local em contêiner, `server/lib/conector/esquema.sql` aplicado, `next start` com `DATABASE_URL` local, cliente OAuth de teste e um preload do Node (fora do repo) que responde ao `tokeninfo`; `TAQCITI_E2E_PG` nomeia o contêiner usado pelo `psql`; `VITE_DOCCITI_SERVER_URL` e `VITE_GOOGLE_OAUTH_WEB_CLIENT_ID` apontando para o ambiente de teste. **Nunca contra produção**: escreve e apaga acervo. |
 | `server/lib/documentos/gerar.live.test.ts` | `DOCUMENTOS_LIVE=1` (e `DOCUMENTOS_AMOSTRAS=<pasta>`) | Suspende a tranca `MOCK_LLM` só nesse arquivo; lê `.env.local` do servidor sem imprimir. Gasta chamadas do provedor. |
 | `server/lib/agents/auditor.canonical.test.ts` | `DOCCITI_LIVE_TESTS=1` + chave do Google | Via `npm run test:live` no servidor. |
